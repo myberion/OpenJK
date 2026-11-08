@@ -123,9 +123,7 @@ typedef enum {
 // struct to hold demo data for a single demo
 typedef struct {
 	char		demoName[MAX_OSPATH];
-	qboolean	demorecording;
-	qboolean	demowaiting;	// don't record until a non-delta message is sent
-	int			minDeltaFrame;	// the first non-delta frame stored in the demo.  cannot delta against frames older than this
+	qboolean	demorecording;	// every message sent is recorded (the message codec codes them only against messages of the demo)
 	fileHandle_t	demofile;
 	qboolean	isBot;
 	int			botReliableAcknowledge; // for bots, need to maintain a separate reliableAcknowledge to record server messages into the demo file
@@ -394,6 +392,7 @@ void SV_NetcodecResetClient( const client_t *client );
 void SV_NetcodecSendGameState( client_t *client );
 void SV_NetcodecSendMapChange( client_t *client );
 void SV_NetcodecSendSnapshot( client_t *client, const char *setGame );
+size_t SV_NetcodecDemoGameState( client_t *client, byte *out, size_t outSize );
 
 //
 // sv_game.c

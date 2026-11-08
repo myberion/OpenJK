@@ -233,7 +233,6 @@ typedef struct clientConnection_s {
 	qboolean	spDemoRecording;
 	qboolean	demorecording;
 	qboolean	demoplaying;
-	qboolean	demowaiting;	// don't record until a non-delta message is received
 	qboolean	firstDemoFrameSkipped;
 	fileHandle_t	demofile;
 
@@ -531,6 +530,7 @@ void CL_ParseDownload( int block, int fileSize, const byte *data, int size );
 //
 void CL_NetcodecReset( void );
 void CL_NetcodecParseServerMessage( msg_t *msg );
+qboolean CL_NetcodecRecordGameState( void );
 
 //====================================================================
 

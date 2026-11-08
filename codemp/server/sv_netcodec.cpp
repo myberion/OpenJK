@@ -108,31 +108,28 @@ static void SV_NetcodecCompare( client_t *client, const eng::ServerMessage &sm, 
 	}
 }
 
+// the last server command the client acknowledged (for a bot recording a demo, the last one it was sent)
+static int SV_NetcodecAcknowledged( const client_t *client ) {
+	if ( client->demo.isBot && client->demo.demorecording ) {
+		return client->demo.botReliableAcknowledge;
+	}
+	return client->reliableAcknowledge;
+}
+
 // every message starts with the last client command received and the server commands not yet acknowledged
 static void SV_NetcodecBegin( client_t *client, eng::ServerMessage &sm ) {
-	int acknowledged;
-
-	if ( client->demo.isBot && client->demo.demorecording ) {
-		acknowledged = client->demo.botReliableAcknowledge;
-	} else {
-		acknowledged = client->reliableAcknowledge;
-	}
 	sm.seq = client->netchan.outgoingSequence;
 	sm.ack = client->lastClientCommand;
-	sm.firstCommand = acknowledged + 1;	// the commands firstCommand to reliableSequence (none if above it)
+	sm.firstCommand = SV_NetcodecAcknowledged( client ) + 1;	// the commands firstCommand to reliableSequence (none if above it)
 	client->reliableSent = client->reliableSequence;
 }
 
-// codes the message, keeps its snapshot's Frame and sends it
-static void SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSnapshot_t *oldframe, int lastframe ) {
-	static byte buf[MAX_MSGLEN];
-	eng::Frame *frames = s_frames[ClientIndex( client )];
+// codes sm into out against the client's frames; returns its size (0: not coded) and the Record of its snapshot
+static size_t SV_NetcodecEncode( client_t *client, const eng::ServerMessage &sm, byte *out, size_t outSize, eng::Record &record ) {
 	eng::EntityRing ring;
 	eng::CommandRing commands;
 	eng::Baselines baselines;
-	eng::Record record = {};
 	uint32_t delta = 0;
-	msg_t msg;
 
 	ring.states = svs.snapshotEntities;
 	ring.count = (uint32_t)svs.numSnapshotEntities;
@@ -143,7 +140,17 @@ static void SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSna
 	baselines.bytes = &sv.svEntities[0].baseline;
 	baselines.stride = sizeof( svEntity_t );
 
-	const size_t size = Codec().Encode( sm, frames, ring, svs.nextSnapshotEntities, commands, baselines, buf, sizeof( buf ), delta, record );
+	return Codec().Encode( sm, s_frames[ClientIndex( client )], ring, svs.nextSnapshotEntities, commands, baselines, out, outSize, delta, record );
+}
+
+// codes the message, keeps its snapshot's Frame and sends it
+static void SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSnapshot_t *oldframe, int lastframe ) {
+	static byte buf[MAX_MSGLEN];
+	eng::Frame *frames = s_frames[ClientIndex( client )];
+	eng::Record record = {};
+	msg_t msg;
+
+	const size_t size = SV_NetcodecEncode( client, sm, buf, sizeof( buf ), record );
 
 	eng::Frame &slot = frames[sm.seq % PACKET_BACKUP];
 	slot.seq = -1;
@@ -179,6 +186,35 @@ void SV_NetcodecSendGameState( client_t *client ) {
 	sm.clientNum = ClientIndex( client );
 	sm.checksum = sv.checksumFeed;
 	SV_NetcodecSend( client, sm, NULL, 0 );
+}
+
+// The gamestate at the start of a server demo (svrecord, sv_autoDemo); the demo then holds every message sent. The
+// client's frames are reset, so the next message is coded without a base and the later ones only against messages of
+// the demo. The commands a later message carries start after the client's acknowledge, and each may be coded against
+// one up to kCommandWindow earlier: the gamestate holds those, so the demo holds every command a message refers to.
+size_t SV_NetcodecDemoGameState( client_t *client, byte *out, size_t outSize ) {
+	eng::ServerMessage sm = {};
+	eng::Record record = {};
+	int first = SV_NetcodecAcknowledged( client ) + 1 - (int)eng::kCommandWindow;
+
+	if ( first <= client->reliableSequence - MAX_RELIABLE_COMMANDS ) {
+		first = client->reliableSequence - MAX_RELIABLE_COMMANDS + 1;	// older ones are no longer held
+	}
+	if ( first < 1 ) {
+		first = 1;
+	}
+
+	SV_NetcodecResetClient( client );
+	sm.seq = client->netchan.outgoingSequence - 1;
+	sm.ack = client->lastClientCommand;
+	sm.firstCommand = first;
+	sm.gameState = true;
+	sm.relSeq = client->reliableSequence;
+	sm.configStrings = sv.configstrings;
+	sm.numConfigStrings = MAX_CONFIGSTRINGS;
+	sm.clientNum = ClientIndex( client );
+	sm.checksum = sv.checksumFeed;
+	return SV_NetcodecEncode( client, sm, out, outSize, record );
 }
 
 void SV_NetcodecSendMapChange( client_t *client ) {

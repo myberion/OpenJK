@@ -64,9 +64,6 @@ void CL_ParseSnapshot( clSnapshot_t *newSnap ) {
 	cl_paused->modified = qfalse;
 
 	newSnap->valid = qtrue;
-	if ( newSnap->deltaNum <= 0 ) {
-		clc.demowaiting = qfalse;	// uncompressed frame: we can start recording now
-	}
 
 	// clear the valid flags of any snapshots between the last
 	// received and this one, so if there was a dropped packet
@@ -110,9 +107,9 @@ CL_ParseSetGame
 
 rww - Update fs_game, this message is so we can use the ext_data
 *_overrides.txt files for mods.
+(The message codec has its own field tables: the overrides files are no longer read here.)
 ================
 */
-void MSG_CheckNETFPSFOverrides(qboolean psfOverrides);
 void FS_UpdateGamedir(void);
 void CL_ParseSetGame( const char *gameDir )
 {
@@ -136,10 +133,6 @@ void CL_ParseSetGame( const char *gameDir )
 
 	//Update the search path for the mod dir
 	FS_UpdateGamedir();
-
-	//Now update the overrides manually
-	MSG_CheckNETFPSFOverrides(qfalse);
-	MSG_CheckNETFPSFOverrides(qtrue);
 }
 
 

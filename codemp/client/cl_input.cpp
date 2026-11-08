@@ -1554,7 +1554,6 @@ void CL_WritePacket( void ) {
 
 		// begin a client move command
 		if ( cl_nodelta->integer || !cl.snap.valid
-			|| clc.demowaiting
 			|| clc.serverMessageSequence != cl.snap.messageNum ) {
 			MSG_WriteByte (&buf, clc_moveNoDelta);
 		} else {

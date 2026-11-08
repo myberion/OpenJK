@@ -198,29 +198,6 @@ CLIENT SIDE DEMO RECORDING
 
 /*
 ====================
-CL_WriteDemoMessage
-
-Dumps the current net message, prefixed by the length
-====================
-*/
-void CL_WriteDemoMessage ( msg_t *msg, int headerBytes ) {
-	int		len, swlen;
-
-	// write the packet sequence
-	len = clc.serverMessageSequence;
-	swlen = LittleLong( len );
-	FS_Write (&swlen, 4, clc.demofile);
-
-	// skip the packet sequencing information
-	len = msg->cursize - headerBytes;
-	swlen = LittleLong(len);
-	FS_Write (&swlen, 4, clc.demofile);
-	FS_Write ( msg->data + headerBytes, len, clc.demofile );
-}
-
-
-/*
-====================
 CL_StopRecording_f
 
 stop recording a demo
@@ -272,12 +249,6 @@ Begins recording a demo from the current position
 static char		demoName[MAX_QPATH];	// compiler bug workaround
 void CL_Record_f( void ) {
 	char		name[MAX_OSPATH];
-	byte		bufData[MAX_MSGLEN];
-	msg_t	buf;
-	int			i;
-	int			len;
-	entityState_t	*ent;
-	entityState_t	nullstate;
 	char		*s;
 
 	if ( Cmd_Argc() > 2 ) {
@@ -335,65 +306,15 @@ void CL_Record_f( void ) {
 
 	Q_strncpyz( clc.demoName, demoName, sizeof( clc.demoName ) );
 
-	// don't start saving messages until a non-delta compressed message is received
-	clc.demowaiting = qtrue;
-
-	// write out the gamestate message
-	MSG_Init (&buf, bufData, sizeof(bufData));
-	MSG_Bitstream(&buf);
-
-	// NOTE, MRE: all server->client messages now acknowledge
-	MSG_WriteLong( &buf, clc.reliableSequence );
-
-	MSG_WriteByte (&buf, svc_gamestate);
-	MSG_WriteLong (&buf, clc.serverCommandSequence );
-
-	// configstrings
-	for ( i = 0 ; i < MAX_CONFIGSTRINGS ; i++ ) {
-		if ( !cl.gameState.stringOffsets[i] ) {
-			continue;
-		}
-		s = cl.gameState.stringData + cl.gameState.stringOffsets[i];
-		MSG_WriteByte (&buf, svc_configstring);
-		MSG_WriteShort (&buf, i);
-		MSG_WriteBigString (&buf, s);
+	// write out the gamestate message; every message decoded from now on is coded again into the demo against the
+	// demo's own previous snapshot (cl_netcodec.cpp), so no full snapshot needs to be asked of the server
+	if ( !CL_NetcodecRecordGameState() ) {
+		Com_Printf( "ERROR: the gamestate could not be coded.\n" );
+		FS_FCloseFile( clc.demofile );
+		clc.demofile = 0;
+		clc.demorecording = qfalse;
+		clc.spDemoRecording = qfalse;
 	}
-
-	// baselines
-	Com_Memset (&nullstate, 0, sizeof(nullstate));
-	for ( i = 0; i < MAX_GENTITIES ; i++ ) {
-		ent = &cl.entityBaselines[i];
-		if ( !ent->number ) {
-			continue;
-		}
-		MSG_WriteByte (&buf, svc_baseline);
-		MSG_WriteDeltaEntity (&buf, &nullstate, ent, qtrue );
-	}
-
-	MSG_WriteByte( &buf, svc_EOF );
-
-	// finished writing the gamestate stuff
-
-	// write the client num
-	MSG_WriteLong(&buf, clc.clientNum);
-	// write the checksum feed
-	MSG_WriteLong(&buf, clc.checksumFeed);
-
-	// Filler for old RMG system.
-	MSG_WriteShort ( &buf, 0 );
-
-	// finished writing the client packet
-	MSG_WriteByte( &buf, svc_EOF );
-
-	// write it to the demo file
-	len = LittleLong( clc.serverMessageSequence - 1 );
-	FS_Write (&len, 4, clc.demofile);
-
-	len = LittleLong (buf.cursize);
-	FS_Write (&len, 4, clc.demofile);
-	FS_Write (buf.data, buf.cursize, clc.demofile);
-
-	// the rest of the demo file will be copied from net messages
 }
 
 /*
@@ -2051,8 +1972,6 @@ A packet has arrived from the main event loop
 =================
 */
 void CL_PacketEvent( const netadr_t *from, msg_t *msg ) {
-	int		headerBytes;
-
 	clc.lastPacketTime = cls.realtime;
 
 	if ( msg->cursize >= 4 && *(int *)msg->data == -1 ) {
@@ -2085,24 +2004,13 @@ void CL_PacketEvent( const netadr_t *from, msg_t *msg ) {
 		return;		// out of order, duplicated, etc
 	}
 
-	// the header is different lengths for reliable and unreliable messages
-	headerBytes = msg->readcount;
-
 	// track the last message received so it can be returned in
 	// client messages, allowing the server to detect a dropped
 	// gamestate
 	clc.serverMessageSequence = LittleLong( *(int *)msg->data );
 
 	clc.lastPacketTime = cls.realtime;
-	CL_ParseServerMessage( msg );
-
-	//
-	// we don't know if it is ok to save a demo message until
-	// after we have parsed the frame
-	//
-	if ( clc.demorecording && !clc.demowaiting ) {
-		CL_WriteDemoMessage( msg, headerBytes );
-	}
+	CL_ParseServerMessage( msg );	// a demo being recorded gets the decoded message coded again (cl_netcodec.cpp)
 }
 
 /*

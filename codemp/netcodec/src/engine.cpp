@@ -13,6 +13,7 @@ namespace netcodec::engine {
 namespace {
 
 static_assert(kMaxEntities == netcodec::kMaxEntities, "entity numbers");
+static_assert(kCommandWindow == netcodec::kCommandWindow, "command window");
 static_assert(kMinCommands >= (2 * kCommandWindow) + 2, "the command history the codec needs");
 
 [[nodiscard]] uint32_t Slot(int32_t seq) noexcept { return static_cast<uint32_t>(seq) % kPacketBackup; }

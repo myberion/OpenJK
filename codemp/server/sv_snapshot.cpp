@@ -145,17 +145,9 @@ clientSnapshot_t *SV_SnapshotBase( client_t *client, int *lastframe_out ) {
 		Com_DPrintf ("%s: Delta request from out of date packet.\n", client->name);
 		oldframe = NULL;
 		lastframe = 0;
-	} else if ( client->demo.demorecording && client->demo.demowaiting ) {
-		// demo is waiting for a non-delta-compressed frame for this client, so don't delta compress
-		oldframe = NULL;
-		lastframe = 0;
-	} else if ( client->demo.minDeltaFrame > deltaMessage ) {
-		// we saved a non-delta frame to the demo and sent it to the client, but the client didn't ack it
-		// we can't delta against an old frame that's not in the demo without breaking the demo.  so send
-		// non-delta frames until the client acks.
-		oldframe = NULL;
-		lastframe = 0;
 	} else {
+		// (a server demo needs no rule here: its start resets the message codec's frames, which then code only
+		// against messages of the demo, SV_NetcodecDemoGameState)
 		// we have a valid snapshot to delta from
 		oldframe = &client->frames[ deltaMessage & PACKET_MASK ];
 		lastframe = client->netchan.outgoingSequence - deltaMessage;
@@ -166,14 +158,6 @@ clientSnapshot_t *SV_SnapshotBase( client_t *client, int *lastframe_out ) {
 			oldframe = NULL;
 			lastframe = 0;
 		}
-	}
-
-	if ( oldframe == NULL ) {
-		if ( client->demo.demowaiting ) {
-			// this is a non-delta frame, so we can delta against it in the demo
-			client->demo.minDeltaFrame = client->netchan.outgoingSequence;
-		}
-		client->demo.demowaiting = qfalse;
 	}
 
 	*lastframe_out = lastframe;
@@ -723,7 +707,7 @@ void SV_SendMessageToClient( msg_t *msg, client_t *client ) {
 	client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageAcked = -1;
 
 	// save the message to demo.  this must happen before sending over network as that encodes the backing databuf
-	if ( client->demo.demorecording && !client->demo.demowaiting ) {
+	if ( client->demo.demorecording ) {
 		SV_WriteDemoMessage( client, msg, 0 );
 	}
 

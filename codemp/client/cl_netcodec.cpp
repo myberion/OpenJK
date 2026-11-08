@@ -50,10 +50,127 @@ static eng::Frame s_frames[PACKET_BACKUP];
 // gamestate clears the client state (cl.entityBaselines included) after it is decoded; CL_ParseGamestateEnd copies it
 static entityState_t s_baselines[MAX_GENTITIES];
 
+// Client demos (record): the demo is a coded stream of its own. Each message the client decodes is coded again by a
+// ServerCodec against the previous snapshot of the demo, with the server commands it brought (each command is written
+// once) and without its download block. The demo then holds every base and every command its messages refer to, and
+// decodes from its start whatever the network lost or the client could not decode.
+static eng::ServerCodec &DemoCodec( void ) {
+	static eng::ServerCodec codec;
+	return codec;
+}
+
+static eng::Frame s_demoFrames[PACKET_BACKUP];
+
+static void CL_NetcodecDemoReset( void ) {
+	for ( int i = 0; i < PACKET_BACKUP; i++ ) {
+		s_demoFrames[i].seq = -1;
+	}
+}
+
 void CL_NetcodecReset( void ) {
 	for ( int i = 0; i < PACKET_BACKUP; i++ ) {
 		s_frames[i].seq = -1;
 	}
+	CL_NetcodecDemoReset();	// a demo's player resets its state with a gamestate too
+}
+
+// codes sm for the demo against its frames, keeps its snapshot's Frame and writes it; qfalse if it could not be coded
+static qboolean CL_NetcodecDemoWrite( const eng::ServerMessage &sm ) {
+	static byte buf[MAX_MSGLEN];
+	eng::EntityRing ring;
+	eng::CommandRing commands;
+	eng::Baselines baselines;
+	eng::Record record = {};
+	uint32_t delta = 0;
+	int len;
+
+	ring.states = cl.parseEntities;
+	ring.count = MAX_PARSE_ENTITIES;
+	commands.texts = clc.serverCommands[0];
+	commands.stride = MAX_STRING_CHARS;
+	commands.count = MAX_RELIABLE_COMMANDS;
+	commands.last = clc.serverCommandSequence;
+	baselines.bytes = cl.entityBaselines;
+	baselines.stride = sizeof( entityState_t );
+
+	const size_t size = DemoCodec().Encode( sm, s_demoFrames, ring, cl.parseEntitiesNum, commands, baselines, buf, sizeof( buf ), delta, record );
+
+	eng::Frame &slot = s_demoFrames[sm.seq % PACKET_BACKUP];
+	slot.seq = -1;
+	if ( !size ) {
+		Com_Printf( "WARNING: message %d not recorded (too large or malformed)\n", sm.seq );
+		return qfalse;
+	}
+	if ( sm.snapshot ) {
+		slot = sm.frame;
+		slot.seq = sm.seq;
+		slot.record = record;
+	}
+
+	len = LittleLong( sm.seq );
+	FS_Write( &len, 4, clc.demofile );
+	len = LittleLong( (int)size );
+	FS_Write( &len, 4, clc.demofile );
+	FS_Write( buf, (int)size, clc.demofile );
+	return qtrue;
+}
+
+// the gamestate of the client's current state: config strings, baselines, client number, checksum feed
+static void CL_NetcodecDemoGameState( eng::ServerMessage &sm ) {
+	static const char *configStrings[MAX_CONFIGSTRINGS];
+
+	for ( int i = 0; i < MAX_CONFIGSTRINGS; i++ ) {
+		const int offset = cl.gameState.stringOffsets[i];
+		configStrings[i] = offset ? cl.gameState.stringData + offset : NULL;
+	}
+	sm.gameState = true;
+	sm.relSeq = clc.serverCommandSequence;
+	sm.configStrings = configStrings;
+	sm.numConfigStrings = MAX_CONFIGSTRINGS;
+	sm.clientNum = clc.clientNum;
+	sm.checksum = clc.checksumFeed;
+}
+
+// record: the gamestate at the start of the demo. It holds the last kCommandWindow server commands, which the commands
+// of the later messages may be coded against.
+qboolean CL_NetcodecRecordGameState( void ) {
+	eng::ServerMessage sm = {};
+	const int first = clc.serverCommandSequence + 1 - (int)eng::kCommandWindow;
+
+	CL_NetcodecDemoReset();
+	sm.seq = clc.serverMessageSequence - 1;
+	sm.ack = clc.reliableSequence;
+	sm.firstCommand = first < 1 ? 1 : first;
+	CL_NetcodecDemoGameState( sm );
+	return CL_NetcodecDemoWrite( sm );
+}
+
+// a decoded message, recorded: the commands after firstCommand - 1 (the ones it brought), the snapshot against the
+// demo's snapshot baseSeq (the previous one)
+static void CL_NetcodecDemoRecord( const eng::ClientMessage &cm, int seq, int firstCommand, int baseSeq ) {
+	eng::ServerMessage sm = {};
+
+	sm.seq = seq;
+	sm.ack = cm.ack;
+	if ( firstCommand <= clc.serverCommandSequence - MAX_RELIABLE_COMMANDS ) {
+		firstCommand = clc.serverCommandSequence - MAX_RELIABLE_COMMANDS + 1;	// older ones are no longer held
+	}
+	sm.firstCommand = firstCommand;
+	if ( cm.gameState ) {
+		CL_NetcodecDemoGameState( sm );	// the demo's frames were reset with the client state
+	}
+	sm.setGame = cm.setGame;
+	if ( cm.snapshot ) {
+		sm.snapshot = true;
+		sm.delta = seq - baseSeq > 0 && seq - baseSeq < PACKET_BACKUP ? (uint32_t)( seq - baseSeq ) : 0;
+		sm.time = cm.time;
+		sm.flags = cm.flags;
+		sm.areas = cm.areas;
+		sm.numAreas = cm.numAreas;
+		sm.frame = s_frames[seq % PACKET_BACKUP];	// the player states and entities the message was decoded into
+	}
+	sm.mapChange = cm.mapChange;
+	CL_NetcodecDemoWrite( sm );
 }
 
 // the decoded text NUL-terminated within size bytes, format specifiers made harmless as the legacy string readers
@@ -79,6 +196,8 @@ void CL_NetcodecParseServerMessage( msg_t *msg ) {
 	eng::ClientTarget target;
 	eng::ClientMessage cm = {};
 	const bool show = cl_shownet->integer >= 2;	// one line per decoded operation
+	const int oldCommand = clc.serverCommandSequence;	// for a demo: the commands this message brings come after it
+	const int oldSnapshot = cl.snap.messageNum;			// for a demo: the snapshot this one is coded against
 
 	if ( cl_shownet->integer == 1 ) {
 		Com_Printf( "%i ", msg->cursize );	// the whole packet, netchan header included, as before the codec
@@ -202,5 +321,9 @@ void CL_NetcodecParseServerMessage( msg_t *msg ) {
 		if ( cls.cgameStarted ) {
 			CGVM_MapChange();
 		}
+	}
+
+	if ( clc.demorecording ) {
+		CL_NetcodecDemoRecord( cm, seq, oldCommand + 1, oldSnapshot );
 	}
 }
