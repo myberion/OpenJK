@@ -10179,14 +10179,25 @@ UI_MouseEvent
 */
 void UI_MouseEvent( int dx, int dy )
 {
+	// the deltas are screen pixels, the cursor is in 640x480 units: scale them (else the cursor moves vidWidth / 640
+	// times faster than the desktop's), keeping the fractions so that slow movements are not lost
+	static float fracx = 0.0f, fracy = 0.0f;
+	int stepx, stepy;
+	fracx += dx / uiInfo.uiDC.xscale;
+	fracy += dy / uiInfo.uiDC.yscale;
+	stepx = (int)fracx;
+	stepy = (int)fracy;
+	fracx -= stepx;
+	fracy -= stepy;
+
 	// update mouse screen position
-	uiInfo.uiDC.cursorx += dx;
+	uiInfo.uiDC.cursorx += stepx;
 	if (uiInfo.uiDC.cursorx < 0)
 		uiInfo.uiDC.cursorx = 0;
 	else if (uiInfo.uiDC.cursorx > SCREEN_WIDTH)
 		uiInfo.uiDC.cursorx = SCREEN_WIDTH;
 
-	uiInfo.uiDC.cursory += dy;
+	uiInfo.uiDC.cursory += stepy;
 	if (uiInfo.uiDC.cursory < 0)
 		uiInfo.uiDC.cursory = 0;
 	else if (uiInfo.uiDC.cursory > SCREEN_HEIGHT)
