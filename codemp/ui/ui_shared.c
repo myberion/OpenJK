@@ -1451,6 +1451,7 @@ void Menus_CloseAll()
 	int i;
 
 	g_waitingForKey = qfalse;
+	DC->setCVar( "com_waitingForKey", "0" );
 
 	for (i = 0; i < menuCount; i++)
 	{
@@ -2464,7 +2465,7 @@ qboolean Item_TextScroll_HandleKey ( itemDef_t *item, int key, qboolean down, qb
 
 		if ( key == A_MWHEELUP )
 		{
-			int count = trap->Key_IsDown( A_CTRL ) ? 5 : 1;
+			int count = ( trap->Key_IsDown( A_CTRL ) || trap->Key_IsDown( A_CTRL2 ) ) ? 5 : 1;
 			scrollPtr->startPos -= count;
 			if (scrollPtr->startPos < 0)
 			{
@@ -2477,7 +2478,7 @@ qboolean Item_TextScroll_HandleKey ( itemDef_t *item, int key, qboolean down, qb
 		}
 		if ( key == A_MWHEELDOWN )
 		{
-			int count = trap->Key_IsDown( A_CTRL ) ? 5 : 1;
+			int count = ( trap->Key_IsDown( A_CTRL ) || trap->Key_IsDown( A_CTRL2 ) ) ? 5 : 1;
 			scrollPtr->startPos += count;
 			if (scrollPtr->startPos > max)
 			{
@@ -3148,7 +3149,7 @@ qboolean Item_ListBox_HandleKey(itemDef_t *item, int key, qboolean down, qboolea
 
 			if ( key == A_MWHEELUP )
 			{
-				int count = trap->Key_IsDown( A_CTRL ) ? 5 : 1;
+				int count = ( trap->Key_IsDown( A_CTRL ) || trap->Key_IsDown( A_CTRL2 ) ) ? 5 : 1;
 				listPtr->startPos -= ((int)item->special == FEEDER_Q3HEADS) ? viewmax : count;
 				if (listPtr->startPos < 0)
 				{
@@ -3161,7 +3162,7 @@ qboolean Item_ListBox_HandleKey(itemDef_t *item, int key, qboolean down, qboolea
 			}
 			if ( key == A_MWHEELDOWN )
 			{
-				int count = trap->Key_IsDown( A_CTRL ) ? 5 : 1;
+				int count = ( trap->Key_IsDown( A_CTRL ) || trap->Key_IsDown( A_CTRL2 ) ) ? 5 : 1;
 				listPtr->startPos += ((int)item->special == FEEDER_Q3HEADS) ? viewmax : count;
 				if (listPtr->startPos > max)
 				{
@@ -4314,6 +4315,7 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down) {
 		    Item_RunScript(&it, menu->onESC);
 			}
 		    g_waitingForKey = qfalse;
+		    DC->setCVar( "com_waitingForKey", "0" );
 			break;
 		case A_TAB:
 		case A_KP_2:
@@ -5124,6 +5126,7 @@ qboolean Item_Bind_HandleKey(itemDef_t *item, int key, qboolean down) {
 	if ( key == A_MOUSE1 && Rect_ContainsPoint(&item->window.rect, DC->cursorx, DC->cursory) && !g_waitingForKey ) {
 		if (down) {
 			g_waitingForKey = qtrue;
+			DC->setCVar( "com_waitingForKey", "1" );
 			g_bindItem = item;
 		}
 		return qtrue;
@@ -5131,6 +5134,7 @@ qboolean Item_Bind_HandleKey(itemDef_t *item, int key, qboolean down) {
 	else if ( key == A_ENTER && !g_waitingForKey ) {
 		if ( down ) {
 			g_waitingForKey = qtrue;
+			DC->setCVar( "com_waitingForKey", "1" );
 			g_bindItem = item;
 		}
 		return qtrue;
@@ -5147,6 +5151,7 @@ qboolean Item_Bind_HandleKey(itemDef_t *item, int key, qboolean down) {
 		switch ( key ) {
 			case A_ESCAPE:
 				g_waitingForKey = qfalse;
+				DC->setCVar( "com_waitingForKey", "0" );
 				return qtrue;
 
 			case A_BACKSPACE:
@@ -5164,6 +5169,7 @@ qboolean Item_Bind_HandleKey(itemDef_t *item, int key, qboolean down) {
 				}
 				Controls_SetConfig();
 				g_waitingForKey = qfalse;
+				DC->setCVar( "com_waitingForKey", "0" );
 				g_bindItem = NULL;
 				return qtrue;
 
@@ -5214,6 +5220,7 @@ qboolean Item_Bind_HandleKey(itemDef_t *item, int key, qboolean down) {
 
 	Controls_SetConfig();
 	g_waitingForKey = qfalse;
+	DC->setCVar( "com_waitingForKey", "0" );
 
 	return qtrue;
 }

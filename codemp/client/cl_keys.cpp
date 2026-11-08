@@ -45,6 +45,11 @@ int			chat_playerNum;
 
 keyGlobals_t	kg;
 
+// either side's modifier: the right ones are keys of their own (RSHIFT, RCTRL, RALT), bindable apart
+static qboolean Key_ShiftDown( void ) { return (qboolean)( kg.keys[A_SHIFT].down || kg.keys[A_SHIFT2].down ); }
+static qboolean Key_CtrlDown( void ) { return (qboolean)( kg.keys[A_CTRL].down || kg.keys[A_CTRL2].down ); }
+static qboolean Key_AltDown( void ) { return (qboolean)( kg.keys[A_ALT].down || kg.keys[A_ALT2].down ); }
+
 // do NOT blithely change any of the key names (3rd field) here, since they have to match the key binds
 //	in the CFG files, they're also prepended with "KEYNAME_" when looking up StringEd references
 //
@@ -183,9 +188,9 @@ keyname_t keynames[MAX_KEYS] =
 	{ 0x7f, 0x7f, "DEL", A_DELETE, false								},
 
 	{ 0x80, 0x80, "EURO", A_EURO, false  								},
-	{ 0x81, 0x81, "SHIFT", A_SHIFT2, false								},
-	{ 0x82, 0x82, "CTRL", A_CTRL2, false								},
-	{ 0x83, 0x83, "ALT", A_ALT2, false									},
+	{ 0x81, 0x81, "RSHIFT", A_SHIFT2, false								},
+	{ 0x82, 0x82, "RCTRL", A_CTRL2, false								},
+	{ 0x83, 0x83, "RALT", A_ALT2, false									},
 	{ 0x84, 0x84, "F5", A_F5, true										},
 	{ 0x85, 0x85, "F6", A_F6, true										},
 	{ 0x86, 0x86, "F7", A_F7, true										},
@@ -524,7 +529,7 @@ void Field_KeyDownEvent( field_t *edit, int key ) {
 	int		len;
 
 	// shift-insert is paste
-	if ( ( ( key == A_INSERT ) || ( key == A_KP_0 ) ) && kg.keys[A_SHIFT].down ) {
+	if ( ( ( key == A_INSERT ) || ( key == A_KP_0 ) ) && Key_ShiftDown() ) {
 		Field_Paste( edit );
 		return;
 	}
@@ -663,7 +668,7 @@ Handles history and console scrollback
 */
 void Console_Key( int key ) {
 	// ctrl-L clears screen
-	if ( keynames[key].lower == 'l' && kg.keys[A_CTRL].down ) {
+	if ( keynames[key].lower == 'l' && Key_CtrlDown() ) {
 		Cbuf_AddText( "clear\n" );
 		return;
 	}
@@ -738,8 +743,8 @@ void Console_Key( int key ) {
 
 	// history scrolling
 	if ( key == A_CURSOR_UP || key == A_KP_8
-		|| (kg.keys[A_SHIFT].down && key == A_MWHEELUP)
-		|| (kg.keys[A_CTRL].down && keynames[key].lower == 'p') )
+		|| (Key_ShiftDown() && key == A_MWHEELUP)
+		|| (Key_CtrlDown() && keynames[key].lower == 'p') )
 	{// scroll up: arrow-up, numpad-up, shift + mwheelup, ctrl + p
 		if ( nextHistoryLine - historyLine < COMMAND_HISTORY && historyLine > 0 )
 			historyLine--;
@@ -749,8 +754,8 @@ void Console_Key( int key ) {
 	}
 
 	if ( key == A_CURSOR_DOWN || key == A_KP_2
-		|| (kg.keys[A_SHIFT].down && key == A_MWHEELDOWN)
-		|| (kg.keys[A_CTRL].down && keynames[key].lower == 'n') )
+		|| (Key_ShiftDown() && key == A_MWHEELDOWN)
+		|| (Key_CtrlDown() && keynames[key].lower == 'n') )
 	{// scroll down: arrow-down, numpad-down, shift + mwheeldown, ctrl + n
 		historyLine++;
 		if (historyLine >= nextHistoryLine) {
@@ -765,27 +770,27 @@ void Console_Key( int key ) {
 
 	// console scrolling (ctrl to scroll fast)
 	if ( key == A_PAGE_UP || key == A_MWHEELUP ) {
-		int count = kg.keys[A_CTRL].down ? 5 : 1;
+		int count = Key_CtrlDown() ? 5 : 1;
 		for ( int i=0; i<count; i++ )
 			Con_PageUp();
 		return;
 	}
 
 	if ( key == A_PAGE_DOWN || key == A_MWHEELDOWN ) {
-		int count = kg.keys[A_CTRL].down ? 5 : 1;
+		int count = Key_CtrlDown() ? 5 : 1;
 		for ( int i=0; i<count; i++ )
 			Con_PageDown();
 		return;
 	}
 
 	// ctrl-home = top of console
-	if ( key == A_HOME && kg.keys[A_CTRL].down ) {
+	if ( key == A_HOME && Key_CtrlDown() ) {
 		Con_Top();
 		return;
 	}
 
 	// ctrl-end = bottom of console
-	if ( key == A_END && kg.keys[A_CTRL].down ) {
+	if ( key == A_END && Key_CtrlDown() ) {
 		Con_Bottom();
 		return;
 	}
@@ -1308,14 +1313,14 @@ void CL_KeyDownEvent( int key, unsigned time )
 		kg.anykeydown = qtrue;
 	}
 
-	if ( cl_allowAltEnter->integer && kg.keys[A_ALT].down && key == A_ENTER )
+	if ( cl_allowAltEnter->integer && Key_AltDown() && key == A_ENTER )
 	{
 		Cvar_SetValue( "r_fullscreen", !Cvar_VariableIntegerValue( "r_fullscreen" ) );
 		return;
 	}
 
 	// console key is hardcoded, so the user can never unbind it
-	if ( key == A_CONSOLE || (kg.keys[A_SHIFT].down && key == A_ESCAPE) ) {
+	if ( key == A_CONSOLE || (Key_ShiftDown() && key == A_ESCAPE) ) {
 		Con_ToggleConsole_f();
 		Key_ClearStates ();
 		return;
@@ -1331,7 +1336,7 @@ void CL_KeyDownEvent( int key, unsigned time )
 
 	// escape is always handled special
 	if ( key == A_ESCAPE ) {
-		if ( !kg.keys[A_SHIFT].down && ( Key_GetCatcher( ) & KEYCATCH_CONSOLE ) ) {
+		if ( !Key_ShiftDown() && ( Key_GetCatcher( ) & KEYCATCH_CONSOLE ) ) {
 			Con_ToggleConsole_f();
 			Key_ClearStates();
 			return;
@@ -1412,7 +1417,7 @@ void CL_KeyUpEvent( int key, unsigned time )
 	}
 
 	// don't process key-up events for the console key
-	if ( key == A_CONSOLE || ( key == A_ESCAPE && kg.keys[A_SHIFT].down ) )
+	if ( key == A_CONSOLE || ( key == A_ESCAPE && Key_ShiftDown() ) )
 		return;
 
 	//

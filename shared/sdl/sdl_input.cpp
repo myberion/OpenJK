@@ -191,7 +191,10 @@ static bool IN_NumLockEnabled( void )
 
 static void IN_TranslateNumpad( SDL_Keysym *keysym, fakeAscii_t *key )
 {
-	if ( IN_NumLockEnabled() )
+	// with num lock, keypad keys type digits in the console, chat and menus; in game, and while the UI waits for a
+	// key to bind, they stay KP_* keys (they used to become digits everywhere, so KP_* binds never fired)
+	static cvar_t *com_waitingForKey = Cvar_Get( "com_waitingForKey", "0", CVAR_TEMP );
+	if ( IN_NumLockEnabled() && Key_GetCatcher() && !com_waitingForKey->integer )
 	{
 		switch ( keysym->sym )
 		{
@@ -326,14 +329,14 @@ static fakeAscii_t IN_TranslateSDLToJKKey( SDL_Keysym *keysym, qboolean down ) {
 			case SDLK_DELETE:       key = A_DELETE;        break;
 			case SDLK_PAUSE:        key = A_PAUSE;         break;
 
-			case SDLK_LSHIFT:
-			case SDLK_RSHIFT:       key = A_SHIFT;         break;
+			case SDLK_LSHIFT:       key = A_SHIFT;         break;
+			case SDLK_RSHIFT:       key = A_SHIFT2;        break;
 
-			case SDLK_LCTRL:
-			case SDLK_RCTRL:        key = A_CTRL;          break;
+			case SDLK_LCTRL:        key = A_CTRL;          break;
+			case SDLK_RCTRL:        key = A_CTRL2;         break;
 
-			case SDLK_RALT:
 			case SDLK_LALT:         key = A_ALT;           break;
+			case SDLK_RALT:         key = A_ALT2;          break;
 
 			case SDLK_KP_5:         key = A_KP_5;          break;
 			case SDLK_INSERT:       key = A_INSERT;        break;
