@@ -106,7 +106,9 @@ Depends on: step 6.
 - Server: build every message with the codec in `SV_SendClientSnapshot`, `SV_SendClientGameState`, `SV_WriteDownloadToClient` and `SV_SendClientMapChange`; keep the base selection of `SV_WriteSnapshotToClient` for now (step 9 changes it).
 - Client: decode in `CL_ParseServerMessage` into `clSnapshot_t`, `cl.parseEntities` and `cl.entityBaselines`, with the validity rules of `CL_ParseSnapshot` (base valid, matching message number, entities not overwritten) and the `%` sanitation of strings.
 - Cover: bots (built but not sent), spectators, vehicles and pilots, downloads (UDP; HTTP downloads are separate), `svc_setgame`, `svc_mapchange`, and both demo systems: client demos and the server-side demos (`sv_autoDemo`, present in OpenJK) record the message stream, so the demo format changes with the protocol (old demos need the old reader or a converter; decide).
-- New protocol number; refuse a mismatch at the `connect` handshake. Out-of-band messages keep their own format.
+- New protocol number; refuse a mismatch at the `connect` handshake. Out-of-band messages keep their own format. (Owner, 7 and 8 November 2026: the protocol number, the handshake and any coexistence of protocols 26 and 27 are decided at the end of the plan; until then the codec simply replaces the server-to-client format in the branch's build, with no switch, and the reference build is the comparison.)
+- The netchan obfuscation XOR is dropped on server-to-client messages (decided 8 November 2026; to revisit in step 11).
+- A debug cvar on the server also codes each message with the legacy `msg.cpp` and reports the byte ratio (works with bots, where step 5's demos are not comparable).
 - Server commands are coded against earlier commands (step 6, part 2 B): server and client give the codec their command history (`CommandHistory`), and both keep the last 256 commands (the engine keeps 128 today, `MAX_RELIABLE_COMMANDS`).
 - Statistics cvars or commands: bytes per snapshot, symbols, escapes, base age.
 - Check: a normal game plays with no visible difference; `cg_showmiss` shows no new prediction misses; the statistics match step 5 within 5 %; client and server demos record and play back.
@@ -128,6 +130,7 @@ Depends on: step 7. The options and the decision procedure are in [07](07-transp
 - Gamestate, server commands and client commands on a reliable path with its own fast resend, instead of the 1,000 ms gamestate resend wait; snapshots never wait behind reliable data. Measured on the held-out demos (step 6): every server command is sent 2.59 times on average (repeated in every message until acknowledged), about 60 % of the command bytes.
 - Client input: every `usercmd` not yet acknowledged is resent in each packet, up to a cap; removes `cl_packetdup`.
 - Snapshot history sized from the supported RTT; replaces the fixed `PACKET_BACKUP`.
+- UDP downloads: since step 7 the codec carries one 2,048-byte block per message. The legacy format sent as many as the rate allowed in one snapshot interval (up to the 8-block window): also one block at the branch's defaults (`sv_clientRate` 25000, 50 ms), but 3 on a LAN (rate 100000), so downloads are slower only from a rate of about 41,000 bytes per second. To fix (owner, 8 November 2026), possibly with a system of their own: several blocks per message, or a separate download channel next to the reliable path above.
 - Check: simulated loss, latency and jitter (as `sim_loss.py`, extended to burst loss and lost acknowledgements) and two-machine tests; 0 decode failures; base age equal to RTT / frame time plus at most one frame.
 
 ### Step 10: settings computed at run time (M)
@@ -146,6 +149,7 @@ Depends on: step 9.
 Depends on: steps 9 and 10, and the owner's answers in 07 section 7.7.
 
 - Decide on authenticated encryption and the connection model; evaluate an in-place AEAD layer, netcode + reliable, GameNetworkingSockets against the requirements of 07 section 7.3, on a prototype with the real codec payloads.
+- The legacy netchan obfuscation (`SV_Netchan_Encode` / `CL_Netchan_Decode`: the payload XORed with a key made of the challenge, the sequence and the last command texts) is removed from server-to-client messages in step 7 (owner, 8 November 2026: its key was chosen from the reliable acknowledge read in clear at the start of the message, which the codec now codes). Decide here whether to restore an equivalent, replace it with the encryption above, or leave it out; the client-to-server direction still has it.
 - Check: the decision is recorded with measured overhead, CPU at 64 clients, behaviour under loss, and licence review.
 
 ### Step 12: live measurement and tuning (M)

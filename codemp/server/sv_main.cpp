@@ -46,7 +46,7 @@ cvar_t	*sv_master[MAX_MASTER_SERVERS];		// master server ip address
 cvar_t	*sv_reconnectlimit;		// minimum seconds between connect messages
 cvar_t	*sv_showghoultraces;	// report ghoul2 traces
 cvar_t	*sv_showloss;			// report when usercmds are lost
-cvar_t	*sv_padPackets;			// add nop bytes to messages
+cvar_t	*sv_netcodecCompare;		// debug: also code each message in the legacy format, print the byte ratio
 cvar_t	*sv_killserver;			// menu system can set to 1 to shut server down
 cvar_t	*sv_mapname;
 cvar_t	*sv_mapChecksum;

@@ -518,6 +518,19 @@ extern int cl_connectedToCheatServer;
 
 void CL_SystemInfoChanged( void );
 void CL_ParseServerMessage( msg_t *msg );
+void CL_ParseCommandString( int seq, const char *s );
+void CL_ParseGamestate( int serverCommandSequence );
+void CL_ParseGamestateString( int i, const char *s );
+void CL_ParseGamestateEnd( const entityState_t *baselines, int clientNum, int checksumFeed );
+void CL_ParseSetGame( const char *gameDir );
+void CL_ParseSnapshot( clSnapshot_t *newSnap );
+void CL_ParseDownload( int block, int fileSize, const byte *data, int size );
+
+//
+// cl_netcodec.cpp: the server's messages are decoded by netcodec (plan step 7)
+//
+void CL_NetcodecReset( void );
+void CL_NetcodecParseServerMessage( msg_t *msg );
 
 //====================================================================
 

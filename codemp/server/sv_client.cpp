@@ -311,6 +311,7 @@ gotnewcl:
 
 	// save the address
 	Netchan_Setup (NS_SERVER, &newcl->netchan , from, qport);
+	SV_NetcodecResetClient( newcl );	// the message codec holds no snapshot of this client yet
 
 	// save the userinfo
 	Q_strncpyz( newcl->userinfo, userinfo, sizeof(newcl->userinfo) );
@@ -481,11 +482,6 @@ the wrong gamestate.
 ================
 */
 void SV_SendClientGameState( client_t *client ) {
-	msg_t		msg;
-	byte		msgBuffer[MAX_MSGLEN];
-
-	MSG_Init( &msg, msgBuffer, sizeof( msgBuffer ) );
-
 	// MW - my attempt to fix illegible server message errors caused by
 	// packet fragmentation of initial snapshot.
 	while(client->state&&client->netchan.unsentFragments)
@@ -509,35 +505,15 @@ void SV_SendClientGameState( client_t *client ) {
 	// gamestate message was not just sent, forcing a retransmit
 	client->gamestateMessageNum = client->netchan.outgoingSequence;
 
-	SV_CreateClientGameStateMessage( client, &msg );
-
-	// deliver this to the client
-	SV_SendMessageToClient( &msg, client );
+	// the commands and the gamestate, coded and sent
+	SV_NetcodecSendGameState( client );
 }
 
 
 void SV_SendClientMapChange( client_t *client )
 {
-	msg_t		msg;
-	byte		msgBuffer[MAX_MSGLEN];
-
-	MSG_Init( &msg, msgBuffer, sizeof( msgBuffer ) );
-
-	// NOTE, MRE: all server->client messages now acknowledge
-	// let the client know which reliable clientCommands we have received
-	MSG_WriteLong( &msg, client->lastClientCommand );
-
-	// send any server commands waiting to be sent first.
-	// we have to do this cause we send the client->reliableSequence
-	// with a gamestate and it sets the clc.serverCommandSequence at
-	// the client side
-	SV_UpdateServerCommandsToClient( client, &msg );
-
-	// send the gamestate
-	MSG_WriteByte( &msg, svc_mapchange );
-
-	// deliver this to the client
-	SV_SendMessageToClient( &msg, client );
+	// the waiting server commands and the map change, coded and sent
+	SV_NetcodecSendMapChange( client );
 }
 
 /*
@@ -698,25 +674,25 @@ static void SV_BeginDownload_f( client_t *cl ) {
 	// Kill any existing download
 	SV_CloseDownload( cl );
 
-	// cl->downloadName is non-zero now, SV_WriteDownloadToClient will see this and open
+	// cl->downloadName is non-zero now, SV_NextDownloadBlock will see this and open
 	// the file itself
 	Q_strncpyz( cl->downloadName, Cmd_Argv(1), sizeof(cl->downloadName) );
 }
 
 /*
 ==================
-SV_WriteDownloadToClient
+SV_NextDownloadBlock
 
 Check to see if the client wants a file, open it if needed and start pumping the client
-Fill up msg with data
+The block for the next message, if any: one per message (the message codec sends one download block per message)
 ==================
 */
-void SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
+void SV_NextDownloadBlock(client_t *cl, svDownloadBlock_t *out)
 {
 	int curindex;
-	int rate;
-	int blockspersnap;
-	char errorMessage[1024];
+	static char errorMessage[1024];	// sent as the block's data, after this function returns
+
+	out->present = qfalse;
 
 	if (!*cl->downloadName)
 		return;	// Nothing being downloaded
@@ -754,10 +730,11 @@ void SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
 				Com_Printf("clientDownload: %d : \"%s\" file not found on server\n", (int) (cl - svs.clients), cl->downloadName);
 				Com_sprintf(errorMessage, sizeof(errorMessage), "File \"%s\" not found on server for autodownloading.\n", cl->downloadName);
 			}
-			MSG_WriteByte( msg, svc_download );
-			MSG_WriteShort( msg, 0 ); // client is expecting block zero
-			MSG_WriteLong( msg, -1 ); // illegal file size
-			MSG_WriteString( msg, errorMessage );
+			out->present = qtrue;
+			out->block = 0;		// client is expecting block zero
+			out->fileSize = -1;	// illegal file size
+			out->data = (const byte *)errorMessage;
+			out->size = (int)strlen( errorMessage );
 
 			*cl->downloadName = 0;
 
@@ -809,75 +786,39 @@ void SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
 		cl->downloadEOF = qtrue;  // We have added the EOF block
 	}
 
-	// Loop up to window size times based on how many blocks we can fit in the
-	// client snapMsec and rate
+	// Write out the next section of the file, if we have already reached our window,
+	// automatically start retransmitting
 
-	// based on the rate, how many bytes can we fit in the snapMsec time of the client
-	// normal rate / snapshotMsec calculation
-	rate = cl->rate;
-	if ( sv_maxRate->integer ) {
-		if ( sv_maxRate->integer < 1000 ) {
-			Cvar_Set( "sv_MaxRate", "1000" );
-		}
-		if ( sv_maxRate->integer < rate ) {
-			rate = sv_maxRate->integer;
-		}
+	if (cl->downloadClientBlock == cl->downloadCurrentBlock)
+		return; // Nothing to transmit
+
+	if (cl->downloadXmitBlock == cl->downloadCurrentBlock) {
+		// We have transmitted the complete window, should we start resending?
+
+		//FIXME:  This uses a hardcoded one second timeout for lost blocks
+		//the timeout should be based on client rate somehow
+		if (svs.time - cl->downloadSendTime > 1000)
+			cl->downloadXmitBlock = cl->downloadClientBlock;
+		else
+			return;
 	}
 
-	if (!rate) {
-		blockspersnap = 1;
-	} else {
-		blockspersnap = ( (rate * cl->snapshotMsec) / 1000 + MAX_DOWNLOAD_BLKSIZE ) /
-			MAX_DOWNLOAD_BLKSIZE;
-	}
+	// Send current block
+	curindex = (cl->downloadXmitBlock % MAX_DOWNLOAD_WINDOW);
 
-	if (blockspersnap < 0)
-		blockspersnap = 1;
+	out->present = qtrue;
+	out->block = cl->downloadXmitBlock;
+	out->fileSize = cl->downloadSize;	// block zero is special, contains file size
+	out->data = cl->downloadBlocks[curindex];
+	out->size = cl->downloadBlockSize[curindex];
 
-	while (blockspersnap--) {
+	Com_DPrintf( "clientDownload: %d : writing block %d\n", (int) (cl - svs.clients), cl->downloadXmitBlock );
 
-		// Write out the next section of the file, if we have already reached our window,
-		// automatically start retransmitting
+	// Move on to the next block
+	// It will get sent with next snap shot.  The rate will keep us in line.
+	cl->downloadXmitBlock++;
 
-		if (cl->downloadClientBlock == cl->downloadCurrentBlock)
-			return; // Nothing to transmit
-
-		if (cl->downloadXmitBlock == cl->downloadCurrentBlock) {
-			// We have transmitted the complete window, should we start resending?
-
-			//FIXME:  This uses a hardcoded one second timeout for lost blocks
-			//the timeout should be based on client rate somehow
-			if (svs.time - cl->downloadSendTime > 1000)
-				cl->downloadXmitBlock = cl->downloadClientBlock;
-			else
-				return;
-		}
-
-		// Send current block
-		curindex = (cl->downloadXmitBlock % MAX_DOWNLOAD_WINDOW);
-
-		MSG_WriteByte( msg, svc_download );
-		MSG_WriteShort( msg, cl->downloadXmitBlock );
-
-		// block zero is special, contains file size
-		if ( cl->downloadXmitBlock == 0 )
-			MSG_WriteLong( msg, cl->downloadSize );
-
-		MSG_WriteShort( msg, cl->downloadBlockSize[curindex] );
-
-		// Write the block
-		if ( cl->downloadBlockSize[curindex] ) {
-			MSG_WriteData( msg, cl->downloadBlocks[curindex], cl->downloadBlockSize[curindex] );
-		}
-
-		Com_DPrintf( "clientDownload: %d : writing block %d\n", (int) (cl - svs.clients), cl->downloadXmitBlock );
-
-		// Move on to the next block
-		// It will get sent with next snap shot.  The rate will keep us in line.
-		cl->downloadXmitBlock++;
-
-		cl->downloadSendTime = svs.time;
-	}
+	cl->downloadSendTime = svs.time;
 }
 
 /*

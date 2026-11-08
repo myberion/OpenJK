@@ -124,7 +124,8 @@ NET
 
 #define	PORT_ANY			-1
 
-#define	MAX_RELIABLE_COMMANDS	128			// max string commands buffered for restransmit
+#define	MAX_RELIABLE_COMMANDS	256			// max string commands buffered for restransmit; the message codec codes the
+										// server commands against earlier ones and needs both sides to keep 256 (netcodec::engine::kMinCommands)
 
 typedef enum {
 	NS_CLIENT,
@@ -1043,10 +1044,8 @@ int		Huff_getBit( byte *fout, int *offset);
 
 extern huffman_t clientHuffTables;
 
-#define	SV_ENCODE_START		4
 #define SV_DECODE_START		12
 #define	CL_ENCODE_START		12
-#define CL_DECODE_START		4
 
 inline int Round(float value)
 {

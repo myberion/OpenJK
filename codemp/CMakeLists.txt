@@ -24,7 +24,7 @@ endif(NOT InOpenJK)
 set(MPSharedDefines ${SharedDefines})
 
 # Message codec of the new netcode: the static library netcodec::netcodec (C++20 inside; the engine includes
-# netcodec/engine.h, which is C++11). Not linked by any target yet (plan step 7).
+# netcodec/engine.h, which is C++11). Linked by the client and the dedicated server (plan step 7).
 add_subdirectory("${MPDir}/netcodec")
 
 #    Add Game Project
@@ -177,7 +177,7 @@ if(BuildMPEngine OR BuildMPDed)
 	#    Common files/libraries/defines of both Engine and Dedicated Server
 
 	# libraries: Botlib
-	set(MPEngineAndDedLibraries ${MPBotLib})
+	set(MPEngineAndDedLibraries ${MPBotLib} netcodec::netcodec)
 	# Platform-specific libraries
 	if(WIN32)
 		set(MPEngineAndDedLibraries ${MPEngineAndDedLibraries} "winmm" "wsock32")
@@ -329,6 +329,7 @@ if(BuildMPEngine OR BuildMPDed)
 		"${MPDir}/server/sv_init.cpp"
 		"${MPDir}/server/sv_main.cpp"
 		"${MPDir}/server/sv_net_chan.cpp"
+		"${MPDir}/server/sv_netcodec.cpp"
 		"${MPDir}/server/sv_snapshot.cpp"
 		"${MPDir}/server/sv_world.cpp"
 		"${MPDir}/server/sv_gameapi.cpp"
@@ -441,6 +442,7 @@ if(BuildMPEngine)
 		"${MPDir}/client/cl_main.cpp"
 		"${MPDir}/client/cl_net_chan.cpp"
 		"${MPDir}/client/cl_parse.cpp"
+		"${MPDir}/client/cl_netcodec.cpp"
 		"${MPDir}/client/cl_scrn.cpp"
 		"${MPDir}/client/cl_ui.cpp"
 		"${MPDir}/client/cl_uiapi.cpp"

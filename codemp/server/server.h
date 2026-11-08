@@ -250,7 +250,7 @@ extern	cvar_t	*sv_master[MAX_MASTER_SERVERS];
 extern	cvar_t	*sv_reconnectlimit;
 extern	cvar_t	*sv_showghoultraces;
 extern	cvar_t	*sv_showloss;
-extern	cvar_t	*sv_padPackets;
+extern	cvar_t	*sv_netcodecCompare;
 extern	cvar_t	*sv_killserver;
 extern	cvar_t	*sv_mapname;
 extern	cvar_t	*sv_mapChecksum;
@@ -351,7 +351,17 @@ void SV_DropClient( client_t *drop, const char *reason );
 void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK );
 void SV_ClientThink (client_t *cl, usercmd_t *cmd);
 
-void SV_WriteDownloadToClient( client_t *cl , msg_t *msg );
+// the download block of the next message, if any (one per message): block 0 holds the file size, or -1 with the
+// error text as data (valid until the next call)
+typedef struct svDownloadBlock_s {
+	qboolean		present;
+	int				block;
+	int				fileSize;
+	const byte		*data;
+	int				size;
+} svDownloadBlock_t;
+void SV_NextDownloadBlock( client_t *cl, svDownloadBlock_t *out );
+void SV_CreateClientGameStateMessage( client_t *client, msg_t *msg );
 
 //
 // sv_ccmds.c
@@ -372,6 +382,18 @@ void SV_WriteFrameToClient (client_t *client, msg_t *msg);
 void SV_SendMessageToClient( msg_t *msg, client_t *client );
 void SV_SendClientMessages( void );
 void SV_SendClientSnapshot( client_t *client );
+clientSnapshot_t *SV_SnapshotBase( client_t *client, int *lastframe );
+int SV_SnapshotTime( const client_t *client );
+int SV_SnapshotFlags( const client_t *client );
+void SV_WriteSnapshotToClient( client_t *client, msg_t *msg, clientSnapshot_t *oldframe, int lastframe );
+
+//
+// sv_netcodec.cpp: every server-to-client message is coded by netcodec (plan step 7)
+//
+void SV_NetcodecResetClient( const client_t *client );
+void SV_NetcodecSendGameState( client_t *client );
+void SV_NetcodecSendMapChange( client_t *client );
+void SV_NetcodecSendSnapshot( client_t *client, const char *setGame );
 
 //
 // sv_game.c

@@ -727,6 +727,7 @@ void CL_ClearState (void) {
 
 //	S_StopAllSounds();
 	Com_Memset( &cl, 0, sizeof( cl ) );
+	CL_NetcodecReset();	// its frames point into cl.snapshots and cl.parseEntities
 }
 
 /*
