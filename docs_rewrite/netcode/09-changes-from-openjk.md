@@ -20,7 +20,7 @@ This page lists every change of the branch outside the study documents, grouped 
 | Rounding rule of `SnapVector` | differs between compilers | to nearest, ties to even, everywhere | a Windows client and a Linux server agree |
 | Server defaults | `sv_fps` 40, `sv_clientRate` 50000 | `sv_fps` 20, `sv_clientRate` 25000 | the conditions of the measurements |
 | Removed cvars | | `pmove_float`, `pmove_fixed`, `pmove_msec`, `sv_padPackets` | movement now always behaves as OpenJK with `pmove_float 1` and `pmove_fixed 0` (section 6) |
-| Added cvar | | `sv_netcodecCompare` (debug) | byte comparison with the legacy format |
+| Added cvars | | `sv_netcodecCompare`, `sv_recordClientPackets` (debug) | byte comparison with the legacy format; recordings of the client packets for plan step 8 |
 | Client fixes outside the netcode | | menu cursor speed, font aspect, keypad and right modifier keys, server browser state (servers answering in under 1 ms were hidden) | |
 
 ## 1. The server-to-client format
@@ -153,6 +153,7 @@ What it implies: players used to the 125 or 333 fps jumps lose them, and a jump 
 | `sv_clientRate` | 50000 | 25000 | the client's default rate; same delay threshold as OpenJK's pair (messages from 1,202 bytes) |
 | `sv_padPackets` | adds padding bytes | removed | it padded only the legacy format |
 | `sv_netcodecCompare` | | added (debug, 0 by default) | also codes each message in the legacy format and prints the byte ratio, every 10 s (1) or every message (2) |
+| `sv_recordClientPackets` | | added (debug, 0 by default) | writes each client's packets to a file (`clientpackets/` under the home path, one file per connection), the data to measure and train the client-to-server format of plan step 8 |
 | `pmove_float`, `pmove_fixed`, `pmove_msec` | game and cgame cvars | removed | section 6 |
 | `cl_shownet` | levels 1 to 4, -1, -2 | levels 1, 2 and 3 | section 1 |
 

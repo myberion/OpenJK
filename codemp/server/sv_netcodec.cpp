@@ -295,3 +295,100 @@ void SV_NetcodecStats_f( void ) {
 		Com_Memset( &st, 0, sizeof( st ) );
 	}
 }
+
+// sv_recordClientPackets (debug, plan step 8): each client's packets are written, as SV_ExecuteClientMessage reads them
+// (after the netchan header, the obfuscation XOR already removed), to clientpackets/client<n>_<date>.jkcp under the
+// home path, one file per connection, for the measurements and the training data of the client-to-server format.
+// File: ClientPacketFileHeader, then per packet a ClientPacketRecord followed by its length bytes; little-endian.
+struct ClientPacketFileHeader {
+	char magic[4];              // "JKCP"
+	int32_t version;            // 1
+	int32_t recordSize;         // sizeof( ClientPacketRecord )
+};
+
+struct ClientPacketRecord {
+	int32_t svTime;             // sv.time at arrival
+	int32_t realTime;           // Sys_Milliseconds() at arrival
+	int32_t key;                // the usercmd key SV_UserMove derives for this packet
+	int32_t snapTime;           // server time of the acknowledged snapshot, -1 if the server no longer holds it
+	int32_t commandTime;        // then its player state's fields that match usercmd fields (0 without a snapshot)
+	float viewangles[3];
+	int32_t deltaAngles[3];
+	int32_t weapon;
+	int32_t forcePowerSelected;
+	int32_t holdableItem;
+	int32_t length;             // bytes that follow
+};
+static_assert( sizeof( ClientPacketRecord ) == 15 * 4, "no padding in the file records" );
+
+static fileHandle_t s_recordFiles[MAX_CLIENTS];
+
+void SV_NetcodecRecordClose( const client_t *client ) {
+	fileHandle_t &f = s_recordFiles[ClientIndex( client )];
+	if ( f ) {
+		FS_FCloseFile( f );
+		f = 0;
+	}
+}
+
+void SV_NetcodecRecordCloseAll( void ) {
+	for ( fileHandle_t &f : s_recordFiles ) {
+		if ( f ) {
+			FS_FCloseFile( f );
+			f = 0;
+		}
+	}
+}
+
+void SV_NetcodecRecordClientPacket( client_t *client, const msg_t *msg ) {
+	const int ci = ClientIndex( client );
+	fileHandle_t &f = s_recordFiles[ci];
+	if ( !sv_recordClientPackets->integer ) {
+		SV_NetcodecRecordClose( client );
+		return;
+	}
+	if ( !f ) {
+		qtime_t t;
+		Com_RealTime( &t );
+		const char *name = va( "clientpackets/client%d_%04d%02d%02d-%02d%02d%02d.jkcp", ci, 1900 + t.tm_year, 1 + t.tm_mon,
+			t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec );
+		f = FS_FOpenFileWrite( name );
+		if ( !f ) {
+			Com_Printf( S_COLOR_YELLOW "Cannot write %s, sv_recordClientPackets set to 0\n", name );
+			Cvar_Set( "sv_recordClientPackets", "0" );
+			return;
+		}
+		const ClientPacketFileHeader header = { { 'J', 'K', 'C', 'P' }, 1, (int32_t)sizeof( ClientPacketRecord ) };
+		FS_Write( &header, sizeof( header ), f );
+		Com_Printf( "Recording the packets of client %d to %s\n", ci, name );
+	}
+
+	// the header as SV_ExecuteClientMessage reads it, for the key of SV_UserMove and the acknowledged snapshot
+	msg_t peek = *msg;
+	MSG_Bitstream( &peek );
+	MSG_ReadLong( &peek );  // serverId
+	const int ack = MSG_ReadLong( &peek );
+	const int reliableAck = MSG_ReadLong( &peek );
+
+	ClientPacketRecord rec = {};
+	rec.svTime = sv.time;
+	rec.realTime = Sys_Milliseconds();
+	rec.key = sv.checksumFeed ^ ack ^ Com_HashKey( client->reliableCommands[reliableAck & ( MAX_RELIABLE_COMMANDS - 1 )], 32 );
+	rec.snapTime = -1;
+	const eng::Frame &frame = s_frames[ci][( ack & 0x7fffffff ) % PACKET_BACKUP];
+	if ( ack >= 0 && frame.seq == ack ) {
+		const playerState_t *ps = static_cast<const playerState_t *>( frame.ps );
+		rec.snapTime = (int32_t)frame.record.time;
+		rec.commandTime = ps->commandTime;
+		for ( int i = 0; i < 3; i++ ) {
+			rec.viewangles[i] = ps->viewangles[i];
+			rec.deltaAngles[i] = ps->delta_angles[i];
+		}
+		rec.weapon = ps->weapon;
+		rec.forcePowerSelected = ps->fd.forcePowerSelected;
+		rec.holdableItem = ps->stats[STAT_HOLDABLE_ITEM];
+	}
+	rec.length = msg->cursize - msg->readcount;
+	FS_Write( &rec, sizeof( rec ), f );
+	FS_Write( msg->data + msg->readcount, rec.length, f );
+}

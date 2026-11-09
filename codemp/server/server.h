@@ -261,6 +261,7 @@ extern	cvar_t	*sv_reconnectlimit;
 extern	cvar_t	*sv_showghoultraces;
 extern	cvar_t	*sv_showloss;
 extern	cvar_t	*sv_netcodecCompare;
+extern	cvar_t	*sv_recordClientPackets;
 extern	cvar_t	*sv_killserver;
 extern	cvar_t	*sv_mapname;
 extern	cvar_t	*sv_mapChecksum;
@@ -406,6 +407,9 @@ void SV_NetcodecSendMapChange( client_t *client );
 void SV_NetcodecSendSnapshot( client_t *client, const char *setGame );
 size_t SV_NetcodecDemoGameState( client_t *client, byte *out, size_t outSize );
 void SV_NetcodecStats_f( void );
+void SV_NetcodecRecordClientPacket( client_t *client, const msg_t *msg );
+void SV_NetcodecRecordClose( const client_t *client );
+void SV_NetcodecRecordCloseAll( void );
 
 //
 // sv_game.c

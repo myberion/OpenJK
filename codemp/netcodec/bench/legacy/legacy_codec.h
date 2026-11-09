@@ -53,4 +53,46 @@ int Encode(const MessageView &msg, const SnapshotView *base, const uint8_t *cons
 // Decodes one message as the client does; false on a malformed message. base: the client's copy of the base.
 bool Decode(const uint8_t *data, int size, const SnapshotView *base, const uint8_t *const *baselines, SnapshotOut &out);
 
+// Client packets, before the netchan obfuscation: written as CL_WritePacket and CL_Netchan_Transmit (its clc_EOF) do,
+// read as SV_ExecuteClientMessage, SV_ClientCommand and SV_UserMove do. User commands are byte images of usercmd_t.
+constexpr size_t kUserCmdBytes = 28;
+constexpr int kMaxUserCmds = 32;              // MAX_PACKET_USERCMDS
+
+enum class Move { kNone, kDelta, kNoDelta };  // no user command, clc_move, clc_moveNoDelta
+
+struct ClientPacketView {
+	int32_t serverId = 0;
+	int32_t messageAck = 0;
+	int32_t reliableAck = 0;
+	const Command *commands = nullptr;        // the client commands not yet acknowledged
+	int numCommands = 0;
+	Move move = Move::kNone;
+	const uint8_t *userCmds = nullptr;        // numUserCmds images, each delta-coded against the previous one
+	int numUserCmds = 0;
+	int32_t key = 0;                          // the user-command key
+};
+
+// A decoded client packet; the command texts point into text. Bit counts of the sections, for where the bytes go.
+struct ClientPacketOut {
+	static constexpr int kMaxCommands = 256;
+	int32_t serverId = 0;
+	int32_t messageAck = 0;
+	int32_t reliableAck = 0;
+	Command commands[kMaxCommands];
+	int numCommands = 0;
+	char text[65536];
+	Move move = Move::kNone;
+	uint8_t userCmds[kMaxUserCmds * kUserCmdBytes];
+	int numUserCmds = 0;
+	int headerBits = 0;                       // the three acknowledges
+	int commandBits = 0;                      // the client commands
+	int moveBits = 0;                         // the move byte, the count and the user commands, or the final clc_EOF
+};
+
+// Encodes one client packet; returns its size in bytes (0 on overflow).
+int EncodeClientPacket(const ClientPacketView &p, uint8_t *out, int capacity);
+
+// Decodes one client packet; false where the server would stop early or on a malformed packet.
+bool DecodeClientPacket(const uint8_t *data, int size, int32_t key, ClientPacketOut &out);
+
 } // namespace legacy

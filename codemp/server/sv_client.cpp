@@ -403,6 +403,8 @@ void SV_DropClient( client_t *drop, const char *reason ) {
 		drop->state = CS_ZOMBIE;		// become free in a few seconds
 	}
 
+	SV_NetcodecRecordClose( drop );
+
 	if ( drop->demo.demorecording ) {
 		SV_StopRecordDemo( drop );
 	}
@@ -1400,6 +1402,8 @@ Parse a client packet
 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
 	int			c;
 	int			serverId;
+
+	SV_NetcodecRecordClientPacket( cl, msg );	// sv_recordClientPackets
 
 	MSG_Bitstream(msg);
 

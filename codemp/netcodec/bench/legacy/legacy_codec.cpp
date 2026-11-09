@@ -154,4 +154,85 @@ bool Decode(const uint8_t *data, int size, const SnapshotView *base, const uint8
 	return msg.readcount <= msg.cursize;
 }
 
+static_assert(sizeof(usercmd_t) == kUserCmdBytes, "usercmd_t layout");
+static_assert(MAX_PACKET_USERCMDS == kMaxUserCmds, "user commands per packet");
+
+int EncodeClientPacket(const ClientPacketView &p, uint8_t *out, int capacity) {
+	msg_t msg;
+	MSG_Init(&msg, out, capacity);
+	MSG_Bitstream(&msg);
+	MSG_WriteLong(&msg, p.serverId);
+	MSG_WriteLong(&msg, p.messageAck);
+	MSG_WriteLong(&msg, p.reliableAck);
+	for (int i = 0; i < p.numCommands; i++) {
+		MSG_WriteByte(&msg, clc_clientCommand);
+		MSG_WriteLong(&msg, p.commands[i].seq);
+		MSG_WriteString(&msg, p.commands[i].text);
+	}
+	if (p.move != Move::kNone) {
+		MSG_WriteByte(&msg, p.move == Move::kDelta ? clc_move : clc_moveNoDelta);
+		MSG_WriteByte(&msg, p.numUserCmds);
+		usercmd_t nullcmd;
+		std::memset(&nullcmd, 0, sizeof(nullcmd));
+		usercmd_t *oldcmd = &nullcmd;
+		for (int i = 0; i < p.numUserCmds; i++) {
+			usercmd_t *cmd = reinterpret_cast<usercmd_t *>(const_cast<uint8_t *>(p.userCmds + i * kUserCmdBytes));
+			MSG_WriteDeltaUsercmdKey(&msg, p.key, oldcmd, cmd);
+			oldcmd = cmd;
+		}
+	}
+	MSG_WriteByte(&msg, clc_EOF);
+	return msg.overflowed ? 0 : msg.cursize;
+}
+
+bool DecodeClientPacket(const uint8_t *data, int size, int32_t key, ClientPacketOut &out) {
+	msg_t msg;
+	MSG_Init(&msg, const_cast<uint8_t *>(data), size);
+	msg.cursize = size;
+	MSG_BeginReading(&msg);
+	out.serverId = MSG_ReadLong(&msg);
+	out.messageAck = MSG_ReadLong(&msg);
+	out.reliableAck = MSG_ReadLong(&msg);
+	out.headerBits = msg.bit;
+	out.numCommands = 0;
+	out.move = Move::kNone;
+	out.numUserCmds = 0;
+	if (out.messageAck < 0) return false;
+	int textUsed = 0;
+	int c;
+	for (;;) {
+		c = MSG_ReadByte(&msg);
+		if (c != clc_clientCommand || msg.readcount > msg.cursize) break;
+		if (out.numCommands == ClientPacketOut::kMaxCommands) return false;
+		Command &command = out.commands[out.numCommands++];
+		command.seq = MSG_ReadLong(&msg);
+		const char *s = MSG_ReadString(&msg);
+		const int len = static_cast<int>(std::strlen(s)) + 1;
+		if (textUsed + len > static_cast<int>(sizeof(out.text))) return false;
+		std::memcpy(out.text + textUsed, s, len);
+		command.text = out.text + textUsed;
+		textUsed += len;
+	}
+	out.commandBits = msg.bit - out.headerBits;
+	if (c == clc_move || c == clc_moveNoDelta) {
+		out.move = c == clc_move ? Move::kDelta : Move::kNoDelta;
+		out.numUserCmds = MSG_ReadByte(&msg);
+		if (out.numUserCmds < 1 || out.numUserCmds > kMaxUserCmds) return false;
+		usercmd_t nullcmd;
+		std::memset(&nullcmd, 0, sizeof(nullcmd));
+		usercmd_t *oldcmd = &nullcmd;
+		for (int i = 0; i < out.numUserCmds; i++) {
+			usercmd_t *cmd = reinterpret_cast<usercmd_t *>(out.userCmds + i * kUserCmdBytes);
+			std::memset(cmd, 0, sizeof(*cmd));
+			MSG_ReadDeltaUsercmdKey(&msg, key, oldcmd, cmd);
+			oldcmd = cmd;
+		}
+		MSG_ReadByte(&msg);                           // clc_EOF (the server does not read it)
+	} else if (c != clc_EOF) {
+		return false;
+	}
+	out.moveBits = msg.bit - out.headerBits - out.commandBits;
+	return msg.readcount <= msg.cursize;
+}
+
 } // namespace legacy
