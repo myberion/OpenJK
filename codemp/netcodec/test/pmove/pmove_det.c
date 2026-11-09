@@ -1,9 +1,9 @@
 // Determinism test of the game's player movement (bg_pmove.c, bg_slidemove.c), outside the engine: the same synthetic
 // commands through Pmove, in a small world of brushes, and a hash of the player state after every command. Built
 // twice, as the server's game module (-D_GAME) and as cgame (-D_CGAME), with each compiler: cgame's prediction is
-// right only if a client build gives the same states as the server build. Rounding modes of pmove's velocity: 0, the
-// engine's Sys_SnapVector as it is (today's default, pmove_float 0); 1, none (pmove_float 1); 2, to nearest with ties to
-// even on every platform ((float)lrintf, the planned fix). Built with -DJKA101 and the original 1.01 game code
+// right only if a client build gives the same states as the server build. Pmove no longer rounds the velocity (owner,
+// 9 November 2026), so this game code runs one mode, 1: no rounding (modes 0, the engine's Sys_SnapVector, and 2, ties
+// to even, were measured before that decision). Built with -DJKA101 and the original 1.01 game code
 // (E:\Git\jka\jediacademy\codemp\game), mode 3: 1.01's own rounding (fistp on Windows and Linux; 1.01 always rounds).
 // Output: one line per scenario and mode: the hash of the movement fields (origin, velocity, view angles, ground
 // entity, pm_flags, pm_time, commandTime) and of the whole player state after every command, and the final origin and
@@ -158,8 +158,8 @@ static int World_Contents(const vec3_t point, int passEntityNum) {
 // ------------------------------------------------------------------ what the bg code needs from the module
 
 static int harnessTime;
-static int snapMode;   // the rounding mode of the run (see the top of the file)
 
+#if defined(JKA101)
 // to nearest, ties to even, through an integer (+0 for -0.5): what 1.01's fistp does
 static void SnapEven(float *v) {
 	v[0] = (float)lrintf(v[0]);
@@ -167,7 +167,6 @@ static void SnapEven(float *v) {
 	v[2] = (float)lrintf(v[2]);
 }
 
-#if defined(JKA101)
 void QDECL Com_Error(int level, const char *error, ...) {
 	(void)level;
 	fprintf(stderr, "Com_Error: %s\n", error);
@@ -195,11 +194,6 @@ static void QDECL HarnessPrintf(const char *fmt, ...) { (void)fmt; }
 NORETURN_PTR void (*Com_Error)(int level, const char *error, ...) = HarnessError;
 void (*Com_Printf)(const char *msg, ...) = HarnessPrintf;
 
-extern void Sys_SnapVector(float *v);   // shared/sys/snapvector.cpp, the engine's own
-static void SnapTrap(float *v) {
-	if (snapMode == 2) SnapEven(v);
-	else Sys_SnapVector(v);
-}
 // debug builds register a cvar from BG_AddPredictableEventToPlayerstate (bg_misc.c)
 static void CvarRegisterTrap(vmCvar_t *vmCvar, const char *varName, const char *defaultValue, uint32_t flags) {
 	(void)varName; (void)defaultValue; (void)flags;
@@ -347,11 +341,6 @@ static void Run(int scenario, int mode, int commands, FILE *dump) {
 	pm.tracemask = MASK_PLAYERSOLID;
 	pm.trace = World_Trace;
 	pm.pointcontents = World_Contents;
-#if !defined(JKA101)
-	pm.pmove_float = mode == 1;
-#endif
-	snapMode = mode;
-	pm.pmove_msec = 8;
 	pm.animations = anims;
 	pm.gametype = GT_FFA;
 	pm.stepSlideFix = 1;
@@ -395,14 +384,13 @@ static void Run(int scenario, int mode, int commands, FILE *dump) {
 }
 
 int main(int argc, char **argv) {
-	int commands = 20000, a, s, f, i;
+	int commands = 20000, a, s, i;
 	FILE *dump = NULL;
 	for (a = 1; a < argc; a++) {
 		if (strncmp(argv[a], "--dump=", 7) == 0) dump = fopen(argv[a] + 7, "w");
 		else commands = atoi(argv[a]);
 	}
 #if !defined(JKA101)
-	imports.SnapVector = SnapTrap;
 	imports.Cvar_Register = CvarRegisterTrap;
 #endif
 	for (i = 0; i < MAX_TOTALANIMATIONS; i++) {
@@ -426,7 +414,7 @@ int main(int argc, char **argv) {
 #if defined(JKA101)
 		Run(s, 3, commands, dump);
 #else
-		for (f = 0; f < 3; f++) Run(s, f, commands, dump);
+		Run(s, 1, commands, dump);
 #endif
 	}
 	if (dump) fclose(dump);

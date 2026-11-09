@@ -42,7 +42,7 @@ Depends on: nothing (can run alongside step 1).
 
 ### Step 3: state recorder in the server (S)
 
-Depends on: step 2. **No longer needed before step 5**: client demos give the data (step 4). The recorder is still wanted later, to record states on this branch's server without a Huffman decoder and to feed the training of step 12.
+Depends on: step 2. **No longer needed before step 5**: client demos give the data (step 4). The recorder is still wanted later, to record states on this branch's server without a Huffman decoder and to feed the training of step 13.
 
 - A server option that writes, per client and per message, the decoded content the codec needs: header, player state(s), entity list, baselines, server commands, gamestate, downloads, the chosen base and the send time. Simple binary format with the schema hash.
 - It replaces the proxy capture of the study (which recorded bitstreams and needed a Huffman decoder). The proxy stays usable on the original 1.01 server.
@@ -103,28 +103,43 @@ Depends on: steps 2 and 5. **In progress** (7 November 2026): rANS and whole-mes
 
 Depends on: step 6.
 
-- Server: build every message with the codec in `SV_SendClientSnapshot`, `SV_SendClientGameState`, `SV_WriteDownloadToClient` and `SV_SendClientMapChange`; keep the base selection of `SV_WriteSnapshotToClient` for now (step 9 changes it).
+**Done on 9 November 2026** ([progress/step-07-engine-integration.md](progress/step-07-engine-integration.md)): every server-to-client message coded by netcodec, demos, the precision decisions of step 6 part F, statistics commands; tested on the loopback, with simulated loss and with a GCC server on a Linux VPS played from Windows: no message the client could not decode, prediction misses of the same order as the reference build.
+
+- Server: build every message with the codec in `SV_SendClientSnapshot`, `SV_SendClientGameState`, `SV_WriteDownloadToClient` and `SV_SendClientMapChange`; keep the base selection of `SV_WriteSnapshotToClient` for now (step 10 changes it).
 - Client: decode in `CL_ParseServerMessage` into `clSnapshot_t`, `cl.parseEntities` and `cl.entityBaselines`, with the validity rules of `CL_ParseSnapshot` (base valid, matching message number, entities not overwritten) and the `%` sanitation of strings.
 - Cover: bots (built but not sent), spectators, vehicles and pilots, downloads (UDP; HTTP downloads are separate), `svc_setgame`, `svc_mapchange`, and both demo systems: client demos and the server-side demos (`sv_autoDemo`, present in OpenJK) record the message stream, so the demo format changes with the protocol (old demos need the old reader or a converter; decide). Done 8 November 2026: server demos copy the messages sent (the codec's frames are reset when recording starts), client demos code each decoded message again against the demo's previous snapshot; each starts with a coded gamestate holding the last 127 server commands ([progress/step-07-engine-integration.md](progress/step-07-engine-integration.md), part 3).
 - New protocol number; refuse a mismatch at the `connect` handshake. Out-of-band messages keep their own format. (Owner, 7 and 8 November 2026: the protocol number, the handshake and any coexistence of protocols 26 and 27 are decided at the end of the plan; until then the codec simply replaces the server-to-client format in the branch's build, with no switch, and the reference build is the comparison.)
-- The netchan obfuscation XOR is dropped on server-to-client messages (decided 8 November 2026; to revisit in step 11).
+- The netchan obfuscation XOR is dropped on server-to-client messages (decided 8 November 2026; to revisit in step 12).
 - A debug cvar on the server also codes each message with the legacy `msg.cpp` and reports the byte ratio (works with bots, where step 5's demos are not comparable).
 - Server commands are coded against earlier commands (step 6, part 2 B): server and client give the codec their command history (`CommandHistory`), and both keep the last 256 commands (the engine keeps 128 today, `MAX_RELIABLE_COMMANDS`).
 - Statistics cvars or commands: bytes per snapshot, symbols, escapes, base age.
 - Check: a normal game plays with no visible difference; `cg_showmiss` shows no new prediction misses; the statistics match step 5 within 5 %; client and server demos record and play back.
 
-### Step 8: safety and limits (S)
+### Step 8: client-to-server messages by the codec (M)
 
-Depends on: step 7.
+Depends on: step 7. Decided 9 November 2026 (owner): the client-to-server direction is coded by netcodec too; the steps after it were renumbered (the former steps 8 to 13 are 9 to 14).
+
+Today each client packet (about 60 per second, `CL_WritePacket`) carries the server id, the acknowledge of the last server message and of the last server command, the client commands not yet acknowledged (text), and the user commands (time, view angles, buttons, movement, weapon) coded against the previous one with a "key" XOR, all through Huffman, then the netchan XOR (`CL_Netchan_Encode`). None of it was studied or measured: the demos do not hold it.
+
+1. Measure and record: a server debug cvar writes the decoded client packets (legacy size, acknowledges, client commands, user commands, arrival time) to a file; the owner plays a few games with it (bots send no packets, their commands are made inside the server). This gives the legacy cost and the training data.
+2. The format in the library: a client message in `engine.h`, contexts for the user-command fields, trained tables. Each packet decodes alone (the server does not acknowledge client packets): the bases are the previous command of the same packet and the snapshot the client acknowledges (its time, its angles). Client commands are coded against earlier client commands, as server commands are.
+3. Integration: `CL_WritePacket` and `SV_ExecuteClientMessage` (`SV_UserMove`, `SV_ClientCommand`); the user-command key and the netchan XOR are dropped in this direction as well (to revisit in step 12); `sv_netcodecCompare` covers it.
+4. Robustness first: the server decodes data from anyone, so the malformed-input test and a fuzzer target cover this decoder before it is used.
+- Out of scope here: connectionless messages (`connect`, `getinfo`, `getstatus`, the master server), decided with the protocol number at the end of the plan.
+- Check: a normal game plays with no visible difference (movement, prediction, chat, votes); round trip and determinism tests on the recordings; the byte ratio against the legacy format is documented.
+
+### Step 9: safety and limits (S)
+
+Depends on: steps 7 and 8.
 
 - Escape path: done in step 6 per message (owner, 7 November 2026), not per entity: a message coded larger than 1 KB is also coded with its fields raw and the smaller is sent, which bounds the worst case to about the raw layout ([progress/step-06-cpp-codec.md](progress/step-06-cpp-codec.md), part D).
 - Size cap: on overflow, retry with fewer entities or a full-state message; never drop a snapshot silently (today the engine clears the message and prints a warning, `server/sv_snapshot.cpp:852`).
 - Fuzz corpus and sanitizer builds in CI.
 - Check: the synthetic worst case (every field random, 1,000 entities) stays within the raw layout plus a small constant and decodes.
 
-### Step 9: acknowledgements, base selection, reliable data (M)
+### Step 10: acknowledgements, base selection, reliable data (M)
 
-Depends on: step 7. The options and the decision procedure are in [07](07-transport-study.md).
+Depends on: steps 7 and 8. The options and the decision procedure are in [07](07-transport-study.md).
 
 - Acknowledgement record in every client packet (bitfield of the last 32 or more messages); the server uses the newest acknowledged snapshot as base.
 - Gamestate, server commands and client commands on a reliable path with its own fast resend, instead of the 1,000 ms gamestate resend wait; snapshots never wait behind reliable data. Measured on the held-out demos (step 6): every server command is sent 2.59 times on average (repeated in every message until acknowledged), about 60 % of the command bytes.
@@ -133,9 +148,9 @@ Depends on: step 7. The options and the decision procedure are in [07](07-transp
 - UDP downloads: since step 7 the codec carries one 2,048-byte block per message. The legacy format sent as many as the rate allowed in one snapshot interval (up to the 8-block window): also one block at the branch's defaults (`sv_clientRate` 25000, 50 ms), but 3 on a LAN (rate 100000), so downloads are slower only from a rate of about 41,000 bytes per second. To fix (owner, 8 November 2026), possibly with a system of their own: several blocks per message, or a separate download channel next to the reliable path above.
 - Check: simulated loss, latency and jitter (as `sim_loss.py`, extended to burst loss and lost acknowledgements) and two-machine tests; 0 decode failures; base age equal to RTT / frame time plus at most one frame.
 
-### Step 10: settings computed at run time (M)
+### Step 11: settings computed at run time (M)
 
-Depends on: step 9.
+Depends on: step 10.
 
 - Bandwidth estimate per connection from the acknowledgement record; it sets the snapshot and packet rates. Removes `rate`, `sv_maxRate`, `sv_minRate`, `sv_ratePolicy`, `sv_clientRate`, `sv_lanForceRate`, `snaps`, `sv_snapsMin`, `sv_snapsMax`, `sv_snapsPolicy`, `cl_maxpackets`, `cl_lanForcePackets`.
 - Interpolation delay computed from the measured snapshot interval and jitter. Removes `cl_timeNudge`, `cl_timenudgeDuration` and the user choice of `cg_smoothClients`.
@@ -144,27 +159,26 @@ Depends on: step 9.
 - Debug cvars to force each value and to print the measured ones.
 - Check: on links from LAN to 400 ms RTT and from 2 % to 20 % loss, no setting is needed to reach the snapshot rate the link allows; the forced-value debug cvars reproduce the old behaviour for comparison.
 
-### Step 11: transport security and library decision (M to L, optional)
+### Step 12: transport security and library decision (M to L, optional)
 
-Depends on: steps 9 and 10, and the owner's answers in 07 section 7.7.
+Depends on: steps 10 and 11, and the owner's answers in 07 section 7.7.
 
 - Decide on authenticated encryption and the connection model; evaluate an in-place AEAD layer, netcode + reliable, GameNetworkingSockets against the requirements of 07 section 7.3, on a prototype with the real codec payloads.
-- The legacy netchan obfuscation (`SV_Netchan_Encode` / `CL_Netchan_Decode`: the payload XORed with a key made of the challenge, the sequence and the last command texts) is removed from server-to-client messages in step 7 (owner, 8 November 2026: its key was chosen from the reliable acknowledge read in clear at the start of the message, which the codec now codes). Decide here whether to restore an equivalent, replace it with the encryption above, or leave it out; the client-to-server direction still has it.
+- The legacy netchan obfuscation (`SV_Netchan_Encode` / `CL_Netchan_Decode`: the payload XORed with a key made of the challenge, the sequence and the last command texts) is removed from server-to-client messages in step 7 (owner, 8 November 2026: its key was chosen from the reliable acknowledge read in clear at the start of the message, which the codec now codes). The client-to-server direction loses it, and the user-command key, in step 8. Decide here whether to restore an equivalent, replace it with the encryption above, or leave it out.
 - Check: the decision is recorded with measured overhead, CPU at 64 clients, behaviour under loss, and licence review.
 
-### Step 12: live measurement and tuning (M)
+### Step 13: live measurement and tuning (M)
 
-Depends on: steps 7 to 10.
+Depends on: steps 7 to 12.
 
 - Playtest servers with the recorder: bytes per client per second, snapshots per second, prediction misses, CPU per client, escape rate.
 - Retrain the tables from the new recordings; size regression check.
 
-### Step 13: beyond the codec (L, optional)
+### Step 14: beyond the codec (L, optional)
 
 Not studied; the largest unexplored potential (05 section 5.7):
 
 - per-client priority and bandwidth budget, distance-based update rates, interest culling;
-- the client-to-server `usercmd` stream;
 - an audit of the client's prediction and interpolation code (`cg_predict.c`, `cg_ents.c`, time synchronisation in `CL_AdjustTimeDelta`), now that compatibility does not constrain it;
 - a fixed physics step (`pmove_*`, 04 section 4.10), a gameplay decision.
 
@@ -179,12 +193,13 @@ Not studied; the largest unexplored potential (05 section 5.7):
 | 5 | re-measure, finish the model | 1, 4 | S |
 | 6 | C++ codec library | 2, 5 | M |
 | 7 | engine integration, demos | 6 | M |
-| 8 | safety and limits | 7 | S |
-| 9 | acknowledgements, reliable data | 7 | M |
-| 10 | settings computed at run time | 9 | M |
-| 11 | transport security decision | 9, 10 | M to L |
-| 12 | live measurement | 7 to 10 | M |
-| 13 | beyond the codec | | L |
+| 8 | client-to-server messages by the codec | 7 | M |
+| 9 | safety and limits | 7, 8 | S |
+| 10 | acknowledgements, reliable data | 7, 8 | M |
+| 11 | settings computed at run time | 10 | M |
+| 12 | transport security decision | 10, 11 | M to L |
+| 13 | live measurement | 7 to 12 | M |
+| 14 | beyond the codec | | L |
 
 ## 4. Test matrix
 
@@ -200,7 +215,7 @@ Not studied; the largest unexplored potential (05 section 5.7):
 | Loss, latency, jitter | simulator over recordings: loss 0 to 20 % with bursts, RTT 0 to 400 ms, jitter, lost acknowledgements | transport change |
 | Worst case | adversarial snapshots stay within the cap and decode | every build |
 | CPU | C benchmark over recordings on the target machine | codec change |
-| Live | two or more machines, several humans, loss emulation | step 12 |
+| Live | two or more machines, several humans, loss emulation | step 13 |
 
 ## 5. Risks
 
@@ -215,7 +230,7 @@ Not studied; the largest unexplored potential (05 section 5.7):
 | Acknowledgement redesign breaks base selection | corrupted deltas | round-trip tests under simulated loss |
 | Bandwidth estimation oscillates or is too slow | stutter, delayed snapshots | simulator with changing links before live tests; debug cvars to force values |
 | Demo format change | old demos unreadable | keep a legacy reader or write a converter |
-| Scope creep into priority, culling, prediction audit | schedule | keep step 13 separate |
+| Scope creep into priority, culling, prediction audit | schedule | keep step 14 separate |
 
 ## 6. Targets taken from the study
 

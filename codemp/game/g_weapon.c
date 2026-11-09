@@ -1884,7 +1884,6 @@ void rocketThink( gentity_t *ent )
 
 		VectorScale( newdir, vel * 0.5f, ent->s.pos.trDelta );
 		VectorCopy( newdir, ent->movedir );
-		SnapVector( ent->s.pos.trDelta );			// save net bandwidth
 		VectorCopy( ent->r.currentOrigin, ent->s.pos.trBase );
 		ent->s.pos.trTime = level.time;
 	}
@@ -2035,7 +2034,6 @@ void thermalDetonatorExplode( gentity_t *ent )
 
 		BG_EvaluateTrajectory( &ent->s.pos, level.time, origin );
 		origin[2] += 8;
-		SnapVector( origin );
 		G_SetOrigin( ent, origin );
 
 		ent->s.eType = ET_GENERAL;
@@ -2144,7 +2142,6 @@ gentity_t *WP_FireThermalDetonator( gentity_t *ent, qboolean altFire )
 	bolt->s.pos.trTime = level.time;		// move a bit on the very first frame
 	VectorCopy( start, bolt->s.pos.trBase );
 
-	SnapVector( bolt->s.pos.trDelta );			// save net bandwidth
 	VectorCopy (start, bolt->r.currentOrigin);
 
 	VectorCopy( start, bolt->pos2 );
@@ -2591,9 +2588,6 @@ void CreateLaserTrap( gentity_t *laserTrap, vec3_t start, gentity_t *owner )
 
 	laserTrap->s.pos.trTime = level.time;		// move a bit on the very first frame
 	VectorCopy( start, laserTrap->s.pos.trBase );
-	SnapVector( laserTrap->s.pos.trBase );			// save net bandwidth
-
-	SnapVector( laserTrap->s.pos.trDelta );			// save net bandwidth
 	VectorCopy (start, laserTrap->r.currentOrigin);
 
 	laserTrap->s.apos.trType = TR_GRAVITY;
@@ -3560,29 +3554,6 @@ void WP_FireMelee( gentity_t *ent, qboolean alt_fire )
 ////////////////////////////////////////////////////////////////////////////
 
 
-/*
-======================
-SnapVectorTowards
-
-Round a vector to integers for more efficient network
-transmission, but make sure that it rounds towards a given point
-rather than blindly truncating.  This prevents it from truncating
-into a wall.
-======================
-*/
-void SnapVectorTowards( vec3_t v, vec3_t to ) {
-	int		i;
-
-	for ( i = 0 ; i < 3 ; i++ ) {
-		if ( to[i] <= v[i] ) {
-			v[i] = floorf( v[i] );
-		} else {
-			v[i] = ceilf( v[i] );
-		}
-	}
-}
-
-
 //======================================================================
 
 
@@ -3654,9 +3625,6 @@ void CalcMuzzlePoint ( gentity_t *ent, const vec3_t inForward, const vec3_t inRi
 			muzzlePoint[2] += ent->client->ps.viewheight + muzzleOffPoint[2];
 		}
 	}
-
-	// snap to integer coordinates for more efficient network bandwidth usage
-	SnapVector( muzzlePoint );
 }
 
 extern void G_MissileImpact( gentity_t *ent, trace_t *trace );

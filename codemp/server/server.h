@@ -129,6 +129,17 @@ typedef struct {
 	int			botReliableAcknowledge; // for bots, need to maintain a separate reliableAcknowledge to record server messages into the demo file
 } demoInfo_t;
 
+// message codec statistics of one client since its connection or the last svnetstats (sv_netcodec.cpp)
+typedef struct {
+	int			messages;
+	double		bytes;
+	int			snapshots;
+	int			noBase;			// snapshots for which no base was asked (new client, map change, client asked for a full one)
+	int			baseRefused;	// a base was asked but the codec coded without one (its own base no longer held)
+	int			escaped;		// messages sent in their raw form
+	int			baseAge[6];		// snapshots coded against a base 1, 2, 3, 4, 5 to 8, 9 or more messages back
+} netcodecStats_t;
+
 
 typedef struct client_s {
 	clientState_t	state;
@@ -188,6 +199,7 @@ typedef struct client_s {
 	qboolean		csUpdated[MAX_CONFIGSTRINGS];
 
 	demoInfo_t		demo;
+	netcodecStats_t	netcodecStats;
 } client_t;
 
 //=============================================================================
@@ -393,6 +405,7 @@ void SV_NetcodecSendGameState( client_t *client );
 void SV_NetcodecSendMapChange( client_t *client );
 void SV_NetcodecSendSnapshot( client_t *client, const char *setGame );
 size_t SV_NetcodecDemoGameState( client_t *client, byte *out, size_t outSize );
+void SV_NetcodecStats_f( void );
 
 //
 // sv_game.c

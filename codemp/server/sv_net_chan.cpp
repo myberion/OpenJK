@@ -32,7 +32,7 @@ SV_Netchan_Encode
 Removed with the message codec (plan step 7, owner 8 November 2026): the server-to-client payload was XORed with a
 key made of the challenge, the sequence and the last command texts, chosen on the client from the reliable
 acknowledge read in clear at the start of the message, which the codec now codes. Whether to restore an equivalent
-is decided in plan step 11. The client-to-server direction keeps it (SV_Netchan_Decode).
+is decided in plan step 12. The client-to-server direction keeps it (SV_Netchan_Decode).
 ==============
 */
 

@@ -531,6 +531,7 @@ void CL_ParseDownload( int block, int fileSize, const byte *data, int size );
 void CL_NetcodecReset( void );
 void CL_NetcodecParseServerMessage( msg_t *msg );
 qboolean CL_NetcodecRecordGameState( void );
+void CL_NetcodecStats_f( void );
 
 //====================================================================
 

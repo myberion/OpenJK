@@ -167,6 +167,8 @@ size_t ServerCodec::Encode(const ServerMessage &msg, const Frame *frames, const 
 	return impl_->out.size();
 }
 
+bool ServerCodec::Escaped() const { return impl_->enc.Escaped(); }
+
 // ------------------------------------------------------------------ client
 
 namespace {

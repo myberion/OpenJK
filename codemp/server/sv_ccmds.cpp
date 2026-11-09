@@ -1976,6 +1976,7 @@ void SV_AddOperatorCommands( void ) {
 	Cmd_AddCommand ("weapontoggle", SV_WeaponToggle_f, "Toggle g_weaponDisable bits" );
 	Cmd_AddCommand ("svrecord", SV_Record_f, "Record a server-side demo" );
 	Cmd_AddCommand ("svstoprecord", SV_StopRecord_f, "Stop recording a server-side demo" );
+	Cmd_AddCommand ("svnetstats", SV_NetcodecStats_f, "Message codec statistics of each client since the last call" );
 	Cmd_AddCommand ("sv_rehashbans", SV_RehashBans_f, "Reloads banlist from file" );
 	Cmd_AddCommand ("sv_listbans", SV_ListBans_f, "Lists bans" );
 	Cmd_AddCommand ("sv_banaddr", SV_BanAddr_f, "Bans a user" );

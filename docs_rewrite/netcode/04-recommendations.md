@@ -13,8 +13,8 @@ Each recommendation states how strongly the evidence supports it: **measured** (
 | Prediction | Add lossless prediction modes (time against `serverTime`, position from velocity in integer arithmetic, second-order angle) to the per-field chooser: 139.1 to 107.3 real bytes, rANS initial-state trick included (03 section 3.13) | measured |
 | Tables | Generate the probability tables offline from recorded states, version them, load them as data, and ship a fallback of uniform contexts | judgement |
 | Safety | Add a raw-format escape path and a hard cap on message size | measured (worst case) |
-| Transport | Codec first on the existing netchan (steps 1 to 8 of the plan, [PLAN.md](PLAN.md)); then an acknowledgement record, newest-acknowledged base and a reliable path for the gamestate and commands (step 9). Evaluate libraries only against the requirements in 4.7 | measured (what matters), judgement (how) |
-| Settings | Remove `rate`, `snaps`, `cl_maxpackets`, `cl_packetdup`, `cl_timeNudge` and similar; compute them at run time (4.10, step 10 of the plan) | judgement |
+| Transport | Codec first on the existing netchan (steps 1 to 9 of the plan, [PLAN.md](PLAN.md)); then an acknowledgement record, newest-acknowledged base and a reliable path for the gamestate and commands (step 10). Evaluate libraries only against the requirements in 4.7 | measured (what matters), judgement (how) |
+| Settings | Remove `rate`, `snaps`, `cl_maxpackets`, `cl_packetdup`, `cl_timeNudge` and similar; compute them at run time (4.10, step 11 of the plan) | judgement |
 | Reuse | Keep the codec a library driven by the field tables, so other JKA forks can link it with their own tables | judgement |
 | Not studied | Entity priority, interest culling, bandwidth budgets, client to server direction | not measured |
 
@@ -111,7 +111,7 @@ Compatibility with existing mods and with the old protocol is not required (owne
 
 ## 4.7 Transport
 
-**Exploratory. See [07-transport-study.md](07-transport-study.md) for the facts read in the code, the security analysis, the requirements and the candidate libraries as read. Do not act on this section before the codec exists (steps 1 to 8 of the plan, [PLAN.md](PLAN.md)); the transport choice should be made with the real codec payloads.**
+**Exploratory. See [07-transport-study.md](07-transport-study.md) for the facts read in the code, the security analysis, the requirements and the candidate libraries as read. Do not act on this section before the codec exists (steps 1 to 9 of the plan, [PLAN.md](PLAN.md)); the transport choice should be made with the real codec payloads.**
 
 What the measurements say about what the transport must do:
 
@@ -122,7 +122,7 @@ What the measurements say about what the transport must do:
 5. **Fixed overhead.** Per packet today: 4 bytes netchan + 28 bytes IP/UDP. In the one-player case the new codec payload is 7 to 9 bytes, so headers are 80 % of the packet. An authentication tag (16 bytes in the hand-off's figure, not verified) would make the solo case cost more than today's unencrypted traffic (9.3 against 7.9 kbit/s in the study's table). Decide whether encryption is wanted before choosing.
 6. **Licence and scale.** Anything adopted must be compatible with GPL v2 (BSD-3, MIT, zlib, CC0 are; Apache-2.0 and GPL v3 are not for the GPL-v2-only files), support the intended player count (the hand-off notes yojimbo at a maximum of 64 clients), IPv6, and a non-blocking API usable from the existing socket code.
 
-Recommendation: do the codec first on the existing netchan (steps 1 to 8 of the plan, [PLAN.md](PLAN.md)). The codec is independent of the transport and carries the largest measured gains. Then change the acknowledgement path and the gamestate path (step 9), then the settings (step 10). Evaluate yojimbo and GameNetworkingSockets only against the list above; their licences, maintenance, dependencies and costs were **not** checked in this study, and a single third-party report in the hand-off (GameNetworkingSockets at 8.4 % CPU with 256 clients) was not verified.
+Recommendation: do the codec first on the existing netchan (steps 1 to 9 of the plan, [PLAN.md](PLAN.md)). The codec is independent of the transport and carries the largest measured gains. Then change the acknowledgement path and the gamestate path (step 10), then the settings (step 11). Evaluate yojimbo and GameNetworkingSockets only against the list above; their licences, maintenance, dependencies and costs were **not** checked in this study, and a single third-party report in the hand-off (GameNetworkingSockets at 8.4 % CPU with 256 clients) was not verified.
 
 ## 4.8 Safety
 
@@ -135,7 +135,7 @@ Recommendation: do the codec first on the existing netchan (steps 1 to 8 of the 
 
 - **Default `rate`.** At the 1.01 client default of 4000 bytes per second the engine delays 93 % of snapshots; the new codec delays 39 %. This branch's defaults (rate 25000 imposed by the server, 20 snapshots per second) delay none on the study's data (08 section 8.2). The plan replaces the setting by a measured bandwidth estimate (4.10).
 - **Snapshot rate.** `snaps` 20 and `sv_fps` 20 are the defaults used in the captures. A higher rate is cheaper in bytes per snapshot with the new codec, but the study did not measure its effect on size per second.
-- **Time base** (5 November 2026). `serverTime` is the game clock, which follows real time in steps of `1000 / sv_fps` ms (02 section 2.4); it must stay the time the positions refer to, so replacing it by `Sys_Milliseconds()` would be wrong. What the client lacks is the real send time and the server's processing delay, which would help its clock synchronisation (`CL_AdjustTimeDelta`) and the computed interpolation delay of 4.10. To evaluate in step 10 as an additional timestamp, costed in bytes.
+- **Time base** (5 November 2026). `serverTime` is the game clock, which follows real time in steps of `1000 / sv_fps` ms (02 section 2.4); it must stay the time the positions refer to, so replacing it by `Sys_Milliseconds()` would be wrong. What the client lacks is the real send time and the server's processing delay, which would help its clock synchronisation (`CL_AdjustTimeDelta`) and the computed interpolation delay of 4.10. To evaluate in step 11 as an additional timestamp, costed in bytes.
 - **Not studied (and potentially large):** per-client priority and bandwidth budgets, distance-based update frequency, interest management (culling entities the client does not need), and delta coding of entities relative to each other. The study measured only how well a given set of updates is coded, not which updates to send.
 
 ## 4.10 Settings to remove or compute (owner's goal 3 in the README)

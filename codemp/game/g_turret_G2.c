@@ -415,7 +415,6 @@ static void turretG2_fire ( gentity_t *ent, vec3_t start, vec3_t dir )
 		bolt->s.pos.trTime = level.time;
 		VectorCopy( start, bolt->s.pos.trBase );
 		VectorScale( dir, ent->mass, bolt->s.pos.trDelta );
-		SnapVector( bolt->s.pos.trDelta );		// save net bandwidth
 		VectorCopy( start, bolt->r.currentOrigin);
 	}
 }

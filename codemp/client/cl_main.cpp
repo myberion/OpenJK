@@ -2781,6 +2781,7 @@ void CL_Init( void ) {
 	Cmd_AddCommand ("demo", CL_PlayDemo_f, "Playback a demo" );
 	Cmd_SetCommandCompletionFunc( "demo", CL_CompleteDemoName );
 	Cmd_AddCommand ("stoprecord", CL_StopRecord_f, "Stop recording a demo" );
+	Cmd_AddCommand ("netstats", CL_NetcodecStats_f, "Message codec statistics since the last call" );
 	Cmd_AddCommand ("configstrings", CL_Configstrings_f, "Prints the configstrings list" );
 	Cmd_AddCommand ("clientinfo", CL_Clientinfo_f, "Prints the userinfo variables" );
 	Cmd_AddCommand ("snd_restart", CL_Snd_Restart_f, "Restart sound" );
@@ -2860,6 +2861,7 @@ void CL_Shutdown( void ) {
 	Cmd_RemoveCommand ("demo");
 	Cmd_RemoveCommand ("cinematic");
 	Cmd_RemoveCommand ("stoprecord");
+	Cmd_RemoveCommand ("netstats");
 	Cmd_RemoveCommand ("connect");
 	Cmd_RemoveCommand ("reconnect");
 	Cmd_RemoveCommand ("localservers");

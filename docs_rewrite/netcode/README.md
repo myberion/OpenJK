@@ -1,6 +1,6 @@
 # Netcode rework study: replacing the Huffman coder of Jedi Academy multiplayer
 
-Status: analysis finished, nothing implemented in the engine yet. Measurements were taken on 3 and 4 November 2026 against the original 1.01 dedicated server. The folder lives in this repository, a fork of OpenJK and the proof-of-concept base of the rewrite: the whole tool chain was re-run here with identical results, the code readings were re-checked in OpenJK ([08-openjk.md](08-openjk.md)), and prediction variants were measured (03, section 3.12).
+Status: analysis finished; since 9 November 2026 the engine of this branch sends every server-to-client message with the new codec (plan step 7; where the work stands: [progress/README.md](progress/README.md)). Measurements were taken on 3 and 4 November 2026 against the original 1.01 dedicated server. The folder lives in this repository, a fork of OpenJK and the proof-of-concept base of the rewrite: the whole tool chain was re-run here with identical results, the code readings were re-checked in OpenJK ([08-openjk.md](08-openjk.md)), and prediction variants were measured (03, section 3.12).
 
 This folder records an investigation into replacing the network coding of Jedi Academy multiplayer (the Huffman-based `MSG_*` layer and the surrounding snapshot protocol) in a standalone game derived from CleanJK (itself derived from OpenJK, GPL v2). The owner is willing to break protocol compatibility and to change structures, protocol and third-party mods.
 
@@ -43,7 +43,8 @@ These constrain every recommendation in this folder:
 | [06-reproduction.md](06-reproduction.md) | Tools, file formats, commands, data checksums, environment | you want to re-run something |
 | [07-transport-study.md](07-transport-study.md) | **Exploratory.** How the current transport and its "encryption" work, security implications, transport requirements derived from the measurements, candidate libraries as read (not run), and how to decide. Wait for the codec before acting on it | you are going to touch the transport |
 | [08-openjk.md](08-openjk.md) | What differs in OpenJK (wire format, defaults, challenge, demos), what was re-checked there, a bug found, and where every function of 02 and 07 is in this tree | you work in this repository |
-| [PLAN.md](PLAN.md) (separate from the study) | Ordered steps (1 to 13) from the Python codec to the engine, transport and settings, each with a deliverable, a check and its dependencies; tests and risks | you are going to implement it |
+| [09-changes-from-openjk.md](09-changes-from-openjk.md) | Every change of this branch against OpenJK, in plain words and comparison tables: the new format, demos, downloads, game physics, settings, client fixes, compatibility, what it implies | you want to know what the branch changes and why, without reading code |
+| [PLAN.md](PLAN.md) (separate from the study) | Ordered steps (1 to 14) from the Python codec to the engine, transport and settings, each with a deliverable, a check and its dependencies; tests and risks | you are going to implement it |
 | [progress/README.md](progress/README.md) | **Where the work stands**: status of each step, decisions with dates, open questions, how to resume; one document per finished step | you start a session |
 | `tools/` | The Python and C code used (see 06) | |
 | `data/` | The three real captures, a copy of `msg.cpp` (2.6 MB, 0.5 MB, 0.1 MB), the C benchmark input files (13 MB and two small crowd scenarios) | you want to re-run anything |
@@ -51,7 +52,7 @@ These constrain every recommendation in this folder:
 
 ## Suggested reading order
 
-- Owner or lead: this file, then [progress/README.md](progress/README.md), then 04, then [PLAN.md](PLAN.md); then 07 when the transport comes up (it is exploratory).
+- Owner or lead: this file, then [09-changes-from-openjk.md](09-changes-from-openjk.md) (what the branch changes), [progress/README.md](progress/README.md), then 04, then [PLAN.md](PLAN.md); then 07 when the transport comes up (it is exploratory).
 - Engineer implementing: [progress/README.md](progress/README.md), 02, 08, 04, [PLAN.md](PLAN.md), then 03 as reference.
 - A model or reviewer asked to re-verify and improve the work: 05 first, then 01, 02, 03, 06, and finally 04 and [PLAN.md](PLAN.md) to see what is proposed.
 

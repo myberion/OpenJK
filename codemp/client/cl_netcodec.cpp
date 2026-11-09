@@ -184,6 +184,33 @@ static const char *Sanitized( const char *text, uint32_t length, char *buf, size
 	return buf;
 }
 
+// netstats: the message codec's statistics since the last netstats
+static struct {
+	int		messages;
+	int		lost;			// gaps in the message sequence: lost on the way (or dropped by the netchan)
+	int		notDecoded;		// empty, malformed, or coded against a snapshot this client no longer holds
+	double	bytes;
+	int		snapshots;
+	int		noBase;
+	int		baseAge[6];		// snapshots coded against a base 1, 2, 3, 4, 5 to 8, 9 or more messages back
+	int		lastSeq;
+} s_stats;
+
+void CL_NetcodecStats_f( void ) {
+	if ( !s_stats.messages ) {
+		Com_Printf( "No server message since the last netstats.\n" );
+		return;
+	}
+	Com_Printf( "%d messages (%d lost on the way, %d not decoded), %.1f bytes per message; %d snapshots: %d without a base, "
+		"base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back\n",
+		s_stats.messages, s_stats.lost, s_stats.notDecoded, s_stats.bytes / s_stats.messages, s_stats.snapshots,
+		s_stats.noBase, s_stats.baseAge[0], s_stats.baseAge[1], s_stats.baseAge[2], s_stats.baseAge[3], s_stats.baseAge[4],
+		s_stats.baseAge[5] );
+	const int lastSeq = s_stats.lastSeq;
+	Com_Memset( &s_stats, 0, sizeof( s_stats ) );
+	s_stats.lastSeq = lastSeq;
+}
+
 void CL_NetcodecParseServerMessage( msg_t *msg ) {
 	static clSnapshot_t newSnap;	// two player states: not on the stack
 	static char text[BIG_INFO_STRING];
@@ -204,9 +231,16 @@ void CL_NetcodecParseServerMessage( msg_t *msg ) {
 	} else if ( show ) {
 		Com_Printf( "------------------ %i\n", msg->cursize );
 	}
+	s_stats.messages++;
+	if ( s_stats.lastSeq && seq > s_stats.lastSeq + 1 ) {
+		s_stats.lost += seq - s_stats.lastSeq - 1;
+	}
+	s_stats.lastSeq = seq;
 	if ( size <= 0 ) {
+		s_stats.notDecoded++;
 		return;	// the server could not code this message and sent it empty
 	}
+	s_stats.bytes += size;
 
 	// a slot whose entities this message may overwrite in cl.parseEntities is no base any more
 	for ( int i = 0; i < PACKET_BACKUP; i++ ) {
@@ -233,6 +267,7 @@ void CL_NetcodecParseServerMessage( msg_t *msg ) {
 	if ( !Codec().Decode( msg->data + start, (size_t)size, seq, s_frames, ring, commands, target, cm ) ) {
 		// malformed, or coded against a snapshot this client does not hold: no snapshot, so the next packet asks for
 		// a full one (clc_moveNoDelta); the reliable commands are sent again until acknowledged
+		s_stats.notDecoded++;
 		if ( show ) {
 			Com_Printf( "not decoded\n" );
 		} else {
@@ -281,6 +316,12 @@ void CL_NetcodecParseServerMessage( msg_t *msg ) {
 		if ( cm.numAreas > sizeof( newSnap.areamask ) ) {
 			Com_Error( ERR_DROP, "CL_NetcodecParseServerMessage: Invalid size %u for areamask", cm.numAreas );
 			return;
+		}
+		s_stats.snapshots++;
+		if ( !cm.delta ) {
+			s_stats.noBase++;
+		} else {
+			s_stats.baseAge[cm.delta <= 4 ? cm.delta - 1 : cm.delta <= 8 ? 4 : 5]++;
 		}
 		// we will have read any new server commands in this message before the snapshot
 		newSnap.serverCommandNum = clc.serverCommandSequence;

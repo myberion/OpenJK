@@ -486,7 +486,6 @@ typedef struct clientPersistant_s {
 	qboolean	localClient;		// true if "ip" info key is "localhost"
 	qboolean	initialSpawn;		// the first spawn should be at a cool location
 	qboolean	predictItemPickup;	// based on cg_predictItems userinfo
-	qboolean	pmoveFixed;			//
 	char		netname[MAX_NETNAME];
 	char		netname_nocolor[MAX_NETNAME];
 	int			netnameTime;				// Last time the name was changed
@@ -1260,7 +1259,6 @@ void WP_FireTurretMissile( gentity_t *ent, vec3_t start, vec3_t dir, qboolean al
 void WP_FireGenericBlasterMissile( gentity_t *ent, vec3_t start, vec3_t dir, qboolean altFire, int damage, int velocity, int mod );
 qboolean LogAccuracyHit( gentity_t *target, gentity_t *attacker );
 void CalcMuzzlePoint ( gentity_t *ent, const vec3_t inForward, const vec3_t inRight, const vec3_t inUp, vec3_t muzzlePoint );
-void SnapVectorTowards( vec3_t v, vec3_t to );
 qboolean CheckGauntletAttack( gentity_t *ent );
 
 

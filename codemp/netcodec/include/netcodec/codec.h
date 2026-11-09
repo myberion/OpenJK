@@ -159,9 +159,13 @@ public:
 	[[nodiscard]] bool Encode(const Message &msg, const Base &base, const BaselineTable &baselines,
 	                          const CommandHistory &history, size_t maxBytes, std::vector<uint8_t> &out, HeaderRecord &record);
 
+	// whether the last Encode gave the raw form (statistics)
+	[[nodiscard]] bool Escaped() const noexcept { return escaped_; }
+
 private:
 	std::vector<rans::Encoder::Op> ops_;   // record buffer of the rANS encoder, reused between messages
 	std::vector<uint8_t> scratch_;         // output buffer, reused between messages
+	bool escaped_ = false;
 };
 
 // Looks up the base of a delta: returns false if the client does not hold it.

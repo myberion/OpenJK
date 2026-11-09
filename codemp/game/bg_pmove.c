@@ -11126,9 +11126,8 @@ void PmoveSingle (pmove_t *pmove) {
 	// entering / leaving water splashes
 	PM_WaterEvents();
 
-	// snap velocity to integer coordinates to save network bandwidth
-	if ( !pm->pmove_float )
-		trap->SnapVector( pm->ps->velocity );
+	// the velocity is not rounded (owner, 9 November 2026): the client gets it exactly, the jumps no longer depend on
+	// the frame time, and an MSVC client and a GCC server cannot flip a rounding apart
 
  	if (pm->ps->pm_type == PM_JETPACK || gPMDoSlowFall )
 	{
@@ -11199,15 +11198,8 @@ void Pmove (pmove_t *pmove) {
 
 		msec = finalTime - pmove->ps->commandTime;
 
-		if ( pmove->pmove_fixed ) {
-			if ( msec > pmove->pmove_msec ) {
-				msec = pmove->pmove_msec;
-			}
-		}
-		else {
-			if ( msec > 66 ) {
-				msec = 66;
-			}
+		if ( msec > 66 ) {
+			msec = 66;
 		}
 		pmove->cmd.serverTime = pmove->ps->commandTime + msec;
 

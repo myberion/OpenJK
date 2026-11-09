@@ -223,7 +223,6 @@ void G_ExplodeMissile( gentity_t *ent ) {
 	vec3_t		origin;
 
 	BG_EvaluateTrajectory( &ent->s.pos, level.time, origin );
-	SnapVector( origin );
 	G_SetOrigin( ent, origin );
 
 	// we don't have a valid direction, so just point straight up
@@ -318,11 +317,9 @@ gentity_t *CreateMissile( vec3_t org, vec3_t dir, float vel, int life,
 	missile->s.pos.trTime = level.time;// - MISSILE_PRESTEP_TIME;	// NOTENOTE This is a Quake 3 addition over JK2
 	missile->target_ent = NULL;
 
-	SnapVector(org);
 	VectorCopy( org, missile->s.pos.trBase );
 	VectorScale( dir, vel, missile->s.pos.trDelta );
 	VectorCopy( org, missile->r.currentOrigin);
-	SnapVector(missile->s.pos.trDelta);
 
 	return missile;
 }
@@ -782,8 +779,6 @@ killProj:
 		// change over to a normal entity right at the point of impact
 		ent->s.eType = ET_GENERAL;
 	}
-
-	SnapVectorTowards( trace->endpos, ent->s.pos.trBase );	// save net bandwidth
 
 	G_SetOrigin( ent, trace->endpos );
 

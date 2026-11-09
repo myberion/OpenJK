@@ -1056,17 +1056,6 @@ void CG_PredictPlayerState( void ) {
 		cg.physicsTime = cg.snap->serverTime;
 	}
 
-	if ( pmove_msec.integer < 8 ) {
-		trap->Cvar_Set("pmove_msec", "8");
-	}
-	else if (pmove_msec.integer > 33) {
-		trap->Cvar_Set("pmove_msec", "33");
-	}
-
-	cg_pmove.pmove_fixed = pmove_fixed.integer;// | cg_pmove_fixed.integer;
-	cg_pmove.pmove_float = pmove_float.integer;
-	cg_pmove.pmove_msec = pmove_msec.integer;
-
 	for ( i = 0 ; i < MAX_GENTITIES ; i++ )
 	{
 		//Written this way for optimal speed, even though it doesn't look pretty.
@@ -1105,10 +1094,6 @@ void CG_PredictPlayerState( void ) {
 	for ( cmdNum = current - CMD_BACKUP + 1 ; cmdNum <= current ; cmdNum++ ) {
 		// get the command
 		trap->GetUserCmd( cmdNum, &cg_pmove.cmd );
-
-		if ( cg_pmove.pmove_fixed ) {
-			PM_UpdateViewAngles( cg_pmove.ps, &cg_pmove.cmd );
-		}
 
 		// don't do anything if the time is before the snapshot player time
 		if ( cg_pmove.cmd.serverTime <= cg.predictedPlayerState.commandTime )
@@ -1236,10 +1221,6 @@ void CG_PredictPlayerState( void ) {
 			}
 		}
 
-		if ( cg_pmove.pmove_fixed ) {
-			cg_pmove.cmd.serverTime = ((cg_pmove.cmd.serverTime + pmove_msec.integer-1) / pmove_msec.integer) * pmove_msec.integer;
-		}
-
 		cg_pmove.animations = bgAllAnims[pEnt->localAnimIndex].anims;
 		cg_pmove.gametype = cgs.gametype;
 
@@ -1358,8 +1339,6 @@ void CG_PredictPlayerState( void ) {
 				}
 
 				cg_vehPmove.noFootsteps = ( cgs.dmflags & DF_NO_FOOTSTEPS ) > 0;
-				cg_vehPmove.pmove_fixed = pmove_fixed.integer;
-				cg_vehPmove.pmove_msec = pmove_msec.integer;
 
 				cg_entities[cg.predictedPlayerState.clientNum].playerState = &cg.predictedPlayerState;
 				veh->playerState = &cg.predictedVehicleState;

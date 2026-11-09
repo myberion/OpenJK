@@ -1,7 +1,6 @@
 # Determinism test of the game's player movement (pmove_det.c): bg_pmove.c and its files built as the game module
 # (_GAME) and as cgame (_CGAME), with OpenJK's own compiler settings for the modules (not netcodec's: the point is
-# how the shipped game code behaves), and the engine's Sys_SnapVector. Its output is compared between builds and
-# compilers (validate.sh, validate.bat).
+# how the shipped game code behaves). Its output is compared between builds and compilers (validate.sh, validate.bat).
 set(netcodec_OPENJK_DIR "${PROJECT_SOURCE_DIR}/../.." CACHE PATH "OpenJK source tree, for the legacy benchmark")
 set(netcodec_ojk "${netcodec_OPENJK_DIR}")
 set(netcodec_pmove_sources
@@ -19,7 +18,6 @@ set(netcodec_pmove_sources
 	"${netcodec_ojk}/shared/qcommon/q_math.c"
 	"${netcodec_ojk}/shared/qcommon/q_string.c"
 	"${netcodec_ojk}/shared/qcommon/q_color.c"
-	"${netcodec_ojk}/shared/sys/snapvector.cpp"
 	pmove_det.c)
 
 foreach(side game cgame)

@@ -772,12 +772,14 @@ bool MessageEncoder::Encode(const Message &msg, const Base &base, const Baseline
 	if (scratch_.size() < maxBytes) scratch_.resize(maxBytes);   // grown once: no clearing per message
 	size_t n = detail::CodeMessage(ops_, scratch_, msg, base, baselines, history, maxBytes, record, m, false);
 	if (n != 0) out.assign(scratch_.begin(), scratch_.begin() + static_cast<std::ptrdiff_t>(n));
+	escaped_ = false;
 	// worst case: a large message (none in the recordings comes close) is also coded raw, and the smaller one is sent
 	if (n == 0 || n > kEscapeTrial) [[unlikely]] {
 		const size_t r = detail::CodeMessage(ops_, scratch_, msg, base, baselines, history, maxBytes, record, m, true);
 		if (r != 0 && (n == 0 || r < n)) {
 			out.assign(scratch_.begin(), scratch_.begin() + static_cast<std::ptrdiff_t>(r));
 			n = r;
+			escaped_ = true;
 		}
 	}
 	return n != 0;

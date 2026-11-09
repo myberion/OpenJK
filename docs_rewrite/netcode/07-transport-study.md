@@ -1,6 +1,6 @@
 # 7. Transport study (exploratory)
 
-**Status: exploratory. Do not act on this document before the new codec exists (steps 1 to 8 of [PLAN.md](PLAN.md)).** It records what was read in the engine and about candidate libraries, derives requirements from the measurements of [03](03-results.md), and proposes how to decide. Nothing here was prototyped or measured on a network. Statements about libraries come from reading their repositories on 4 November 2026 (README, licence, standard, headers, a line count); they were not built or run.
+**Status: exploratory. Do not act on this document before the new codec exists (steps 1 to 9 of [PLAN.md](PLAN.md)).** It records what was read in the engine and about candidate libraries, derives requirements from the measurements of [03](03-results.md), and proposes how to decide. Nothing here was prototyped or measured on a network. Statements about libraries come from reading their repositories on 4 November 2026 (README, licence, standard, headers, a line count); they were not built or run.
 
 Why wait for the codec:
 
@@ -54,7 +54,7 @@ Short answer: **Huffman never gave any security, and the new codec gives none ei
 What this implies:
 
 1. **Do not describe the codec as protection.** It is neither better nor worse than Huffman on confidentiality or integrity.
-2. **Harden the decoder.** Bounds-check every index and length (entity number below `MAX_GENTITIES`, field index below the table length, string and download lengths), limit the number of operations per message, fail closed (drop the message) and fuzz it in CI. The plan has this in 04 section 4.8 and step 8 of the plan. The decoder never writes outside a fixed-size output structure, which is the usual class of exploitable bugs.
+2. **Harden the decoder.** Bounds-check every index and length (entity number below `MAX_GENTITIES`, field index below the table length, string and download lengths), limit the number of operations per message, fail closed (drop the message) and fuzz it in CI. The plan has this in 04 section 4.8 and step 9 of the plan. The decoder never writes outside a fixed-size output structure, which is the usual class of exploitable bugs.
 3. **A decompression-bomb risk does not apply** in the usual sense: every decoded symbol is bounded by the schema (a message produces at most one value per field per entity and at most `MAX_GENTITIES` entities).
 4. **Real security is a transport decision.** If cheating by packet injection, spoofing or traffic reading matters to the project, an authenticated encrypted transport is needed (section 7.4). That has a cost in bytes (section 7.4, "What the numbers imply for the choice") and in connection design (connect tokens, section 7.4).
 5. **Side channels from compression**: compressing attacker-influenced data together with secrets and then encrypting it can leak information (the CRIME / BREACH class). This does not apply to the design here, because the codec uses static tables with no cross-packet state and the secret (keys) is never inside the coded payload. Keep it that way.
@@ -77,7 +77,7 @@ Evidence is from [03](03-results.md) unless noted. "Must" means the codec's gain
 | T10 | 32 to 64 or more simultaneous clients on a dedicated server (Windows and Linux) | must | the owner's player count is not fixed (`MAX_CLIENTS` is 32 in OpenJK); the engine has a Linux dedicated server |
 | T11 | Licence compatible with GPL v2 (BSD-2, BSD-3, MIT, zlib, CC0), no Apache-2.0 / GPL v3 dependency in the linked code, or an explicit decision on the licence of the whole | must | most CleanJK files are GPL v2 only (02, section 2.9) |
 | T12 | The server-browser and master-server queries (`getinfo`, `getstatus`, heartbeats) keep working or are replaced | must | the server list is how players find games |
-| T13 | Statistics: RTT, jitter, loss per connection, to drive T6 | must | step 10 of the plan computes the settings from these measurements; today only the ping in the snapshots exists |
+| T13 | Statistics: RTT, jitter, loss per connection, to drive T6 | must | step 11 of the plan computes the settings from these measurements; today only the ping in the snapshots exists |
 | T14 | A way to test with loss, latency and jitter (a simulator) | should | the study's loss results are models |
 
 ## 7.4 Candidate approaches
@@ -136,7 +136,7 @@ So an authenticated transport adds roughly 10 to 17 % to a normal snapshot and 4
 3. **Build a small test harness**, outside the game, that sends the codec's recorded messages through (a) the netchan model, (b) netcode + reliable, and optionally (c) GameNetworkingSockets, with emulated latency, jitter and loss. Measure: overhead per packet, CPU per client at 64 clients, behaviour under 5 / 10 / 20 % loss, behaviour with large messages (gamestate), reconnect time.
 4. **Review the licences and builds** on the target platforms (Windows and Linux dedicated server), including libsodium and OpenSSL if used, with a legal reading where the licence is not plainly compatible.
 5. **Decision gate.** Choose by this order: licence and maintainability first, then behaviour under loss and latency, then overhead, then integration cost. Record the decision with the measurements.
-6. Only then integrate (steps 9 to 11 of the plan).
+6. Only then integrate (steps 10 to 12 of the plan).
 
 Design notes whichever option is chosen:
 

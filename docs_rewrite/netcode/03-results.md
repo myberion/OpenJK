@@ -297,7 +297,7 @@ Loss and latency with prediction (`pf`, same grid and training as 3.9; mean real
 | 10 % | 123.4 (156.2) | 155.0 (187.0) | 209.6 (237.5) | 292.6 (323.2) |
 | 20 % | 127.9 (159.7) | 158.4 (189.8) | 213.6 (241.3) | 294.0 (324.2) |
 
-The gain in bytes stays about the same with the base age (-34 bytes at age 1, -31 at age 8), so in relative terms it shrinks; acknowledgement latency (step 9 of the plan) matters as much as before.
+The gain in bytes stays about the same with the base age (-34 bytes at age 1, -31 at age 8), so in relative terms it shrinks; acknowledgement latency (step 10 of the plan) matters as much as before.
 
 Decisions taken from these numbers:
 

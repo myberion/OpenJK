@@ -124,12 +124,12 @@ static void SV_NetcodecBegin( client_t *client, eng::ServerMessage &sm ) {
 	client->reliableSent = client->reliableSequence;
 }
 
-// codes sm into out against the client's frames; returns its size (0: not coded) and the Record of its snapshot
-static size_t SV_NetcodecEncode( client_t *client, const eng::ServerMessage &sm, byte *out, size_t outSize, eng::Record &record ) {
+// codes sm into out against the client's frames; returns its size (0: not coded), the base used (delta, 0: none) and
+// the Record of its snapshot
+static size_t SV_NetcodecEncode( client_t *client, const eng::ServerMessage &sm, byte *out, size_t outSize, uint32_t &delta, eng::Record &record ) {
 	eng::EntityRing ring;
 	eng::CommandRing commands;
 	eng::Baselines baselines;
-	uint32_t delta = 0;
 
 	ring.states = svs.snapshotEntities;
 	ring.count = (uint32_t)svs.numSnapshotEntities;
@@ -148,19 +148,34 @@ static void SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSna
 	static byte buf[MAX_MSGLEN];
 	eng::Frame *frames = s_frames[ClientIndex( client )];
 	eng::Record record = {};
+	uint32_t delta = 0;
 	msg_t msg;
 
-	const size_t size = SV_NetcodecEncode( client, sm, buf, sizeof( buf ), record );
+	const size_t size = SV_NetcodecEncode( client, sm, buf, sizeof( buf ), delta, record );
 
 	eng::Frame &slot = frames[sm.seq % PACKET_BACKUP];
 	slot.seq = -1;
 	if ( !size ) {
 		// the legacy code cleared an overflowed message too, and sent it empty
 		Com_Printf( "WARNING: message for %s not coded (too large or malformed)\n", client->name );
-	} else if ( sm.snapshot ) {
-		slot = sm.frame;
-		slot.seq = sm.seq;
-		slot.record = record;
+	} else {
+		netcodecStats_t &st = client->netcodecStats;
+		st.messages++;
+		st.bytes += (double)size;
+		st.escaped += Codec().Escaped() ? 1 : 0;
+		if ( sm.snapshot ) {
+			slot = sm.frame;
+			slot.seq = sm.seq;
+			slot.record = record;
+			st.snapshots++;
+			if ( !sm.delta ) {
+				st.noBase++;
+			} else if ( !delta ) {
+				st.baseRefused++;
+			} else {
+				st.baseAge[delta <= 4 ? delta - 1 : delta <= 8 ? 4 : 5]++;
+			}
+		}
 	}
 
 	if ( sv_netcodecCompare->integer && size ) {
@@ -195,6 +210,7 @@ void SV_NetcodecSendGameState( client_t *client ) {
 size_t SV_NetcodecDemoGameState( client_t *client, byte *out, size_t outSize ) {
 	eng::ServerMessage sm = {};
 	eng::Record record = {};
+	uint32_t delta = 0;
 	int first = SV_NetcodecAcknowledged( client ) + 1 - (int)eng::kCommandWindow;
 
 	if ( first <= client->reliableSequence - MAX_RELIABLE_COMMANDS ) {
@@ -214,7 +230,7 @@ size_t SV_NetcodecDemoGameState( client_t *client, byte *out, size_t outSize ) {
 	sm.numConfigStrings = MAX_CONFIGSTRINGS;
 	sm.clientNum = ClientIndex( client );
 	sm.checksum = sv.checksumFeed;
-	return SV_NetcodecEncode( client, sm, out, outSize, record );
+	return SV_NetcodecEncode( client, sm, out, outSize, delta, record );
 }
 
 void SV_NetcodecSendMapChange( client_t *client ) {
@@ -258,4 +274,24 @@ void SV_NetcodecSendSnapshot( client_t *client, const char *setGame ) {
 	}
 
 	SV_NetcodecSend( client, sm, oldframe, lastframe );
+}
+
+// svnetstats: the message codec's statistics of each client since its connection or the last svnetstats, then reset
+void SV_NetcodecStats_f( void ) {
+	if ( !com_sv_running->integer ) {
+		Com_Printf( "Server is not running.\n" );
+		return;
+	}
+	for ( int i = 0; i < sv_maxclients->integer; i++ ) {
+		client_t *cl = &svs.clients[i];
+		netcodecStats_t &st = cl->netcodecStats;
+		if ( cl->state < CS_CONNECTED || !st.messages ) {
+			continue;
+		}
+		Com_Printf( "%2d %s^7: %d messages, %.1f bytes per message, %d escaped; %d snapshots: %d without a base asked, "
+			"%d with the asked base refused, base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back\n",
+			i, cl->name, st.messages, st.bytes / st.messages, st.escaped, st.snapshots, st.noBase, st.baseRefused,
+			st.baseAge[0], st.baseAge[1], st.baseAge[2], st.baseAge[3], st.baseAge[4], st.baseAge[5] );
+		Com_Memset( &st, 0, sizeof( st ) );
+	}
 }

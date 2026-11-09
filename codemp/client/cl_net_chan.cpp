@@ -89,7 +89,7 @@ CL_Netchan_Decode
 
 Removed with the message codec (plan step 7, owner 8 November 2026): the server's payload was XORed with a key
 chosen from the reliable acknowledge read in clear at the start of the message, which the codec now codes (see
-SV_Netchan_Encode). Whether to restore an equivalent is decided in plan step 11; the client-to-server direction keeps
+SV_Netchan_Encode). Whether to restore an equivalent is decided in plan step 12; the client-to-server direction keeps
 it (CL_Netchan_Encode).
 ==============
 */

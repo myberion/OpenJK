@@ -119,6 +119,10 @@ public:
 	              const CommandRing &commands, const Baselines &baselines, uint8_t *out, size_t outSize, uint32_t &delta,
 	              Record &record);
 
+	// Whether the last Encode sent the message's raw form (a message coded larger than 1 KB is also coded raw and
+	// the smaller form is sent); for statistics.
+	bool Escaped() const;   // NOLINT(modernize-use-nodiscard): this header is C++11
+
 private:
 	struct Impl;
 	std::unique_ptr<Impl> impl_;
