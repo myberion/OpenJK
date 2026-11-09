@@ -1629,7 +1629,8 @@ void CL_InitServerInfo( serverInfo_t *server, const netadr_t *address ) {
 	server->trueJedi = 0;
 	server->weaponDisable = 0;
 	server->forceDisable = 0;
-	server->ping = -1;
+	server->ping = 0;
+	server->state = LANSERVER_NOT_ASKED;
 	server->game[0] = '\0';
 	server->gameType = 0;
 	server->humans = server->bots = 0;
@@ -2896,7 +2897,7 @@ qboolean CL_ConnectedToRemoteServer( void ) {
 	return (qboolean)( com_sv_running && !com_sv_running->integer && cls.state >= CA_CONNECTED && !clc.demoplaying );
 }
 
-static void CL_SetServerInfo(serverInfo_t *server, const char *info, int ping) {
+static void CL_SetServerInfo(serverInfo_t *server, const char *info, lanServerState_t state, int ping) {
 	if (server) {
 		if (info) {
 			server->clients = atoi(Info_ValueForKey(info, "clients"));
@@ -2917,28 +2918,29 @@ static void CL_SetServerInfo(serverInfo_t *server, const char *info, int ping) {
 			server->bots = atoi( Info_ValueForKey( info, "bots" ) );
 //			server->pure = (qboolean)atoi(Info_ValueForKey(info, "pure" ));
 		}
+		server->state = state;
 		server->ping = ping;
 	}
 }
 
-static void CL_SetServerInfoByAddress(const netadr_t *from, const char *info, int ping) {
+static void CL_SetServerInfoByAddress(const netadr_t *from, const char *info, lanServerState_t state, int ping) {
 	int i;
 
 	for (i = 0; i < MAX_OTHER_SERVERS; i++) {
 		if (NET_CompareAdr(from, &cls.localServers[i].adr)) {
-			CL_SetServerInfo(&cls.localServers[i], info, ping);
+			CL_SetServerInfo(&cls.localServers[i], info, state, ping);
 		}
 	}
 
 	for (i = 0; i < MAX_GLOBAL_SERVERS; i++) {
 		if (NET_CompareAdr(from, &cls.globalServers[i].adr)) {
-			CL_SetServerInfo(&cls.globalServers[i], info, ping);
+			CL_SetServerInfo(&cls.globalServers[i], info, state, ping);
 		}
 	}
 
 	for (i = 0; i < MAX_OTHER_SERVERS; i++) {
 		if (NET_CompareAdr(from, &cls.favoriteServers[i].adr)) {
-			CL_SetServerInfo(&cls.favoriteServers[i], info, ping);
+			CL_SetServerInfo(&cls.favoriteServers[i], info, state, ping);
 		}
 	}
 }
@@ -2983,10 +2985,11 @@ void CL_ServerInfoPacket( const netadr_t *from, msg_t *msg ) {
 	// iterate servers waiting for ping response
 	for (i=0; i<MAX_PINGREQUESTS; i++)
 	{
-		if ( cl_pinglist[i].adr.port && !cl_pinglist[i].time && NET_CompareAdr( from, &cl_pinglist[i].adr ) )
+		if ( cl_pinglist[i].adr.port && !cl_pinglist[i].answered && NET_CompareAdr( from, &cl_pinglist[i].adr ) )
 		{
 			// calc ping time
 			cl_pinglist[i].time = Sys_Milliseconds() - cl_pinglist[i].start;
+			cl_pinglist[i].answered = qtrue;
 			if ( com_developer->integer ) {
 				Com_Printf( "ping time %dms from %s\n", cl_pinglist[i].time, NET_AdrToString( from ) );
 			}
@@ -3008,7 +3011,7 @@ void CL_ServerInfoPacket( const netadr_t *from, msg_t *msg ) {
 					break;
 			}
 			Info_SetValueForKey( cl_pinglist[i].info, "nettype", va("%d", type) );
-			CL_SetServerInfoByAddress(from, infoString, cl_pinglist[i].time);
+			CL_SetServerInfoByAddress(from, infoString, LANSERVER_ANSWERED, cl_pinglist[i].time);
 
 			return;
 		}
@@ -3372,25 +3375,27 @@ void CL_GlobalServers_f( void ) {
 CL_GetPing
 ==================
 */
-void CL_GetPing( int n, char *buf, int buflen, int *pingtime )
+lanServerState_t CL_GetPing( int n, char *buf, int buflen, int *pingtime )
 {
 	const char	*str;
 	int		time;
 	int		maxPing;
+	lanServerState_t	state;
 
 	if (n < 0 || n >= MAX_PINGREQUESTS || !cl_pinglist[n].adr.port)
 	{
 		// empty or invalid slot
 		buf[0]    = '\0';
 		*pingtime = 0;
-		return;
+		return LANSERVER_NOT_ASKED;
 	}
 
 	str = NET_AdrToString( &cl_pinglist[n].adr );
 	Q_strncpyz( buf, str, buflen );
 
 	time = cl_pinglist[n].time;
-	if (!time)
+	state = LANSERVER_ANSWERED;
+	if (!cl_pinglist[n].answered)
 	{
 		// check for timeout
 		time = Sys_Milliseconds() - cl_pinglist[n].start;
@@ -3402,12 +3407,18 @@ void CL_GetPing( int n, char *buf, int buflen, int *pingtime )
 		{
 			// not timed out yet
 			time = 0;
+			state = LANSERVER_WAITING;
+		}
+		else
+		{
+			state = LANSERVER_NO_ANSWER;
 		}
 	}
 
-	CL_SetServerInfoByAddress(&cl_pinglist[n].adr, cl_pinglist[n].info, cl_pinglist[n].time);
+	CL_SetServerInfoByAddress(&cl_pinglist[n].adr, cl_pinglist[n].info, state, cl_pinglist[n].time);
 
 	*pingtime = time;
+	return state;
 }
 
 /*
@@ -3483,7 +3494,7 @@ ping_t* CL_GetFreePing( void )
 		// find free ping slot
 		if (pingptr->adr.port)
 		{
-			if (!pingptr->time)
+			if (!pingptr->answered)
 			{
 				if (Sys_Milliseconds() - pingptr->start < 500)
 				{
@@ -3549,8 +3560,9 @@ void CL_Ping_f( void ) {
 	memcpy( &pingptr->adr, &to, sizeof (netadr_t) );
 	pingptr->start = Sys_Milliseconds();
 	pingptr->time  = 0;
+	pingptr->answered = qfalse;
 
-	CL_SetServerInfoByAddress(&pingptr->adr, NULL, 0);
+	CL_SetServerInfoByAddress(&pingptr->adr, NULL, LANSERVER_WAITING, 0);
 
 	NET_OutOfBandPrint( NS_CLIENT, &to, "getinfo xxx" );
 }
@@ -3595,7 +3607,7 @@ qboolean CL_UpdateVisiblePings_f(int source) {
 		}
 		for (i = 0; i < max; i++) {
 			if (server[i].visible) {
-				if (server[i].ping == -1) {
+				if (server[i].state == LANSERVER_NOT_ASKED) {
 					int j;
 
 					if (slots >= MAX_PINGREQUESTS) {
@@ -3620,13 +3632,14 @@ qboolean CL_UpdateVisiblePings_f(int source) {
 						memcpy(&cl_pinglist[j].adr, &server[i].adr, sizeof(netadr_t));
 						cl_pinglist[j].start = Sys_Milliseconds();
 						cl_pinglist[j].time = 0;
+						cl_pinglist[j].answered = qfalse;
 						NET_OutOfBandPrint( NS_CLIENT, &cl_pinglist[j].adr, "getinfo xxx" );
 						slots++;
 					}
 				}
 				// if the server has a ping higher than cl_maxPing or
 				// the ping packet got lost
-				else if (server[i].ping == 0) {
+				else if (server[i].state == LANSERVER_NO_ANSWER) {
 					// if we are updating global servers
 					if (source == AS_GLOBAL) {
 						//
@@ -3649,8 +3662,7 @@ qboolean CL_UpdateVisiblePings_f(int source) {
 		if (!cl_pinglist[i].adr.port) {
 			continue;
 		}
-		CL_GetPing( i, buff, MAX_STRING_CHARS, &pingTime );
-		if (pingTime != 0) {
+		if (CL_GetPing( i, buff, MAX_STRING_CHARS, &pingTime ) != LANSERVER_WAITING) {
 			CL_ClearPing(i);
 			status = qtrue;
 		}

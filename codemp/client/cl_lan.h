@@ -33,6 +33,7 @@ int LAN_GetServerCount( int source );
 void LAN_GetServerAddressString( int source, int n, char *buf, int buflen );
 void LAN_GetServerInfo( int source, int n, char *buf, int buflen );
 int LAN_GetServerPing( int source, int n );
+int LAN_GetServerState( int source, int n );
 int LAN_CompareServers( int source, int sortKey, int sortDir, int s1, int s2 );
 int LAN_GetPingQueueCount( void );
 void LAN_ClearPing( int n );

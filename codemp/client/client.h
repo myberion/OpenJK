@@ -261,7 +261,8 @@ no client connection is active at all
 typedef struct ping_s {
 	netadr_t	adr;
 	int			start;
-	int			time;
+	int			time;		// round trip in ms, valid once answered (0 is a valid value)
+	qboolean	answered;
 	char		info[MAX_INFO_STRING];
 } ping_t;
 
@@ -276,7 +277,8 @@ typedef struct serverInfo_s {
 	int		  	maxClients;
 	int			minPing;
 	int			maxPing;
-	int			ping;
+	int			ping;		// valid only when state is LANSERVER_ANSWERED
+	lanServerState_t	state;
 	qboolean	visible;
 	qboolean	needPassword;
 	int			trueJedi;
@@ -473,7 +475,7 @@ void CL_ReadDemoMessage( void );
 void CL_InitDownloads(void);
 void CL_NextDownload(void);
 
-void CL_GetPing( int n, char *buf, int buflen, int *pingtime );
+lanServerState_t CL_GetPing( int n, char *buf, int buflen, int *pingtime );
 void CL_GetPingInfo( int n, char *buf, int buflen );
 void CL_ClearPing( int n );
 int CL_GetPingQueueCount( void );

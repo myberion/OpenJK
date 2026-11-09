@@ -56,6 +56,14 @@ typedef enum uiMenuCommand_e {
 #define SORT_GAME			3
 #define SORT_PING			4
 
+// state of a server in the browser lists, apart from its ping
+typedef enum lanServerState_e {
+	LANSERVER_NOT_ASKED,	// no info request since the list was reset
+	LANSERVER_WAITING,		// info request sent, no answer yet
+	LANSERVER_ANSWERED,		// answered; its ping is the round trip
+	LANSERVER_NO_ANSWER		// no answer within cl_maxPing
+} lanServerState_t;
+
 typedef enum uiImportLegacy_e {
 	UI_ERROR,
 	UI_PRINT,
@@ -375,6 +383,7 @@ typedef struct uiImport_s {
 		float			(*R_Font_StrLenPixels)					( const char *text, const int iFontIndex, const float scale );
 		void			(*AddCommand)							( const char *cmd_name );
 		void			(*RemoveCommand)						( const char *cmd_name );
+		int				(*LAN_GetServerState)					( int source, int n );
 	} ext;
 } uiImport_t;
 

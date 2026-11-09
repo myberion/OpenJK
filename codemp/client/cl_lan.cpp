@@ -101,7 +101,7 @@ void LAN_ResetPings(int source) {
 	}
 	if (servers) {
 		for (i = 0; i < count; i++) {
-			servers[i].ping = -1;
+			servers[i].state = LANSERVER_NOT_ASKED;
 		}
 	}
 }
@@ -384,6 +384,16 @@ static serverInfo_t *LAN_GetServerPtr( int source, int n ) {
 			break;
 	}
 	return NULL;
+}
+
+/*
+====================
+LAN_GetServerState
+====================
+*/
+int LAN_GetServerState( int source, int n ) {
+	const serverInfo_t *server = LAN_GetServerPtr( source, n );
+	return server ? server->state : LANSERVER_NOT_ASKED;
 }
 
 /*

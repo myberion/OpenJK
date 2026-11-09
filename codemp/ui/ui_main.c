@@ -7409,7 +7409,8 @@ UI_BuildServerDisplayList
 ==================
 */
 static void UI_BuildServerDisplayList(int force) {
-	int i, count, clients, maxClients, ping, game, len, passw/*, visible*/;
+	int i, count, clients, maxClients, game, len, passw/*, visible*/;
+	qboolean answered;
 	char info[MAX_STRING_CHARS];
 //	qboolean startRefresh = qtrue; TTimo: unused
 	int	lanSource;
@@ -7470,9 +7471,9 @@ static void UI_BuildServerDisplayList(int force) {
 			continue;
 		}
 //		visible = qtrue;
-		// get the ping for this server
-		ping = trap->LAN_GetServerPing(lanSource, i);
-		if (ping > 0 || ui_netSource.integer == UIAS_FAVORITES) {
+		// has this server answered
+		answered = (qboolean)(trap->ext.LAN_GetServerState(lanSource, i) == LANSERVER_ANSWERED);
+		if (answered || ui_netSource.integer == UIAS_FAVORITES) {
 
 			trap->LAN_GetServerInfo(lanSource, i, info, MAX_STRING_CHARS);
 
@@ -7529,7 +7530,7 @@ static void UI_BuildServerDisplayList(int force) {
 			// insert the server into the list
 			UI_BinaryServerInsertion(i);
 			// done with this server
-			if (ping > 0) {
+			if (answered) {
 				trap->LAN_MarkServerVisible(lanSource, i, qfalse);
 			}
 		}
@@ -8283,20 +8284,17 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 		return UI_SelectedMap(index, &actual);
 	} else if (feederID == FEEDER_SERVERS) {
 		if (index >= 0 && index < uiInfo.serverStatus.numDisplayServers) {
-			int ping, game;
+			int game;
+			qboolean answered;
 			if (lastColumn != column || lastTime > uiInfo.uiDC.realTime + 5000) {
 				trap->LAN_GetServerInfo(UI_SourceForLAN(), uiInfo.serverStatus.displayServers[index], info, MAX_STRING_CHARS);
 				lastColumn = column;
 				lastTime = uiInfo.uiDC.realTime;
 			}
-			ping = atoi(Info_ValueForKey(info, "ping"));
-			if (ping == -1) {
-				// if we ever see a ping that is out of date, do a server refresh
-				// UI_UpdatePendingPings();
-			}
+			answered = (qboolean)(trap->ext.LAN_GetServerState(UI_SourceForLAN(), uiInfo.serverStatus.displayServers[index]) == LANSERVER_ANSWERED);
 			switch (column) {
 				case SORT_HOST :
-					if (ping <= 0) {
+					if (!answered) {
 						return Info_ValueForKey(info, "addr");
 					} else {
 						int gametype = atoi( Info_ValueForKey( info, "gametype" ) );
@@ -8385,14 +8383,14 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 					if (game >= 0 && game < numGameTypes) {
 						Q_strncpyz( needPass, gameTypes[game], sizeof( needPass ) );
 					} else {
-						if ( ping <= 0 )
+						if ( !answered )
 							Q_strncpyz( needPass, "Inactive", sizeof( needPass ) );
 						Q_strncpyz( needPass, "Unknown", sizeof( needPass ) );
 					}
 
 					return needPass;
 				case SORT_PING :
-					if (ping <= 0) {
+					if (!answered) {
 						return "...";
 					} else {
 						return Info_ValueForKey(info, "ping");

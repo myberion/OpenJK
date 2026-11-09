@@ -21,7 +21,7 @@ This page lists every change of the branch outside the study documents, grouped 
 | Server defaults | `sv_fps` 40, `sv_clientRate` 50000 | `sv_fps` 20, `sv_clientRate` 25000 | the conditions of the measurements |
 | Removed cvars | | `pmove_float`, `pmove_fixed`, `pmove_msec`, `sv_padPackets` | movement now always behaves as OpenJK with `pmove_float 1` and `pmove_fixed 0` (section 6) |
 | Added cvar | | `sv_netcodecCompare` (debug) | byte comparison with the legacy format |
-| Client fixes outside the netcode | | menu cursor speed, font aspect, keypad and right modifier keys | |
+| Client fixes outside the netcode | | menu cursor speed, font aspect, keypad and right modifier keys, server browser state (servers answering in under 1 ms were hidden) | |
 
 ## 1. The server-to-client format
 
@@ -60,7 +60,7 @@ Tested in game over UDP with simulated loss (5 % and 20 % of the server's messag
 ### What does not change
 
 - The client-to-server direction: user commands, client commands, their XOR and Huffman coding (plan step 8 changes it).
-- Connectionless messages (`getinfo`, `getstatus`, `connect`, the master server): the server browser works as before.
+- Connectionless messages (`getinfo`, `getstatus`, `connect`, the master server): the server browser works as before (one display defect fixed, section 8).
 - The choice of the base snapshot (the newest one the client acknowledged), `PACKET_BACKUP` (32), the rate and snapshot-rate rules, the netchan fragmentation.
 - The legacy writer is kept in the server, only to compare sizes (`sv_netcodecCompare`).
 
@@ -175,6 +175,7 @@ Made on the way while testing, each in its own commit, mostly as TaystJK does.
 | `r_aspectCorrectFonts` | narrowed the spacing but not the glyphs: letters overlapped | narrows both | `tr_font.cpp` |
 | Keypad with num lock on | keypad keys became digits everywhere, so `KP_*` binds never fired in game | digits only while typing (and not while binding a key) | `sdl_input.cpp`, `ui_shared.c` |
 | Right shift, ctrl, alt | the same keys as the left ones | keys of their own (`RSHIFT`, `RCTRL`, `RALT`), bindable apart; shortcuts accept either side | `cl_keys.cpp`, `sdl_input.cpp`, `ui_shared.c` |
+| Server browser: whether a server answered | a ping of 0 meant "request sent", "no answer" and "answered in 0 ms" at once, so a server answering in under 1 ms (same machine or LAN) was hidden from the list | each server has a state of its own (not asked, waiting, answered, no answer); the ping is only a measure and 0 ms is valid; the UI reads the state through a new import, `trap->ext.LAN_GetServerState` | `client.h`, `cl_main.cpp`, `cl_lan.cpp`, `cl_uiapi.cpp`, `ui_public.h`, `ui_main.c`, `ui_syscalls.c` |
 
 ## 9. Build and repository
 
