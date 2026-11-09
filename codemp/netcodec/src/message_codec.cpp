@@ -421,27 +421,6 @@ std::string_view HeldCommand(int64_t seq, std::span<const Op> before, int64_t kn
 	return seq <= known ? history.Find(seq) : std::string_view();
 }
 
-// command text: bytes then a 0 terminator, each byte coded given the previous one
-template <class O> void PutCommandText(O &io, std::string_view text) {
-	uint32_t prev = 0;
-	for (const char ch : text) {
-		const auto b = static_cast<uint8_t>(ch);
-		io.Symbol(ctx::CommandText(prev), b);   // a 0 byte would end the text: commands hold none
-		prev = b;
-	}
-	io.Symbol(ctx::CommandText(prev), 0);
-}
-
-bool GetCommandText(In &io, std::string &text) {
-	uint32_t prev = 0;
-	for (uint32_t b = io.Symbol(ctx::CommandText(0)); b != 0; b = io.Symbol(ctx::CommandText(prev))) {
-		if (text.size() >= In::kMaxString) return false;
-		text.push_back(static_cast<char>(b));
-		prev = b;
-	}
-	return true;
-}
-
 uint32_t SameCtx(bool prevSame, bool refNumber) noexcept {
 	return Of(kCmdSame0) + (prevSame ? 0U : 1U) + (refNumber ? 0U : 2U);
 }
@@ -543,6 +522,9 @@ void PutMessage(O &io, const Message &msg, const Base &base, const BaselineTable
 	c.btime = bh != nullptr ? bh->time : std::nullopt;
 	c.olderSnap = bh != nullptr ? bh->older : nullptr;
 	io.Class(Of(kMAck), Zz(msg.ack - (bh != nullptr ? bh->ack : 0)));
+	const bool sameId = bh != nullptr && bh->serverId == msg.serverId;   // the serverId: unchanged, or raw
+	if (bh != nullptr) io.Symbol(ctx::kServerIdSame, sameId ? 1 : 0);
+	if (!sameId) io.Raw(static_cast<uint32_t>(msg.serverId), 32);
 	int64_t lastcmd = bh != nullptr ? bh->cmdSeq : 0;
 	const int64_t known = lastcmd;         // the client holds every command up to this one
 	std::optional<int64_t> time;
@@ -610,7 +592,7 @@ void PutMessage(O &io, const Message &msg, const Base &base, const BaselineTable
 		}
 	}
 	io.Symbol(ctx::kOp + prev, 0);
-	rec = HeaderRecord{ .ack = msg.ack, .time = time, .cmdSeq = lastcmd, .older = base.snap };
+	rec = HeaderRecord{ .ack = msg.ack, .time = time, .cmdSeq = lastcmd, .serverId = msg.serverId, .older = base.snap };
 }
 
 // codes a message into scratch: its size, 0 if a value is outside the model or it does not fit in maxBytes
@@ -661,6 +643,7 @@ bool GetMessage(In &io, const BaseLookup &lookup, const CommandHistory &history,
 	c.btime = bh != nullptr ? bh->time : std::nullopt;
 	c.olderSnap = bh != nullptr ? bh->older : nullptr;
 	msg.ack = (bh != nullptr ? bh->ack : 0) + Unzz(io.Class(Of(kMAck)));
+	msg.serverId = bh != nullptr && io.Symbol(ctx::kServerIdSame) != 0 ? bh->serverId : S32(static_cast<uint32_t>(io.Raw(32)));
 	int64_t lastcmd = bh != nullptr ? bh->cmdSeq : 0;
 	const int64_t known = lastcmd;
 	std::optional<int64_t> time;
@@ -747,7 +730,7 @@ bool GetMessage(In &io, const BaseLookup &lookup, const CommandHistory &history,
 		}
 	}
 	msg.ops.resize(used);
-	rec = HeaderRecord{ .ack = msg.ack, .time = time, .cmdSeq = lastcmd, .older = base };
+	rec = HeaderRecord{ .ack = msg.ack, .time = time, .cmdSeq = lastcmd, .serverId = msg.serverId, .older = base };
 	return true;
 }
 

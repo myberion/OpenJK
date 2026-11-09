@@ -140,6 +140,7 @@ qboolean CL_NetcodecRecordGameState( void ) {
 	CL_NetcodecDemoReset();
 	sm.seq = clc.serverMessageSequence - 1;
 	sm.ack = clc.reliableSequence;
+	sm.serverId = cl.serverId;
 	sm.firstCommand = first < 1 ? 1 : first;
 	CL_NetcodecDemoGameState( sm );
 	return CL_NetcodecDemoWrite( sm );
@@ -152,6 +153,7 @@ static void CL_NetcodecDemoRecord( const eng::ClientMessage &cm, int seq, int fi
 
 	sm.seq = seq;
 	sm.ack = cm.ack;
+	sm.serverId = cm.serverId;
 	if ( firstCommand <= clc.serverCommandSequence - MAX_RELIABLE_COMMANDS ) {
 		firstCommand = clc.serverCommandSequence - MAX_RELIABLE_COMMANDS + 1;	// older ones are no longer held
 	}

@@ -30,18 +30,27 @@ namespace detail {
 
 namespace {
 #include "generated/jka_tables.inc"
+#include "generated/jka_client_tables.inc"
 
 constexpr uint32_t kNoTable = std::numeric_limits<uint32_t>::max();
+static_assert(kTrainedCount == kTrainedContext.size() && kTrainedStart.size() == kTrainedCount + 1, "trained tables");
+static_assert(kClientTrainedCount == kClientTrainedContext.size() && kClientTrainedStart.size() == kClientTrainedCount + 1,
+              "trained client tables");
 }
 
 Model::Model() {
 	// distinct tables: the trained ones, then one uniform table per alphabet size
 	std::vector<std::vector<uint16_t>> freqs;
 	std::vector<uint32_t> tableOf(ctx::kCount, kNoTable);
-	for (uint32_t t = 0; t < kTrainedCount; t++) {
-		tableOf[kTrainedContext[t]] = ToU32(freqs.size());
-		freqs.emplace_back(kTrainedFreq.begin() + kTrainedStart[t], kTrainedFreq.begin() + kTrainedStart[t + 1]);
-	}
+	// the loop runs over the arrays' own sizes (with a separate count GCC 12 saw array-bounds errors once inlined)
+	const auto addTrained = [&](const auto &context, const auto &start, const auto &freq) {
+		for (size_t t = 0; t < context.size(); t++) {
+			tableOf[context[t]] = ToU32(freqs.size());
+			freqs.emplace_back(freq.begin() + start[t], freq.begin() + start[t + 1]);
+		}
+	};
+	addTrained(kTrainedContext, kTrainedStart, kTrainedFreq);                     // server messages
+	addTrained(kClientTrainedContext, kClientTrainedStart, kClientTrainedFreq);   // client packets
 	std::vector<uint32_t> uniformOf;
 	for (uint32_t c = 0; c < ctx::kCount; c++) {
 		const uint32_t k = ctx::Alphabet(c);

@@ -49,7 +49,7 @@ if(EXISTS "${netcodec_OPENJK_DIR}/codemp/qcommon/msg.cpp")
 
 	# The client packets recorded by the server (sv_recordClientPackets, plan step 8) against the legacy coding.
 	netcodec_add_program(netcodec_bench_client bench_client.cpp)
-	target_include_directories(netcodec_bench_client PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+	target_include_directories(netcodec_bench_client PRIVATE "${PROJECT_SOURCE_DIR}/test" "${CMAKE_CURRENT_SOURCE_DIR}")
 	target_link_libraries(netcodec_bench_client PRIVATE netcodec_legacy)
 else()
 	message(STATUS "netcodec: OpenJK sources not found in ${netcodec_OPENJK_DIR}, no legacy benchmark")

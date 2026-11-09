@@ -43,7 +43,7 @@ namespace netcodec::trace {
 }
 
 [[nodiscard]] inline bool SameMessage(const Message &a, const Message &b) {
-	if (a.ack != b.ack || a.ops.size() != b.ops.size()) return false;
+	if (a.ack != b.ack || a.serverId != b.serverId || a.ops.size() != b.ops.size()) return false;
 	for (size_t i = 0; i < a.ops.size(); i++)
 		if (!SameOp(a.ops[i], b.ops[i])) return false;
 	return true;

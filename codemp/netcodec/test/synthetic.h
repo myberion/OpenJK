@@ -218,6 +218,7 @@ public:
 		Message &msg = c.msg;
 		int64_t cmdSeq = cmdSeq_;
 		msg.ack = r.Range(-(int64_t{ 1 } << 31), (int64_t{ 1 } << 31) - 1);
+		msg.serverId = r.Below(16) == 0 ? r.Range(-(int64_t{ 1 } << 31), (int64_t{ 1 } << 31) - 1) : 7;   // changes now and then
 		auto gameState = [&] {
 			Op op;
 			op.type = OpType::GameState;

@@ -38,14 +38,15 @@ static_assert(kMinCommands >= (2 * kCommandWindow) + 2, "the command history the
 }
 
 [[nodiscard]] HeaderRecord Header(const Record &r, const Snapshot *older) noexcept {
-	return HeaderRecord{ .ack = r.ack, .time = r.time, .cmdSeq = r.cmdSeq, .older = older };
+	return HeaderRecord{ .ack = r.ack, .time = r.time, .cmdSeq = r.cmdSeq, .serverId = r.serverId, .older = older };
 }
 
 [[nodiscard]] Record ToRecord(const HeaderRecord &h, int32_t seq, uint32_t delta) noexcept {
 	return Record{ .ack = h.ack,
 	               .cmdSeq = h.cmdSeq,
 	               .time = h.time.value_or(0),
-	               .olderSeq = delta != 0 ? seq - static_cast<int32_t>(delta) : -1 };
+	               .olderSeq = delta != 0 ? seq - static_cast<int32_t>(delta) : -1,
+	               .serverId = static_cast<int32_t>(h.serverId) };
 }
 
 // the base's own base is used when it is fewer than kPacketBackup messages before message seq (both sides)
@@ -100,6 +101,7 @@ size_t ServerCodec::Encode(const ServerMessage &msg, const Frame *frames, const 
 	                        .stride = baselines.stride };
 	Message &m = impl_->msg;
 	m.ack = msg.ack;
+	m.serverId = msg.serverId;
 	size_t used = 0;
 	for (int32_t seq = msg.firstCommand; seq <= commands.last; seq++) {
 		const std::string_view text = history.Find(seq);
@@ -235,6 +237,7 @@ bool ClientCodec::Decode(const uint8_t *bytes, size_t size, int32_t seq, const F
 
 	msg = ClientMessage{};
 	msg.ack = static_cast<int32_t>(m.ack);
+	msg.serverId = static_cast<int32_t>(m.serverId);
 	msg.delta = delta;
 	impl_->commands.clear();
 	impl_->configStrings.clear();

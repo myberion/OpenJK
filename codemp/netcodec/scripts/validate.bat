@@ -1,8 +1,9 @@
 @echo off
 rem Validation of netcodec on Windows (Visual Studio): configure, build and test the MSVC presets (x64 Release and
 rem Debug, Win32 Release, x64 with AddressSanitizer), then the size benchmark, the codec benchmark (two runs) and the
-rem Win32 trainer, which must rewrite the committed tables unchanged. Needs the traces of
-rem docs_rewrite\netcode\data\traces (export_rans_trace.py, export_codec_trace.py, export_demo_traces.py).
+rem Win32 trainers, which must rewrite the committed tables unchanged. Needs the traces of
+rem docs_rewrite\netcode\data\traces (export_rans_trace.py, export_codec_trace.py, export_demo_traces.py, and the
+rem client traces of netcodec_bench_client --trace).
 rem Run from anywhere (cmd or PowerShell): codemp\netcodec\scripts\validate.bat
 rem Output: the console and build-netcodec\validate-windows.log; the summary and the benchmark figures come last.
 setlocal EnableDelayedExpansion
@@ -39,6 +40,8 @@ call :bench "codec benchmark, msvc-x64, run 1" codec1 "%B%\msvc-x64\bench\Releas
 call :bench "codec benchmark, msvc-x64, run 2" codec2 "%B%\msvc-x64\bench\Release\netcodec_bench_codec.exe" "%T%\codec_trace.bin" 10
 call :step "trainer msvc-x86: train" "%B%\msvc-x86\tools\Release\netcodec_train.exe" "%T%\train.bin" "%OUT%\tables.inc"
 call :step "trainer msvc-x86 writes the committed tables" fc.exe /b "%OUT%\tables.inc" src\generated\jka_tables.inc
+call :step "client trainer msvc-x86: train" "%B%\msvc-x86\tools\Release\netcodec_train_client.exe" "%OUT%\client_tables.inc" "%T%\client_train.bin"
+call :step "client trainer msvc-x86 writes the committed client tables" fc.exe /b "%OUT%\client_tables.inc" src\generated\jka_client_tables.inc
 
 call :out ""
 call :out "=== results"

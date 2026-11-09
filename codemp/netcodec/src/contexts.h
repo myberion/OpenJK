@@ -7,7 +7,11 @@
 //  - index of the next changed field given the previous one: player, pilot and vehicle tables, then entities per class;
 //  - entity operation given the previous one; entity type changed and new type, per class of the base;
 //  - message operation given the previous one; the scalar contexts of the message (enum Scalar);
-//  - bytes of server command text given the previous byte (0 at the start of a text).
+//  - bytes of server command text given the previous byte (0 at the start of a text), also used by client commands;
+//  - the message's serverId unchanged from the base;
+//  - client packets (client to server, plan step 8): their scalars (enum ClientScalar), the user-command time step
+//    given the previous step, the view angle differences per axis and context, the byte fields given the previous
+//    value (separately for the packet's first command, which has no previous command).
 #pragma once
 
 #include "schema.h"
@@ -51,7 +55,30 @@ inline constexpr uint32_t kTypeValue = kTypeChanged + kEntityClassCount;
 inline constexpr uint32_t kOp = kTypeValue + kEntityClassCount;
 inline constexpr uint32_t kScalar = kOp + kOpAlphabet;
 inline constexpr uint32_t kCommandText = kScalar + static_cast<uint32_t>(Scalar::kScalarCount);
-inline constexpr uint32_t kCount = kCommandText + 256;
+inline constexpr uint32_t kServerIdSame = kCommandText + 256;
+
+// Client packets (see PutClientPacket): the base flag, serverId unchanged, the server command acknowledge, the client
+// command count and first sequence number, the move operation, the user-command count, the first command's time,
+// an escaped time step.
+enum class ClientScalar : uint8_t {
+	kBase, kSameServerId, kRelAck, kNumCommands, kCommandSeq, kMove, kNumUserCmds, kTime0, kStepEscape, kCount
+};
+// zigzag classes of values below 2^35 (36); moves (3); user-command counts 0 to 32 (33); signed classes of 32-bit
+// differences (65)
+inline constexpr std::array<uint16_t, static_cast<size_t>(ClientScalar::kCount)> kClientScalarAlphabet{
+	2, 2, 36, 36, 36, 3, 33, 65, 36 };
+inline constexpr uint32_t kStepAlphabet = 64;        // time steps 0 to 62, 63 escaped
+inline constexpr uint32_t kStepContexts = 65;        // the previous step's symbol, 64 for the second command
+inline constexpr uint32_t kAngleAlphabet = 33;       // signed classes of 16-bit differences
+inline constexpr uint32_t kAngleContexts = 36;       // per axis: first command with and without base, second, then
+                                                     // the previous difference's signed class
+inline constexpr uint32_t kUserCmdFields = 9;        // buttons (two bytes), weapon, forcesel, invensel, generic_cmd,
+                                                     // forwardmove, rightmove, upmove
+inline constexpr uint32_t kClientScalar = kServerIdSame + 1;
+inline constexpr uint32_t kClientStep = kClientScalar + static_cast<uint32_t>(ClientScalar::kCount);
+inline constexpr uint32_t kClientAngle = kClientStep + kStepContexts;
+inline constexpr uint32_t kClientField = kClientAngle + (3 * kAngleContexts);
+inline constexpr uint32_t kCount = kClientField + (kUserCmdFields * 2 * 256);
 
 // The contexts of one field: row[kind] is the context of that kind.
 struct Row {
@@ -117,7 +144,22 @@ struct Row {
 	if (c < kOp) return 256;
 	if (c < kScalar) return kOpAlphabet;
 	if (c < kCommandText) return kScalarAlphabet[c - kScalar];
+	if (c < kServerIdSame) return 256;
+	if (c < kClientScalar) return 2;
+	if (c < kClientStep) return kClientScalarAlphabet[c - kClientScalar];
+	if (c < kClientAngle) return kStepAlphabet;
+	if (c < kClientField) return kAngleAlphabet;
 	return c < kCount ? 256 : 0;
+}
+
+[[nodiscard]] constexpr uint32_t Of(ClientScalar s) noexcept { return kClientScalar + static_cast<uint32_t>(s); }
+// previous: the previous step's symbol, or kStepContexts - 1 for the packet's second command
+[[nodiscard]] constexpr uint32_t ClientStep(uint32_t previous) noexcept { return kClientStep + previous; }
+[[nodiscard]] constexpr uint32_t ClientAngle(uint32_t axis, uint32_t k) noexcept {
+	return kClientAngle + (axis * kAngleContexts) + k;
+}
+[[nodiscard]] constexpr uint32_t ClientField(uint32_t field, bool first, uint32_t previous) noexcept {
+	return kClientField + (((field * 2) + (first ? 1U : 0U)) * 256) + previous;
 }
 
 } // namespace netcodec::detail::ctx

@@ -37,6 +37,13 @@ static_assert( MAX_SNAPSHOT_ENTITIES == eng::kMaxSnapshotEntities, "entities per
 static_assert( MAX_GENTITIES == eng::kMaxEntities, "entity numbers" );
 static_assert( sizeof( entityState_t ) == 532 && offsetof( entityState_t, number ) == 0, "entity images of the codec" );
 static_assert( sizeof( playerState_t ) == 1552, "player-state images of the codec" );
+// the player-state fields client packets are coded against (codemp/netcodec/src/client_codec.cpp), and usercmd_t
+static_assert( offsetof( playerState_t, commandTime ) == 0 && offsetof( playerState_t, delta_angles ) == 80 &&
+	offsetof( playerState_t, weapon ) == 176 && offsetof( playerState_t, viewangles ) == 184 &&
+	offsetof( playerState_t, stats ) + STAT_HOLDABLE_ITEM * sizeof( int ) == 248 &&
+	offsetof( playerState_t, fd.forcePowerSelected ) == 884, "player-state offsets of the client packet codec" );
+static_assert( sizeof( usercmd_t ) == 28 && offsetof( usercmd_t, angles ) == 4 && offsetof( usercmd_t, buttons ) == 16 &&
+	offsetof( usercmd_t, weapon ) == 20 && offsetof( usercmd_t, upmove ) == 26, "usercmd_t images of the client packet codec" );
 
 // one encoder for every client: it keeps only scratch buffers (created on first use, once the zone is up)
 static eng::ServerCodec &Codec( void ) {
@@ -120,6 +127,7 @@ static int SV_NetcodecAcknowledged( const client_t *client ) {
 static void SV_NetcodecBegin( client_t *client, eng::ServerMessage &sm ) {
 	sm.seq = client->netchan.outgoingSequence;
 	sm.ack = client->lastClientCommand;
+	sm.serverId = sv.serverId;
 	sm.firstCommand = SV_NetcodecAcknowledged( client ) + 1;	// the commands firstCommand to reliableSequence (none if above it)
 	client->reliableSent = client->reliableSequence;
 }
@@ -223,6 +231,7 @@ size_t SV_NetcodecDemoGameState( client_t *client, byte *out, size_t outSize ) {
 	SV_NetcodecResetClient( client );
 	sm.seq = client->netchan.outgoingSequence - 1;
 	sm.ack = client->lastClientCommand;
+	sm.serverId = sv.serverId;
 	sm.firstCommand = first;
 	sm.gameState = true;
 	sm.relSeq = client->reliableSequence;

@@ -70,6 +70,7 @@ add_library(netcodec STATIC
 	include/netcodec/codec.h
 	include/netcodec/engine.h
 	include/netcodec/rans.h
+	src/client_codec.cpp
 	src/coder.h
 	src/contexts.h
 	src/engine.cpp
@@ -79,6 +80,7 @@ add_library(netcodec STATIC
 	src/model.h
 	src/numeric.h
 	src/schema.h
+	src/generated/jka_client_tables.inc
 	src/generated/jka_schema.inc
 	src/generated/jka_tables.inc)
 add_library(netcodec::netcodec ALIAS netcodec)

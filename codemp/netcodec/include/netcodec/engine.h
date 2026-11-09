@@ -43,6 +43,7 @@ struct Record {
 	int64_t cmdSeq;      // the client holds every server command up to this one
 	int64_t time;        // the snapshot's server time
 	int32_t olderSeq;    // the message this one was coded against, -1 if none
+	int32_t serverId;    // the message's serverId
 };
 
 // One message slot: the message seq with a snapshot, its player states and its entities in the ring, its Record.
@@ -74,6 +75,7 @@ struct Baselines {
 struct ServerMessage {
 	int32_t seq;              // netchan sequence of this message
 	int32_t ack;              // the last client command the server received
+	int32_t serverId;         // sv.serverId (the client's own serverId is coded against it, step 8)
 	int32_t firstCommand;     // the commands firstCommand to commands.last are sent (none if above it)
 
 	bool gameState;           // gamestate: config strings, the baselines of the encoder call, client number, checksum
@@ -156,6 +158,7 @@ struct ConfigString {
 // A decoded message. The pointers stay valid until the next Decode of the same ClientCodec.
 struct ClientMessage {
 	int32_t ack;
+	int32_t serverId;
 	uint32_t delta;                     // the base: message seq - delta, 0 = none
 	const Command *commands;
 	uint32_t numCommands;

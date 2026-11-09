@@ -39,6 +39,7 @@ Every message the server sends to a client (snapshot, server commands, gamestate
 | `user*` fields of mods | 1 bit wide unless a mod widens them with `netf_overrides.txt` / `psf_overrides.txt` | coded by their C type, so the full value arrives; the overrides files are no longer read |
 | Server commands | text through Huffman, repeated in every message until acknowledged | still repeated until acknowledged, but each one is coded against an earlier command of the same kind (token by token) |
 | Game directory (`svc_setgame`) | a separate message | carried by the next message |
+| Map instance (`serverId`) | only in the system-info config string | also in every message, coded as "unchanged" (a fraction of a bit) except after a map change or a `map_restart`, so that the client's packets can code theirs as "the same as in the message I acknowledge" (plan step 8) |
 | End of message | an `svc_EOF` byte | none (the codec knows the length) |
 | Oversized message | the server clears it and sends it empty | if a message codes larger than 1 KB, it is also coded raw and the smaller is sent; a worst case stays close to the raw size |
 | Precision | what the field widths allow | exactly what the server holds |

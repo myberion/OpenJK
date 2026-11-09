@@ -1,5 +1,6 @@
 // netcodec internals: the model, one table per context (contexts.h), built once: the trained frequencies of
-// generated/jka_tables.inc, and for every other context the table of zero counts (uniform), shared by alphabet size.
+// generated/jka_tables.inc (server messages) and generated/jka_client_tables.inc (client packets), and for every other
+// context the table of zero counts (uniform), shared by alphabet size.
 #pragma once
 
 #include "netcodec/rans.h"

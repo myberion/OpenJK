@@ -110,6 +110,7 @@ struct Op {
 
 struct Message {
 	int64_t ack = 0;
+	int64_t serverId = 0;                  // the server's map instance (sv.serverId), 32 bits
 	std::vector<Op> ops;
 };
 
@@ -118,6 +119,7 @@ struct HeaderRecord {
 	int64_t ack = 0;
 	std::optional<int64_t> time;           // set when the message had a snapshot
 	int64_t cmdSeq = 0;                    // the client holds every server command up to this one
+	int64_t serverId = 0;                  // the message's serverId (a client packet acknowledging it codes its own against it)
 	// the snapshot this message was coded against (second-order predictions), or nullptr: both sides must give the
 	// same (the engine: only while it holds it, fewer than PACKET_BACKUP messages back)
 	const Snapshot *older = nullptr;
@@ -207,6 +209,69 @@ struct SnapshotOut {
                                  const BaselineTable &baselines, const BaselineTableOut &gamestate, const SnapshotOut &snapshot,
                                  Message &msg, uint32_t &delta, HeaderRecord &record);
 
+// ---------------------------------------------------------------------------------------------------------------
+// Client packets (client to server, plan step 8): the acknowledges, the client commands not yet acknowledged and the
+// user commands. Each packet decodes alone (the server does not acknowledge them). The first user command is coded
+// against the acknowledged message as both sides hold it (its record and player state), when the client says so;
+// the acknowledged message number is sent as its low 8 bits.
+inline constexpr size_t kUserCmdBytes = 28;      // sizeof(usercmd_t)
+inline constexpr uint32_t kMaxUserCmds = 32;     // MAX_PACKET_USERCMDS
+inline constexpr uint32_t kMaxClientCommands = 256;   // decoder limit (MAX_RELIABLE_COMMANDS)
+
+// A usercmd_t image: serverTime, angles[3], buttons (32-bit integers at offsets 0, 4, 8, 12, 16), then the bytes
+// weapon, forcesel, invensel, generic_cmd, forwardmove, rightmove, upmove (20 to 26). As in the legacy format, the
+// angles and the buttons are sent as their low 16 bits: the decoder writes them so, and the rest exactly.
+using UserCmd = std::array<uint8_t, kUserCmdBytes>;
+
+enum class Move : uint8_t { kNone = 0, kDelta = 1, kNoDelta = 2 };   // no user command, clc_move, clc_moveNoDelta
+
+struct ClientCommand {
+	int64_t seq = 0;
+	std::string text;
+};
+
+struct ClientPacket {
+	int64_t serverId = 0;                    // the client's serverId (32 bits)
+	int64_t ack = 0;                         // the last server message received
+	int64_t reliableAck = 0;                 // the last server command received
+	std::vector<ClientCommand> commands;     // consecutive sequence numbers
+	Move move = Move::kNone;
+	std::vector<UserCmd> userCmds;           // 1 to kMaxUserCmds with a move, none without
+};
+
+// The acknowledged message as both sides hold it: its record and its player state (playerState_t).
+struct ClientBase {
+	const HeaderRecord *header = nullptr;
+	std::span<const uint8_t> ps;
+};
+
+class ClientPacketEncoder {
+public:
+	// Codes p; base: the acknowledged message (p.ack), or nullptr to code without it (the client no longer holds it,
+	// or its last message is too old for the server to hold). False if p is malformed or does not fit in maxBytes.
+	[[nodiscard]] bool Encode(const ClientPacket &p, const ClientBase *base, size_t maxBytes, std::vector<uint8_t> &out);
+
+private:
+	std::vector<rans::Encoder::Op> ops_;
+	std::vector<uint8_t> scratch_;
+};
+
+// Finds the acknowledged message on the server: false if it does not hold it (the packet is then dropped).
+struct ClientBaseLookup {
+	ClientBaseLookup() = default;
+	ClientBaseLookup(const ClientBaseLookup &) = delete;
+	ClientBaseLookup &operator=(const ClientBaseLookup &) = delete;
+	ClientBaseLookup(ClientBaseLookup &&) = delete;
+	ClientBaseLookup &operator=(ClientBaseLookup &&) = delete;
+	virtual ~ClientBaseLookup() = default;
+	[[nodiscard]] virtual bool Find(int64_t seq, ClientBase &base) const = 0;
+};
+
+// Decodes a client packet. latest: the last message the server sent (the acknowledge is the latest number at or below
+// it with the coded low 8 bits). False on malformed input or an acknowledged message the server does not hold.
+[[nodiscard]] bool DecodeClientPacket(std::span<const uint8_t> bytes, int64_t latest, const ClientBaseLookup &lookup,
+                                      ClientPacket &out);
+
 // Training (tools). symbols[ctx][symbol]: the symbols the encoder codes, per context (a context that is never coded
 // has no entry); rawBits[ctx]: the raw bits coded right after a symbol of the context. CountMessage adds one message
 // (same arguments and result as Encode, no output). Quantize turns the counts of one context into the frequencies of
@@ -218,6 +283,7 @@ struct SymbolCounts {
 [[nodiscard]] SymbolCounts NewSymbolCounts();
 [[nodiscard]] bool CountMessage(const Message &msg, const Base &base, const BaselineTable &baselines,
                                 const CommandHistory &history, HeaderRecord &record, SymbolCounts &counts);
+[[nodiscard]] bool CountClientPacket(const ClientPacket &p, const ClientBase *base, SymbolCounts &counts);
 void Quantize(std::span<const uint64_t> counts, std::span<uint16_t> freq) noexcept;
 
 } // namespace netcodec

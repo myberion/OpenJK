@@ -234,6 +234,81 @@ def cc_order1(p, q, train, m):
     return bits
 
 
+# --- the planned format, symbol by symbol (what the C++ codes) ------------------------------------------------------
+def zclass(models, key, ctx, d, train):
+    """class of the zigzag of d (bit length) through a model, then the bits below the leading one raw"""
+    z = 2 * d if d >= 0 else -2 * d - 1
+    c = z.bit_length()
+    return sym(models, key, ctx, c, 6, train) + (0 if train else max(0, c - 1))
+
+
+@candidate("whole packet", "planned format (ideal): header, client commands, user commands")
+def planned(p, q, train, m):
+    base = p["snapTime"] >= 0
+    bits = 0 if train else 8                                       # messageAck, low 8 bits
+    bits += sym(m, "base", 0, base, 1, train)
+    if base:                                                       # serverId: unchanged flag (approximated by the
+        same = q is not None and p["serverId"] == q["serverId"]    # previous packet's), else raw
+        bits += sym(m, "sid", 0, same, 1, train) + (0 if train or same else 32)
+        bits += zclass(m, "rel", 0, p["reliableAck"] - (q["reliableAck"] if q else 0), train)
+    else:
+        bits += 0 if train else 64
+    bits += zclass(m, "ncc", 0, len(p["commands"]), train)
+    for k, (seq, text) in enumerate(p["commands"]):
+        if k == 0:
+            bits += zclass(m, "ccseq", 0, 0, train) if base else (0 if train else 32)   # first seq: approximated as
+        prev = 0                                                   # the expected one
+        for ch in text + "\0":
+            bits += sym(m, "cc", prev, ch, 8, train)
+            prev = ch
+    bits += sym(m, "move", 0, p["move"], 2, train)
+    cmds = p["cmds"]
+    if not cmds:
+        return bits
+    bits += sym(m, "count", 0, len(cmds), 6, train)
+    sa = snap_angles(p)
+    prev_dt = 64
+    prev_class = [None, None, None]
+    for i, c in enumerate(cmds):
+        t = c[0]
+        if i == 0:
+            bits += zclass(m, "t0", 0, t - p["snapTime"], train) if base else (0 if train else 32)
+        else:
+            dt = t - cmds[i - 1][0]
+            s = dt if 0 <= dt < 63 else 63
+            bits += sym(m, "dt", prev_dt, s, 6, train)
+            if s == 63:
+                bits += zclass(m, "dtesc", 0, dt, train)
+            prev_dt = s
+        for a in range(3):
+            if i == 0:
+                pred, ctx = (sa[a], (a, "base")) if base else (0, (a, "none"))
+            else:
+                pred = cmds[i - 1][1 + a]
+                ctx = (a, "i1") if i == 1 else (a, prev_class[a])
+            d = delta16(c[1 + a], pred)
+            sc, extra = bucket(d)                                  # signed class: the sign is modelled, not raw
+            bits += sym(m, "ang", ctx, sc, 6, train) + (0 if train else extra)
+            prev_class[a] = sc
+        if i == 0:
+            prevf = [0, p["weapon"] & 255, p["forceSel"] & 255, p["holdable"] & 255, 0, 0, 0, 0] if base else [0] * 8
+        else:
+            prevf = cmds[i - 1][4:12]
+        for k in range(8):
+            v, pv = c[4 + k] & (0xFFFF if k == 0 else 255), prevf[k] & (0xFFFF if k == 0 else 255)
+            if k == 0:                                             # buttons: two bytes, each given the previous byte
+                bits += sym(m, ("f", 0, "lo"), pv & 255, v & 255, 8, train)
+                bits += sym(m, ("f", 0, "hi"), pv >> 8, v >> 8, 8, train)
+            else:
+                bits += sym(m, ("f", k), pv, v, 8, train)
+    return bits
+
+
+@candidate("whole packet", "legacy (all)")
+def legacy_all(p, q, train, m):
+    return p["headerBits"] + p["commandBits"] + p["moveBits"]
+
+
 def run(files):
     train_files = [n for n in files if n != HELD_OUT]
     print(f"training: {len(train_files)} sessions; held out: {HELD_OUT}")
@@ -260,7 +335,7 @@ def run(files):
     print(f"\n{'':16} {'candidate':{width}}  bytes per packet: training  held out")
     for r in results:
         print(f"{r[0]:16} {r[1]:{width}}  {r[2]:26.2f}  {r[3]:8.2f}")
-    legacy = sum(r[3] for r in results if r[1].startswith("legacy"))
+    legacy = sum(r[3] for r in results if r[1].startswith("legacy") and r[0] != "whole packet")
     print(f"\nlegacy held out: {legacy:.2f} bytes per packet (without the unused bits of the last byte)")
 
 
