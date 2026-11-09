@@ -1,19 +1,46 @@
 // netcodec_bench_client: the client packets recorded by the server (sv_recordClientPackets, plan step 8), decoded as
 // the server does with OpenJK's own msg.cpp and coded again as the client does (the bytes must be identical), with
-// where the bytes go.
-// Usage: netcodec_bench_client <file.jkcp> ...
+// where the bytes go, and the legacy coding time (cold: the fastest of 3 passes over every packet; warm: the fastest of
+// 5 codings of each packet, summed, as netcodec_bench_codec).
+// Usage: netcodec_bench_client [--dump out.txt] <file.jkcp> ...
 #include "legacy/legacy_codec.h"
 
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <string>
 #include <vector>
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
+
 namespace {
+
+double NowNs() {
+	return static_cast<double>(
+	    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+uint64_t Ticks() noexcept { return __rdtsc(); }
+
+// A decoded packet kept for the timing: its bytes and key, and what EncodeClientPacket needs.
+struct Kept {
+	std::vector<uint8_t> bytes;
+	int32_t key = 0;
+	legacy::ClientPacketView view;
+	std::vector<std::string> texts;
+	std::vector<legacy::Command> commands;
+	std::vector<uint8_t> userCmds;
+};
 
 // The file of sv_recordClientPackets (codemp/server/sv_netcodec.cpp: ClientPacketFileHeader, ClientPacketRecord).
 struct FileHeader {
@@ -71,7 +98,38 @@ void Print(const char *name, const Totals &t) {
 	            t.newCommands, t.withCommands, 100.0 * static_cast<double>(t.withSnapshot) / n);
 }
 
-bool ReadFile(const char *path, Totals &t, legacy::ClientPacketOut &out) {
+// --dump: each decoded packet as tab-separated text lines, for the measurements of the format (tools/python):
+// P svTime realTime snapTime commandTime viewangles[3] deltaAngles[3] weapon forcePowerSelected holdableItem serverId
+//   messageAck reliableAck move(0 none, 1 delta, 2 no delta) headerBits commandBits moveBits length
+// U serverTime angles[3] buttons weapon forcesel invensel generic_cmd forwardmove rightmove upmove  (one per user command)
+// C seq text  (one per client command; tab, newline and backslash written as \t, \n, \\)
+void Dump(std::FILE *f, const Record &rec, const legacy::ClientPacketOut &out) {
+	std::fprintf(f, "P\t%d\t%d\t%d\t%d\t%.9g\t%.9g\t%.9g\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", rec.svTime,
+	             rec.realTime, rec.snapTime, rec.commandTime, static_cast<double>(rec.viewangles[0]),
+	             static_cast<double>(rec.viewangles[1]), static_cast<double>(rec.viewangles[2]), rec.deltaAngles[0],
+	             rec.deltaAngles[1], rec.deltaAngles[2], rec.weapon, rec.forcePowerSelected, rec.holdableItem, out.serverId,
+	             out.messageAck, out.reliableAck, static_cast<int>(out.move), out.headerBits, out.commandBits, out.moveBits,
+	             rec.length);
+	for (int i = 0; i < out.numUserCmds; i++) {
+		const uint8_t *u = out.userCmds + static_cast<size_t>(i) * legacy::kUserCmdBytes;
+		std::array<int32_t, 5> v{};   // serverTime, angles[3], buttons
+		std::memcpy(v.data(), u, sizeof v);
+		std::fprintf(f, "U\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", v[0], v[1], v[2], v[3], v[4], u[20], u[21], u[22],
+		             u[23], static_cast<int8_t>(u[24]), static_cast<int8_t>(u[25]), static_cast<int8_t>(u[26]));
+	}
+	for (int i = 0; i < out.numCommands; i++) {
+		std::fprintf(f, "C\t%d\t", out.commands[i].seq);
+		for (const char *c = out.commands[i].text; *c; c++) {
+			if (*c == '\t') std::fputs("\\t", f);
+			else if (*c == '\n') std::fputs("\\n", f);
+			else if (*c == '\\') std::fputs("\\\\", f);
+			else std::fputc(*c, f);
+		}
+		std::fputc('\n', f);
+	}
+}
+
+bool ReadFile(const char *path, Totals &t, legacy::ClientPacketOut &out, std::FILE *dump, std::vector<Kept> &kept) {
 	std::ifstream f(path, std::ios::binary);
 	const std::vector<char> data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 	FileHeader header{};
@@ -113,6 +171,13 @@ bool ReadFile(const char *path, Totals &t, legacy::ClientPacketOut &out) {
 		const int size = legacy::EncodeClientPacket(view, coded.data(), static_cast<int>(coded.size()));
 		const int bits = out.headerBits + out.commandBits + out.moveBits;
 		if (size != rec.length || std::memcmp(coded.data(), bytes, static_cast<size_t>((bits + 7) / 8)) != 0) t.codedDifferently++;
+		if (dump) Dump(dump, rec, out);
+		Kept &k = kept.emplace_back();
+		k.bytes.assign(bytes, bytes + rec.length);
+		k.key = rec.key;
+		k.view = view;
+		for (int i = 0; i < out.numCommands; i++) k.texts.emplace_back(out.commands[i].text);
+		k.userCmds.assign(out.userCmds, out.userCmds + static_cast<size_t>(out.numUserCmds) * legacy::kUserCmdBytes);
 
 		t.headerBits += static_cast<uint64_t>(out.headerBits);
 		t.commandBits += static_cast<uint64_t>(out.commandBits);
@@ -133,18 +198,78 @@ bool ReadFile(const char *path, Totals &t, legacy::ClientPacketOut &out) {
 	return true;
 }
 
+void Time(std::vector<Kept> &kept, legacy::ClientPacketOut &out) {
+	for (Kept &k : kept) {   // the views point into the kept storage, now that it no longer moves
+		for (size_t i = 0; i < k.texts.size(); i++) k.commands.push_back({ k.view.commands[i].seq, k.texts[i].c_str() });
+		k.view.commands = k.commands.data();
+		k.view.userCmds = k.userCmds.data();
+	}
+	std::vector<uint8_t> buf(1 << 16);
+	size_t sink = 0;
+	const auto encode = [&](const Kept &k) {
+		sink += static_cast<size_t>(legacy::EncodeClientPacket(k.view, buf.data(), static_cast<int>(buf.size())));
+	};
+	const auto decode = [&](const Kept &k) {
+		sink += legacy::DecodeClientPacket(k.bytes.data(), static_cast<int>(k.bytes.size()), k.key, out) ? 1U : 0U;
+	};
+	const auto cold = [&](auto code) {
+		double best = 1e300;
+		for (int r = 0; r < 3; r++) {
+			const double t0 = NowNs();
+			for (const Kept &k : kept) code(k);
+			best = std::min(best, NowNs() - t0);
+		}
+		return best;
+	};
+	const auto warm = [&](auto code) {
+		double best = 1e300;
+		for (int r = 0; r < 3; r++) {
+			uint64_t sum = 0;
+			const double t0 = NowNs();
+			const uint64_t c0 = Ticks();
+			for (const Kept &k : kept) {
+				uint64_t fastest = ~uint64_t{ 0 };
+				for (int i = 0; i < 5; i++) {
+					const uint64_t s = Ticks();
+					code(k);
+					fastest = std::min(fastest, Ticks() - s);
+				}
+				sum += fastest;
+			}
+			const double nsPerTick = (NowNs() - t0) / static_cast<double>(Ticks() - c0);
+			best = std::min(best, static_cast<double>(sum) * nsPerTick);
+		}
+		return best;
+	};
+	const double n = static_cast<double>(kept.size());
+	const double ce = cold(encode), we = warm(encode), cd = cold(decode), wd = warm(decode);
+	std::printf("legacy coding time, %zu packets: encode %.1f ns per packet (warm %.1f), decode %.1f (warm %.1f)%s\n", kept.size(),
+	            ce / n, we / n, cd / n, wd / n, sink ? "" : " ");
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
-	if (argc < 2) { std::fprintf(stderr, "usage: %s file.jkcp ...\n", argv[0]); return 2; }
+	int first = 1;
+	std::FILE *dump = nullptr;
+	if (argc > 2 && std::strcmp(argv[1], "--dump") == 0) {
+		dump = std::fopen(argv[2], "w");
+		if (!dump) { std::fprintf(stderr, "cannot write %s\n", argv[2]); return 2; }
+		first = 3;
+	}
+	if (argc <= first) { std::fprintf(stderr, "usage: %s [--dump out.txt] file.jkcp ...\n", argv[0]); return 2; }
 	const auto out = std::make_unique<legacy::ClientPacketOut>();
 	Totals all;
-	for (int a = 1; a < argc; a++) {
+	std::vector<Kept> kept;
+	for (int a = first; a < argc; a++) {
 		Totals t;
-		if (!ReadFile(argv[a], t, *out)) return 2;
+		if (dump) std::fprintf(dump, "F\t%s\n", argv[a]);
+		if (!ReadFile(argv[a], t, *out, dump, kept)) return 2;
 		Print(argv[a], t);
 		all.Add(t);
 	}
-	if (argc > 2) Print("all files", all);
+	if (argc - first > 1) Print("all files", all);
+	if (dump) std::fclose(dump);
+	Time(kept, *out);
 	return all.notDecoded || all.codedDifferently ? 1 : 0;
 }

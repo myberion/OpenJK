@@ -42,4 +42,22 @@ build-netcodec/mingw-clang-release/bench/netcodec_bench_client.exe docs_rewrite/
   | F | `client2_20261109-213533` | 125 fps, 100 | ordinary play on another map (`mp/ffa3`) | 11,183 | 181 | 38.6 | 4 (2) | held out |
 
   All: 81,789 packets in 1,303 s, 40.7 bytes per packet (acknowledges 7.8, client commands 1.0, user commands and end 31.4, unused bits 0.6), 2,555 bytes per second. `cl_maxpackets` 63 gives 66 packets per second, not 63: the interval is 1000 / 63 = 15 ms in integer division.
+- Legacy coding time on the six sessions (clang, this machine, `netcodec_bench_client`; cold: the fastest of 3 passes over every packet, warm: the fastest of 5 codings of each packet, as `netcodec_bench_codec`): encoding 1,181 ns per packet (warm 557), decoding 435 ns (warm 304). A server with 64 players at 63 packets per second each spends about 0.2 % of a core decoding them: the time matters little; the comparison with netcodec comes with part 2.
+- Ideal cost by field (9 November 2026; `tools/python/client_fields.py` on the dump of `netcodec_bench_client --dump`, in `data/traces/clientpackets.txt`): static models per context trained on sessions A to E, evaluated on them and on the held-out session F; cost `-log2 p`, with an escape and raw bits for symbols the training never saw; wide integers (times, angle deltas) as a bucket (zero, or sign and bit length) plus the bits below the leading one. Bytes per packet:
+
+  | part | candidate | training | held out |
+  |---|---|---|---|
+  | acknowledges | legacy (Huffman of three 32-bit values) | 7.78 | 7.68 |
+  | | `serverId` "unchanged" flag, `messageAck` modulo 32 raw (5 bits; the server knows the window of 32 messages it can still use), `reliableAck` against the previous packet (an approximation of a base both sides hold: the commands the acknowledged message carried) | 0.64 | 0.64 |
+  | | for reference, not robust to losses: both acknowledges against the previous packet | 0.13 | 0.13 |
+  | user commands | legacy (count, deltas against the previous command with the key XOR, Huffman) | 31.71 | 29.29 |
+  | | first command absolute as in the legacy format, then deltas, a model per field | 13.75 | 13.45 |
+  | | first command against the acknowledged snapshot (time against its server time, angles against its view angles less `delta_angles`), then deltas | 8.55 | 8.21 |
+  | | the same, first time against the snapshot's `commandTime` | 8.49 | 8.13 |
+  | | against the snapshot, time step in the context of the previous step, angle delta in the context of the previous delta's bucket | 7.31 | **7.07** |
+  | | against the snapshot, angles predicted to second order | 7.86 | 7.49 |
+  | client commands | legacy (Huffman) | 0.97 | 1.05 |
+  | | count, then the text with an order-1 byte model (sequence numbers implied) | 0.03 | 0.11 |
+
+  Best held-out total: about 7.8 ideal bytes per packet against 38.0 for the legacy format (0.21), before the end cost of a real rANS stream on such short messages (to measure with the real coder). The training and held-out figures are close, but all sessions come from one player. Half the user commands are copies from the previous packet (`cl_packetdup`); they are counted in both formats (plan step 10 decides their resending).
 - The legacy coder sizes a message as `bit / 8 + 1` bytes (`msg.cpp`), so a packet ending on a byte boundary (12 % here) carries one more byte that nothing writes: on the client, whatever its stack held at that place (obfuscated by the XOR, but sent). The reader compares only the bytes holding bits.
