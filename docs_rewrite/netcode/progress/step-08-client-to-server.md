@@ -75,5 +75,15 @@ build-netcodec/mingw-clang-release/bench/netcodec_bench_client.exe docs_rewrite/
   | D alone (333 fps, 10 user commands per packet) | 55.04 | 12.43 | 0.226 |
   | C alone (60 fps, 2 per packet) | 32.27 | 8.21 | 0.254 |
 
-  The difference with the ideal 8.15 bytes is mostly the rANS final state, 4 bytes per message of which about 1.8 are overhead (step 6), which weighs on packets this short. Coding times: to measure on a quiet machine (the first figures were taken while the virtual machines ran).
+  The difference with the ideal 8.15 bytes is mostly the rANS final state, 4 bytes per message of which about 1.8 are overhead (step 6), which weighs on packets this short.
+- Sizes and coding times, legacy (`msg.cpp`) then netcodec (10 November 2026, commit `d737012ce`, `netcodec_bench_client` on the six sessions, 81,789 packets, two runs per compiler within 3 %; the host quiet; clang on one fixed core at high priority). The sizes are the same with every compiler: 40.68 bytes per packet, then 10.07 (0.248; the held-out session alone 38.58 then 9.89). Nanoseconds per packet, the ratio in brackets:
+
+  | compiler | bytes per packet | encoding (client), warm | decoding (server), warm | encoding, cold | decoding, cold |
+  |---|---|---|---|---|---|
+  | clang x64 (llvm-mingw, this machine) | 40.68 → 10.07 | 563 → 197 (0.35) | 295 → 253 (0.86) | 1,170 → 270 (0.23) | 423 → 320 (0.76) |
+  | MSVC x64 (Windows VM) | 40.68 → 10.07 | 529 → 213 (0.40) | 344 → 282 (0.82) | 1,148 → 311 (0.27) | 462 → 362 (0.78) |
+  | GCC 12 x64 (Debian VM; the server target) | 40.68 → 10.07 | 401 → 161 (0.40) | 276 → 225 (0.81) | 903 → 207 (0.23) | 641 → 277 (0.43) |
+  | Clang 14 x64 (Debian VM) | 40.68 → 10.07 | 588 → 197 (0.34) | 335 → 249 (0.74) | 1,171 → 243 (0.21) | 474 → 314 (0.66) |
+
+  Four times fewer bytes and faster in both directions. A server with 64 players at 63 packets per second each decodes about 4,000 packets per second: about 1.3 ms per second, 0.13 % of a core (legacy 0.17 %).
 - The legacy coder sizes a message as `bit / 8 + 1` bytes (`msg.cpp`), so a packet ending on a byte boundary (12 % here) carries one more byte that nothing writes: on the client, whatever its stack held at that place (obfuscated by the XOR, but sent). The reader compares only the bytes holding bits.
