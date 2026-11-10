@@ -1,5 +1,6 @@
 # Summary of the A/B scripts (ab_gcc.sh, ab_gcc_podman.sh, ab_clang.sh). Input lines:
 #   <build> <round>: warm encode <ns> (legacy <ns>) decode <ns> (legacy <ns>) mismatches <n> | cold encode <ns> decode <ns>
+# (per server message with bench_codec, per client packet with BENCH=client, whose lines come from ab_client.awk)
 # A warm time of 0 means the build's benchmark predates the warm timing (an old reference commit).
 # Prints the best warm and cold times of each build and their difference against "ref", then checks:
 #  - netcodec mismatches (the builds must code the same bytes);

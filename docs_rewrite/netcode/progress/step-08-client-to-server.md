@@ -1,6 +1,6 @@
 # Step 8: client-to-server messages by the codec
 
-Status: **in progress** (started 9 November 2026; part 3 written 10 November 2026, in-game tests next). Plan: [PLAN.md](../PLAN.md), step 8.
+Status: **in progress** (started 9 November 2026; part 3 done 10 November 2026, checked in game on the loopback and on the VPS; part 4, the robustness tests, next). Plan: [PLAN.md](../PLAN.md), step 8.
 
 ## Why recordings, and where
 
@@ -22,7 +22,7 @@ Wanted in the corpus: several separate sessions (one is kept out of training), s
    - Client traces (`test/client_trace.h`): `netcodec_bench_client --trace` writes the decoded packets with their bases (`data/traces/client_train.bin` for A to E, `client_holdout.bin` for F; not committed). The recording holds the acknowledged snapshot's fields but not its record: its `cmdSeq`, `ack` and `serverId` are approximated (the previous packet's `reliableAck` and `serverId`, the last client command sequence before the packet); exact in the engine, they only weigh on rare symbols.
    - Tests (`test/test_client.cpp`): `netcodec.client_synthetic` (100,000 random packets on every path: with and without base, serverId changed, client commands, steps beyond the escape, any angle and byte; hash `0xCFE7E7FEB2FB9F06`) and `netcodec.client_roundtrip` (each traced packet against its base when the recording had it, then again without a base: 163,578 codings; hash `0xC371DB108DA14F6D`). Same hashes with clang x64 and x86; clang-tidy clean.
    - The engine checks the offsets the codec reads (`playerState_t` and `usercmd_t`, `codemp/server/sv_netcodec.cpp`).
-3. **Integration (code written 10 November 2026; builds with clang, library tests on every local preset; in-game tests and the VM validations next).** See "Part 3: what was done" below.
+3. **Integration (done 10 November 2026; validated on every compiler, the game built with clang, MSVC and GCC, checked in game).** See "Part 3: what was done" and "Part 3: results" below.
 4. **Robustness first**: malformed-input test and fuzzer target on this decoder before it is relied on (the server decodes data from anyone): mutated copies of synthetic and traced packets decoded with random bases and `latest` values, no fault and decode(encode(decode(x))) == decode(x), as `netcodec.decode_robustness`; a libFuzzer target next to `fuzz/fuzz_decode.cpp` with a seed corpus of coded client packets.
 
 ## Part 3: what was done
@@ -39,9 +39,41 @@ The model is step 7: a small C++11 interface in `engine.h`, the conversions in `
 8. **Recorder** removed (owner, 10 November 2026): `sv_recordClientPackets` and its file writer. `netcodec_bench_client` still reads the part 1 files and describes their format.
 9. **Test**: `netcodec.client_roundtrip` also passes every traced packet through `engine.h` (`PacketBaseOf` a frame holding the traced values, the server's window, `EncodePacket`, `DecodePacket`): 163,578 codings, the same bytes as the library, the same packet back, and a packet coded against a base is refused once its slot holds a later message.
 
-### Checks in game (owner)
+## Part 3: results
 
-A normal game (movement, prediction with `cg_showmiss 1`, chat, team change, votes, weapon and force selection), on the loopback, then the VPS with `net_dropsim` on both sides; `netstats` (packets without a base: only right after connecting or a map change) and `svnetstats` (packets not decoded: 0); `sv_netcodecCompare 1` for the byte ratio of the packets in game; the ping shown in the score board against the reference build. Then the VM validations, the game built with MSVC and GCC, and the documents.
+Validation: `validate.sh` (GCC 12 and Clang 14) and `validate.bat` (MSVC x64, x86, ASan) all OK, with `netcodec.client_roundtrip` also through `engine.h` (163,578 codings, 0 failures) and, from this part on, the game itself (Debian: `build-openjk/gcc-ded` and `build-openjk/gcc-mp`, every multiplayer target; Windows: `build-openjk\msvc-x64` in Release): no warning in the files of this part.
+
+In game, owner, 10 November 2026, MSVC x64 client, bots. Each line is one window between two calls of `netstats` (client) and `svnetstats` (server):
+
+| setup | condition | server messages received (lost, not decoded) | bytes per message | client packets (server: not decoded) | bytes per packet | packets without a base | snapshots by base: 1 / 2 / 3 messages back |
+|---|---|---|---|---|---|---|---|
+| loopback (listen server) | first window, connection and map load included | 5,407 (0, 0) | 61.2 | 16,628 (0) | 8.4 | 261 | 5,315 / 1 / 1, 80 without a base |
+| loopback | next window | 4,447 (0, 0) | 79.7 | 13,900 (0) | 8.6 | 0 | 4,447 / 0 / 0 |
+| loopback | `svrecord` in the middle of a game | 1,348 sent | 84.7 | 4,213 (0) | 8.9 | | 1 base refused (the demo's start) |
+| loopback | `map_restart` | 1,634 sent | 79.7 | 5,106 (0) | 9.0 | | 3 without a base (the restart) |
+| VPS, GCC server, Internet (15 ms round trip) | no loss | 2,085 (0, 0) | 29.4 | 6,517 (0) | 8.4 | 0 | 2,085 / 0 / 0 |
+| VPS | long quiet window | 9,254 (0, 0) | 21.3 | 28,924 (0) | 6.7 | 0 | 9,254 / 0 / 0 |
+| VPS | `net_dropsim 10` on the client (server messages lost) | 887 (93, 0) | 34.3 | 3,063 (0) | 10.2 | 0 | 800 / 81 / 6 |
+| VPS | `net_dropsim 20` on the server (client packets lost) | 1,837 (0, 0) | 49.7 | 5,739 sent, 4,878 received (0) | 10.4 to 10.7 | 0 | 1,768 / 69 / 0 |
+
+- No client packet the server could not decode, and no server message the client could not decode, in any window. Packets without a base appear only while connecting (the server sends full snapshots during the map load, and a packet acknowledging one has no earlier snapshot to measure the time between messages); after `svrecord`, whose start resets the server's frames, every packet still decoded (with the 32 frames of step 7 they would have been dropped). The `svrecord` demo plays back.
+- Bytes per packet follow the activity (6.7 in a quiet window, 8 to 10.7 in combat; the loopback sends one user command per packet); lost server messages make the next packets code their first command against an older snapshot, a small part of the difference.
+- `sv_netcodecCompare 1` on the VPS, 10-second windows: client packets 6.0 to 6.1 bytes against 27.4 to 28.0 in the legacy format (ratio 0.215 to 0.219), server messages 0.375 to 0.395.
+- Ping: 24 ms in the score board for a network round trip of 15 ms (`ping` of the VPS from the same machine): the round trip, plus the wait for the client's next packet (one every 16 ms at `cl_maxpackets` 63, 8 ms on average), plus processing; the legacy measure moved in 50 ms steps.
+- Prediction misses (`cg_showmiss 1`): 0.12 to 0.35 unit in normal play. Crouching or jumping while attacking someone gives larger ones, also with the reference build: the saber's special moves depend on what only the server knows at the moment of the hit (the opponent's position and block, the knockback); an entry point for plan step 14. With 20 % of the client packets lost (`net_dropsim 20` on the server): 0.14 to 1.1, a run at 0.74 to 0.80 while moving, and peaks of 7.6 and 12 in jumps: with `cl_packetdup` 1, two consecutive lost packets lose user commands, and the server then runs one long step where the client predicted several short ones (variable step). Part 3 does not change this (the server executes the commands it receives, as before; not compared with the reference build under loss); the remedies are plan step 10 (every user command not yet acknowledged resent in each packet) and step 14 (a fixed step).
+
+Timing against `972172204`, the commit before this part, 10 alternated rounds on a quiet machine, the legacy coder stable within 2.5 % in each build (`BENCH=client` with `ab_clang.sh` here and `ab_gcc.sh` on the Debian VM, `ABM_BENCH=client` with `ab_msvc.bat` on the Windows VM), nanoseconds per packet on the six recorded sessions, before and after:
+
+| | clang x64 (this machine) | GCC 12 x64 (Debian VM, the server target) | MSVC x64 (Windows VM) |
+|---|---|---|---|
+| decoding, warm (the server) | 251.5 to 248.3 (-1.3 %) | 224.4 to 219.4 (-2.2 %) | 282.3 to 272.7 (-3.4 %) |
+| decoding, cold | 316 to 293 (-7.3 %) | 278 to 266 (-4.3 %) | 340 to 328 (-3.7 %) |
+| encoding, warm | 196.1 to 182.6 (-6.9 %) | 161.0 to 158.9 (-1.3 %) | 215.2 to 214.3 (-0.4 %) |
+| encoding, cold | 267 to 239 (-10.5 %) | 207 to 198 (-4.3 %) | 285 to 261 (-8.3 %) |
+
+The library's code grows by 6.3 KB with GCC (the `engine.h` functions of this part).
+
+The decoder reads one 32-byte `ClientBase` instead of five cache lines of the player state, and computes it once per message sent instead of once per packet received. The encoding gain is partly the benchmark's: it computes each packet's base before the timing, while in the engine the client calls `PacketBaseOf` for each packet. The A/B scripts take `BENCH=client` (`ab_clang.sh`, `ab_gcc.sh`; `ABM_BENCH=client` for `ab_msvc.bat`) to time `netcodec_bench_client` instead of `bench_codec`.
 
 ## How the corpus was recorded (part 1)
 

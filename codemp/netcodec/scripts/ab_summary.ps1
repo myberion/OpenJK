@@ -1,5 +1,5 @@
-# Summary of ab_msvc.bat, as ab_summary.awk for the other A/B scripts: reads the bench_codec outputs out-<build>-<round>.txt
-# of a directory and prints the best warm and cold times of each build against "ref" (a warm time of 0: the build's
+# Summary of ab_msvc.bat, as ab_summary.awk for the other A/B scripts: reads the bench_codec (or, with ABM_BENCH=client,
+# netcodec_bench_client) outputs out-<build>-<round>.txt of a directory and prints the best warm and cold times of each build against "ref" (a warm time of 0: the build's
 # benchmark predates the warm timing, an old reference commit), then checks netcodec mismatches, the unchanged legacy
 # encoder moving by more than 4 % within a build (a busy machine), and the legacy difference between builds (code
 # placement: a netcodec difference of that size is not a result).
@@ -18,11 +18,28 @@ foreach ($f in Get-ChildItem -Path $Dir -Filter 'out-*-*.txt' | Sort-Object { [i
 		}
 		return @(0.0, 0.0)
 	}
-	$en = & $time 'encode netcodec'
-	$dn = & $time 'decode netcodec'
-	$le = (& $time 'encode legacy')[1]
-	$m = $t | Where-Object { $_ -match 'netcodec mismatches (\d+)' } | Select-Object -First 1
-	if ($m -match 'netcodec mismatches (\d+)') { $bad += [int]$Matches[1] }
+	# netcodec_bench_client: "<legacy|netcodec> coding time...: encode C ns per packet (warm W), decode C (warm W)"
+	$client = { param($name)
+		foreach ($l in $t) {
+			if ($l -match "^$name coding time.*encode ([\d.]+) ns per packet \(warm ([\d.]+)\), decode ([\d.]+) \(warm ([\d.]+)\)") {
+				return @([double]$Matches[1], [double]$Matches[2], [double]$Matches[3], [double]$Matches[4])
+			}
+		}
+		return $null
+	}
+	$nc = & $client 'netcodec'
+	if ($nc) {
+		$en = @($nc[0], $nc[1]); $dn = @($nc[2], $nc[3])
+		$le = (& $client 'legacy')[1]
+		$m = $t | Where-Object { $_ -match '^netcodec all:.* (\d+) failures' } | Select-Object -First 1
+		if ($m -match ' (\d+) failures') { $bad += [int]$Matches[1] }
+	} else {
+		$en = & $time 'encode netcodec'
+		$dn = & $time 'decode netcodec'
+		$le = (& $time 'encode legacy')[1]
+		$m = $t | Where-Object { $_ -match 'netcodec mismatches (\d+)' } | Select-Object -First 1
+		if ($m -match 'netcodec mismatches (\d+)') { $bad += [int]$Matches[1] }
+	}
 	if (-not $builds.Contains($b)) { $builds[$b] = @{ e = $en[1]; d = $dn[1]; ce = $en[0]; cd = $dn[0]; lmin = $le; lmax = $le } }
 	$x = $builds[$b]
 	$x.e = [math]::Min($x.e, $en[1]); $x.d = [math]::Min($x.d, $dn[1])

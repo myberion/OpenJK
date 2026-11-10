@@ -1,8 +1,10 @@
 #!/bin/bash
 # A/B (owner, Debian VM): bench_codec of a reference commit (REF, default HEAD) against the working tree, GCC Release,
 # run alternately on core 1; prints the warm and cold timings per run, then the best of each build and the difference.
-# Usage, from anywhere: [REF=<commit> | REF_DIR=<copy>] [CUR_DIR=<copy>] [NOINL=1] [NOALIGN=1] [CXXFLAGS=...]
+# Usage, from anywhere: [REF=<commit> | REF_DIR=<copy>] [CUR_DIR=<copy>] [NOINL=1] [NOALIGN=1] [CXXFLAGS=...] [BENCH=client]
 #   bash codemp/netcodec/scripts/ab_gcc.sh [rounds]
+# BENCH=client: netcodec_bench_client on the recorded client packets (docs_rewrite/netcode/data/clientpackets/*.jkcp)
+# instead of bench_codec; the times are then per client packet.
 # CUR_DIR: a directory holding codemp/netcodec (a variant prepared on the host) timed instead of the working tree;
 # REF_DIR: the same for the reference (instead of a commit).
 # Functions, loops and jumps are aligned to 64 bytes in both builds: without it, where the code falls in memory moves
@@ -17,6 +19,7 @@ export LC_ALL=C   # numbers with a decimal point in awk (a French locale reads 1
 R="$(cd "$(dirname "$0")/../../.." && pwd)"
 ROUNDS=${1:-6}
 REF=${REF:-HEAD}
+BENCH=${BENCH:-codec}   # codec (server messages) or client (client packets)
 W=/tmp/netcodec-ab
 G() { git -c safe.directory='*' -C "$R" "$@"; }
 rm -rf "$W" && mkdir -p "$W/ref" "$W/cur/codemp"
@@ -25,7 +28,7 @@ if [ -n "${REF_DIR:-}" ]; then mkdir -p "$W/ref/codemp" && cp -r "$REF_DIR/codem
 cp -r "${CUR_DIR:-$R}/codemp/netcodec" "$W/cur/codemp/"
 rm -rf "$W/cur/codemp/netcodec/build-netcodec"
 if [ -n "${REF_DIR:-}" ]; then RDESC="the copy in $REF_DIR"; else RDESC="$REF ($(G log -1 --format='%h %s' "$REF" | cut -c1-100))"; fi
-echo "ref = $RDESC; cur = ${CUR_DIR:-the working tree}"
+echo "ref = $RDESC; cur = ${CUR_DIR:-the working tree}; bench_$BENCH"
 if [ "${NOINL:-0}" = 1 ]; then
 	F="$W/cur/codemp/netcodec/src/field_codec.h"
 	sed -i 's/\[\[nodiscard\]\] NETCODEC_ALWAYS_INLINE std::optional<int64_t> PredictAngle(/[[nodiscard]] inline std::optional<int64_t> PredictAngle(/' "$F"
@@ -38,7 +41,7 @@ build() {   # $1 = name (ref, cur)
 	cmake -S "$W/$1/codemp/netcodec" -B "$W/build-$1" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++ \
 		-DCMAKE_CXX_FLAGS="$ALIGN ${CXXFLAGS:-}" \
 		-Dnetcodec_OPENJK_DIR="$R" -Dnetcodec_TRACE_DIR="$R/docs_rewrite/netcode/data/traces" > "$W/build-$1.log" 2>&1 &&
-	cmake --build "$W/build-$1" --target netcodec_bench_codec -j 4 >> "$W/build-$1.log" 2>&1 ||
+	cmake --build "$W/build-$1" --target "netcodec_bench_$BENCH" -j 4 >> "$W/build-$1.log" 2>&1 ||
 	{ echo "build of $1 failed:"; tail -30 "$W/build-$1.log"; exit 1; }
 }
 echo "building the reference and the working tree ..."
@@ -56,10 +59,15 @@ command -v taskset > /dev/null && PIN="taskset -c 1"
 for i in $(seq 1 "$ROUNDS"); do
 	for v in ref cur; do
 		printf '%s %d: ' $v $i
-		$PIN "$W/build-$v/bench/netcodec_bench_codec" "$T" 10 \
-			| awk '/mismatches/{split($0,a,"mismatches "); mm=a[2]+0}
-			       /encode netcodec/{en=$3; e=$6} /decode netcodec/{dn=$3; d=$6} /encode legacy/{el=$6} /decode legacy/{dl=$6}
-			       END{printf "warm encode %.1f (legacy %.1f) decode %.1f (legacy %.1f) mismatches %d | cold encode %.0f decode %.0f\n", e, el, d, dl, mm, en, dn}'
+		if [ "$BENCH" = client ]; then
+			$PIN "$W/build-$v/bench/netcodec_bench_client" "$R"/docs_rewrite/netcode/data/clientpackets/*.jkcp \
+				| awk -f "$(dirname "$0")/ab_client.awk"
+		else
+			$PIN "$W/build-$v/bench/netcodec_bench_codec" "$T" 10 \
+				| awk '/mismatches/{split($0,a,"mismatches "); mm=a[2]+0}
+				       /encode netcodec/{en=$3; e=$6} /decode netcodec/{dn=$3; d=$6} /encode legacy/{el=$6} /decode legacy/{dl=$6}
+				       END{printf "warm encode %.1f (legacy %.1f) decode %.1f (legacy %.1f) mismatches %d | cold encode %.0f decode %.0f\n", e, el, d, dl, mm, en, dn}'
+		fi
 	done
 done | tee "$W/runs.txt"
 awk -f "$(dirname "$0")/ab_summary.awk" "$W/runs.txt"

@@ -98,11 +98,13 @@ Coding the first user command against the acknowledged snapshot needs both sides
 | An acknowledge older than the frame history | could write into the frame of a newer message | ignored |
 | "Not acknowledged yet" | a time of -1 (any time at or below 0 counted as none) | an explicit flag |
 
-The ping is still the average over the last 32 messages (`SV_CalcPings`). It is now the real round trip of a message, without the frame-clock steps and without the extra packet intervals; in-game values are to be compared with OpenJK's.
+The ping is still the average over the last 32 messages (`SV_CalcPings`). It is now the real round trip of a message, without the frame-clock steps and without the extra packet intervals. Measured on a server 15 ms away (network round trip): 24 ms, that is the round trip plus the wait for the client's next packet (8 ms on average at `cl_maxpackets` 63) plus processing.
 
 ### Results
 
 On the six games recorded in plan step 8 (81,789 packets): 40.68 bytes per packet in the legacy format, 10.07 with netcodec (the game kept out of training: 38.58 to 9.89). Coding takes 0.34 to 0.40 and decoding 0.74 to 0.86 of the legacy time (warm measurement, clang, MSVC, GCC 12, Clang 14). Every compiler produces the same bytes.
+
+In game (10 November 2026, a GCC server on a Linux VPS played from a Windows client over the Internet, and a local game): 6.0 to 6.1 bytes per packet against 27.4 to 28.0 for the same packets in the legacy format (ratio about 0.22), 6.7 to 10.7 bytes per packet depending on the activity; no packet the server could not decode, also with 10 % of the server's messages or 20 % of the client's packets lost on purpose, after `map_restart` and after a server demo started in the middle of a game.
 
 ### What does not change
 
