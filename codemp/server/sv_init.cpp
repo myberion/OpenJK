@@ -953,13 +953,6 @@ void SV_Init (void) {
 	sv_maxclients = Cvar_Get ("sv_maxclients", "8", CVAR_SERVERINFO | CVAR_LATCH, "Max. connected clients" );
 
 
-	//cvar_t	*sv_ratePolicy;		// 1-2
-	//cvar_t	*sv_clientRate;
-	sv_ratePolicy = Cvar_Get( "sv_ratePolicy", "1", CVAR_ARCHIVE_ND, "Determines which policy of enforcement is used for client's \"rate\" cvar" );
-	Cvar_CheckRange(sv_ratePolicy, 1, 2, qtrue);
-	sv_clientRate = Cvar_Get( "sv_clientRate", "25000", CVAR_ARCHIVE_ND);
-	sv_minRate = Cvar_Get ("sv_minRate", "0", CVAR_ARCHIVE_ND | CVAR_SERVERINFO, "Min bandwidth rate allowed on server. Use 0 for unlimited." );
-	sv_maxRate = Cvar_Get ("sv_maxRate", "0", CVAR_ARCHIVE_ND | CVAR_SERVERINFO, "Max bandwidth rate allowed on server. Use 0 for unlimited." );
 	sv_minPing = Cvar_Get ("sv_minPing", "0", CVAR_ARCHIVE_ND | CVAR_SERVERINFO );
 	sv_maxPing = Cvar_Get ("sv_maxPing", "0", CVAR_ARCHIVE_ND | CVAR_SERVERINFO );
 	sv_floodProtect = Cvar_Get ("sv_floodProtect", "1", CVAR_ARCHIVE | CVAR_SERVERINFO, "Protect against flooding of server commands" );
@@ -976,13 +969,7 @@ void SV_Init (void) {
 	// server vars
 	sv_rconPassword = Cvar_Get ("rconPassword", "", CVAR_TEMP );
 	sv_privatePassword = Cvar_Get ("sv_privatePassword", "", CVAR_TEMP );
-	sv_snapsMin = Cvar_Get ("sv_snapsMin", "10", CVAR_ARCHIVE_ND ); // 1 <=> sv_snapsMax
-	sv_snapsMax = Cvar_Get ("sv_snapsMax", "40", CVAR_ARCHIVE_ND ); // sv_snapsMin <=> sv_fps
-	sv_snapsPolicy = Cvar_Get ("sv_snapsPolicy", "1", CVAR_ARCHIVE_ND, "Determines which policy of enforcement is used for client's \"snaps\" cvar");
-	Cvar_CheckRange(sv_snapsPolicy, 0, 2, qtrue);
 	sv_fps = Cvar_Get ("sv_fps", "20", CVAR_SERVERINFO, "Server frames per second" );
-	sv_timeout = Cvar_Get ("sv_timeout", "200", CVAR_TEMP );
-	sv_zombietime = Cvar_Get ("sv_zombietime", "2", CVAR_TEMP );
 	Cvar_Get ("nextmap", "", CVAR_TEMP );
 
 	sv_allowDownload = Cvar_Get ("sv_allowDownload", "0", CVAR_SERVERINFO, "Allow clients to download mod files via UDP from the server");
@@ -997,7 +984,6 @@ void SV_Init (void) {
 	sv_netcodecMaxBytes = Cvar_Get ("sv_netcodecMaxBytes", "0", CVAR_TEMP, "Debug: the largest message the server codes, in bytes (0: MAX_MSGLEN, 49152), to test what happens to larger ones: snapshots are cut, a gamestate drops the client");
 	sv_killserver = Cvar_Get ("sv_killserver", "0", 0);
 	sv_mapChecksum = Cvar_Get ("sv_mapChecksum", "", CVAR_ROM);
-	sv_lanForceRate = Cvar_Get ("sv_lanForceRate", "1", CVAR_ARCHIVE_ND );
 
 	sv_filterCommands = Cvar_Get( "sv_filterCommands", "1", CVAR_ARCHIVE );
 

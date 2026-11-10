@@ -1177,8 +1177,8 @@ static void SV_Status_f( void )
 	Com_Printf( "players : %i humans, %i bots (%i max)\n", humans, bots, sv_maxclients->integer - sv_privateClients->integer );
 	Com_Printf( "uptime  : %s\n", SV_CalcUptime() );
 
-	Com_Printf ("cl score ping name            address                                 rate \n");
-	Com_Printf ("-- ----- ---- --------------- --------------------------------------- -----\n");
+	Com_Printf ("cl score ping name            address                                \n");
+	Com_Printf ("-- ----- ---- --------------- ---------------------------------------\n");
 	for (i=0,cl=svs.clients ; i < sv_maxclients->integer ; i++,cl++)
 	{
 		if ( !cl->state )
@@ -1198,24 +1198,22 @@ static void SV_Status_f( void )
 
 		if (!avoidTruncation)
 		{
-			Com_Printf ("%2i %5i %s %-15.15s ^7%39s %5i\n",
+			Com_Printf ("%2i %5i %s %-15.15s ^7%39s\n",
 				i,
 				ps->persistant[PERS_SCORE],
 				state,
 				cl->name,
-				s,
-				cl->rate
+				s
 				);
 		}
 		else
 		{
-			Com_Printf ("%2i %5i %s %s ^7%39s %5i\n",
+			Com_Printf ("%2i %5i %s %s ^7%39s\n",
 				i,
 				ps->persistant[PERS_SCORE],
 				state,
 				cl->name,
-				s,
-				cl->rate
+				s
 				);
 		}
 	}

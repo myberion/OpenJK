@@ -1414,7 +1414,7 @@ void CL_CreateNewCommands( void ) {
 =================
 CL_ReadyToSendPacket
 
-Returns qfalse if we are over the maxpackets limit
+Returns qfalse if we are over the MAX_PACKET_RATE limit
 and should choke back the bandwidth a bit by not sending
 a packet this frame.  All the commands will still get
 delivered in the next packet, but saving a header and
@@ -1422,8 +1422,7 @@ getting more delta compression will reduce total bandwidth.
 =================
 */
 qboolean CL_ReadyToSendPacket( void ) {
-	int		oldPacketNum;
-	int		delta;
+	const int interval = 1000 / MAX_PACKET_RATE;
 
 	// don't send anything if playing back a demo
 	if ( clc.demoplaying || cls.state == CA_CINEMATIC ) {
@@ -1445,24 +1444,16 @@ qboolean CL_ReadyToSendPacket( void ) {
 		return qtrue;
 	}
 
-	// send every frame for LAN
-	if ( cl_lanForcePackets->integer && Sys_IsLANAddress( &clc.netchan.remoteAddress ) ) {
-		return qtrue;
-	}
-
-	// check for exceeding cl_maxpackets
-	if ( cl_maxpackets->integer < 20 ) {
-		Cvar_Set( "cl_maxpackets", "20" );
-	}
-	else if ( cl_maxpackets->integer > 1000 ) {
-		Cvar_Set( "cl_maxpackets", "1000" );
-	}
-	oldPacketNum = (clc.netchan.outgoingSequence - 1) & PACKET_MASK;
-	delta = cls.realtime -  cl.outPackets[ oldPacketNum ].p_realtime;
-	if ( delta < 1000 / cl_maxpackets->integer ) {
+	// a packet every frame, up to MAX_PACKET_RATE per second (plan step 11; the server decodes no more). The unused part
+	// of the interval carries over to the next frame (at most one interval), so that the client sends min(frame rate,
+	// MAX_PACKET_RATE) packets per second on average: a minimum gap checked once per frame let a packet leave only every
+	// second frame when the frames were slightly shorter than the gap (62.5 packets per second at 125 fps with a cap of
+	// 100, 72 at 144 fps with a cap of 125).
+	if ( cls.realtime < clc.nextPacketTime ) {
 		// the accumulated commands will go out in the next packet
 		return qfalse;
 	}
+	clc.nextPacketTime = Q_max( clc.nextPacketTime, cls.realtime - interval ) + interval;
 
 	return qtrue;
 }
@@ -1496,12 +1487,7 @@ void CL_WritePacket( void ) {
 	// we want to send all the usercmds that were generated in the last
 	// few packet, so even if a couple packets are dropped in a row,
 	// all the cmds will make it to the server
-	if ( cl_packetdup->integer < 0 ) {
-		Cvar_Set( "cl_packetdup", "0" );
-	} else if ( cl_packetdup->integer > 5 ) {
-		Cvar_Set( "cl_packetdup", "5" );
-	}
-	oldPacketNum = (clc.netchan.outgoingSequence - 1 - cl_packetdup->integer) & PACKET_MASK;
+	oldPacketNum = (clc.netchan.outgoingSequence - 1 - CL_PACKET_DUP) & PACKET_MASK;
 	count = cl.cmdNumber - cl.outPackets[ oldPacketNum ].p_cmdNumber;
 	if ( count > MAX_PACKET_USERCMDS ) {
 		count = MAX_PACKET_USERCMDS;

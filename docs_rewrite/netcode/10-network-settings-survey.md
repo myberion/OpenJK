@@ -103,6 +103,8 @@ Options (the client sends one packet per frame, up to the cap; above it, a packe
 
 **Owner's choice (10 November 2026): 3a**, a fixed cap of 125 with no adaptation: the frame rate does the rest (60 fps sends 60 packets per second; 333 fps sends 125 packets of 2 or 3 commands). Commands, and so movement precision, still follow the frame rate.
 
+Found while measuring (10 November 2026, VPS, `com_maxfps` 125, `cl_maxpackets` 100): the client sent 62.7 packets per second, not 100. The cap is a minimum gap between two packets, `1000 / cl_maxpackets` ms in integer milliseconds, checked once per frame (`client/cl_input.cpp:1460-1464`): 10 ms against frames of 8 ms lets a packet leave every second frame only. The fixed cap of 3a has the same trap (8 ms against frames of 6.9 ms at 144 fps gives 72 packets per second, at 165 fps 82), so it must be a budget instead: the unused part of the interval carries over to the next frame, within a bound, so that the client sends min(frame rate, 125) packets per second on average.
+
 ## 10.6 Point 4: user-command redundancy
 
 Removes `cl_packetdup`.
@@ -126,6 +128,18 @@ Options:
 | 4d. input buffer and client time scaling (Overwatch, Rocket League, Unity) | the modern model | changes the movement model to a fixed tick: step 14 | | | |
 
 **Owner's choice (10 November 2026): measure first** (the real loss of client packets on Internet links, and the byte cost of a repeated command in netcodec), then choose between 4a and 4b.
+
+Measured on 10 November 2026 (VPS over the Internet, `com_maxfps` 125, `cl_maxpackets` 100, so 62.5 packets per second and 2 new commands per packet, about 4 to 6 minutes per run, `svnetstats`):
+
+| `cl_packetdup` | user commands per packet | payload bytes per packet | with headers (+6 netchan, +28 UDP and IP) | upload at 62.5 packets/s | client packets lost |
+|---|---|---|---|---|---|
+| 0 | 1.99 | 7.7 | 41.7 | 2.6 KB/s | 0 of 21,215 |
+| 1 | 4.00 | 10.7 | 44.7 (+7 %) | 2.8 KB/s | 0 of 14,357 |
+| 2 | 6.00 | 14.4 | 48.4 (+16 %) | 3.0 KB/s | 0 of 15,969 |
+
+A repeated command costs 1.5 to 1.9 bytes. No client packet was lost in 51,541 on this link, so the loss that 4b would measure is zero here, and the saving 4b offers over a fixed redundancy is at most about 0.4 KB/s of upload.
+
+**Owner's choice (10 November 2026): 4a, each packet repeats the commands of the 2 previous packets** (as QuakeWorld; `cl_packetdup` removed). Two client packets lost in a row then cost no command: without the repeat, the server runs the next command over the missing time with that command's input, so a jump, an attack or a change of direction in a lost command never happens on the server, and the client, which predicted it, is corrected. With 1, as today, two losses in a row lose commands. Two packets cover 32 ms of commands at 62.5 packets per second and 16 ms at 125; a longer burst still loses commands.
 
 ## 10.7 Point 5: interpolation delay
 
@@ -176,6 +190,8 @@ Options:
 | 6d. a tick-based clock as in Overwatch | | goes with 4d: step 14 | | | |
 
 **Owner's choice (10 November 2026), after asking whether a real server time would be better: measure first, then 6b if it helps.** The offset between the real send time and the game clock is added to `svnetstats`; if it varies by 1 ms or more, it is sent in each snapshot (6b) together with 5c, so that the jitter 5c measures is the network's only and its margin stays as small as possible. If it stays constant, nothing is sent (6a).
+
+Measured on 10 November 2026 (VPS, GCC dedicated server, one player, 6,770 snapshots, about 5.6 minutes): mean change 0.105 ms, 45 changes of 1 ms or more out of 6,769 (0.7 %), largest 2.56 ms. This is far below the jitter of an Internet path and below the client's arrival resolution (one client frame, 8 ms at 125 fps), so nothing is sent (6a). With 32 players the coding order shifts each client by about the same amount at every frame, so the change between consecutive snapshots should stay small; not measured.
 
 ## 10.9 Point 7: timeouts
 

@@ -50,9 +50,6 @@ cvar_t	*cl_motdServer[MAX_MASTER_SERVERS];
 cvar_t	*rcon_client_password;
 cvar_t	*rconAddress;
 
-cvar_t	*cl_timeout;
-cvar_t	*cl_maxpackets;
-cvar_t	*cl_packetdup;
 cvar_t	*cl_timeNudge;
 cvar_t	*cl_showTimeDelta;
 cvar_t	*cl_freezeDemo;
@@ -102,8 +99,6 @@ cvar_t	*cl_autolodscale;
 cvar_t	*cl_consoleKeys;
 cvar_t	*cl_consoleUseScanCode;
 cvar_t	*cl_consoleShiftRequirement;
-
-cvar_t  *cl_lanForcePackets;
 
 cvar_t	*cl_drawRecording;
 
@@ -2026,7 +2021,7 @@ void CL_CheckTimeout( void ) {
 	//
 	if ( ( !CL_CheckPaused() || !sv_paused->integer )
 		&& cls.state >= CA_CONNECTED && cls.state != CA_CINEMATIC
-	    && cls.realtime - clc.lastPacketTime > cl_timeout->value*1000) {
+	    && cls.realtime - clc.lastPacketTime > 1000 * ( cls.state == CA_ACTIVE ? TIMEOUT_ACTIVE : TIMEOUT_CONNECTING ) ) {
 		if (++cl.timeoutcount > 5) {	// timeoutcount saves debugger
 			const char *psTimedOut = SE_GetString("MP_SVGAME_SERVER_CONNECTION_TIMED_OUT");
 			Com_Printf ("\n%s\n",psTimedOut);
@@ -2655,8 +2650,6 @@ void CL_Init( void ) {
 	for ( int index = 2; index < MAX_MASTER_SERVERS; index++ )
 		cl_motdServer[index] = Cvar_Get( va( "cl_motdServer%d", index + 1 ), "", CVAR_ARCHIVE_ND );
 
-	cl_timeout = Cvar_Get ("cl_timeout", "200", 0);
-
 	cl_timeNudge = Cvar_Get ("cl_timeNudge", "0", CVAR_TEMP );
 	cl_shownet = Cvar_Get ("cl_shownet", "0", CVAR_TEMP );
 	cl_showSend = Cvar_Get ("cl_showSend", "0", CVAR_TEMP );
@@ -2676,9 +2669,6 @@ void CL_Init( void ) {
 	cl_yawspeed = Cvar_Get ("cl_yawspeed", "140", CVAR_ARCHIVE_ND );
 	cl_pitchspeed = Cvar_Get ("cl_pitchspeed", "140", CVAR_ARCHIVE_ND );
 	cl_anglespeedkey = Cvar_Get ("cl_anglespeedkey", "1.5", CVAR_ARCHIVE_ND );
-
-	cl_maxpackets = Cvar_Get ("cl_maxpackets", "63", CVAR_ARCHIVE );
-	cl_packetdup = Cvar_Get ("cl_packetdup", "1", CVAR_ARCHIVE_ND );
 
 	cl_run = Cvar_Get ("cl_run", "1", CVAR_ARCHIVE_ND, "Always run");
 	cl_sensitivity = Cvar_Get ("sensitivity", "5", CVAR_ARCHIVE, "Mouse sensitivity value");
@@ -2724,8 +2714,6 @@ void CL_Init( void ) {
 
 	Cvar_Get( "cl_maxPing", "800", CVAR_ARCHIVE_ND, "Max. ping for servers when searching the serverlist" );
 
-	cl_lanForcePackets = Cvar_Get ("cl_lanForcePackets", "1", CVAR_ARCHIVE_ND);
-
 	cl_drawRecording = Cvar_Get("cl_drawRecording", "1", CVAR_ARCHIVE);
 
 	// enable the ja_guid player identifier in userinfo by default in OpenJK
@@ -2747,8 +2735,6 @@ void CL_Init( void ) {
 
 	// userinfo
 	Cvar_Get ("name", "Padawan", CVAR_USERINFO | CVAR_ARCHIVE_ND, "Player name" );
-	Cvar_Get ("rate", "25000", CVAR_USERINFO | CVAR_ARCHIVE, "Data rate" );
-	Cvar_Get ("snaps", "40", CVAR_USERINFO | CVAR_ARCHIVE, "Client snapshots per second" );
 	Cvar_Get ("model", DEFAULT_MODEL"/default", CVAR_USERINFO | CVAR_ARCHIVE, "Player model" );
 	Cvar_Get ("forcepowers", "7-1-032330000000001333", CVAR_USERINFO | CVAR_ARCHIVE, "Player forcepowers" );
 //	Cvar_Get ("g_redTeam", DEFAULT_REDTEAM_NAME, CVAR_SERVERINFO | CVAR_ARCHIVE);

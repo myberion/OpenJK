@@ -111,10 +111,37 @@ static void SV_NetcodecMeasureSend( client_t *client ) {
 	last.valid = true;
 }
 
+// At most MAX_PACKET_RATE client packets per second are decoded, on average, with bursts of SV_PACKET_BURST (plan
+// step 11): the client sends at most that many, so only a modified client goes above, and its extra packets are dropped
+// before decoding. The budget is counted in thousandths of a packet: each millisecond adds MAX_PACKET_RATE.
+static struct {
+	int		time;		// when the budget was last updated (Sys_Milliseconds)
+	int		budget;
+} s_packetBudget[MAX_CLIENTS];
+
+static bool SV_NetcodecPacketAllowed( const client_t *client ) {
+	if ( client->netchan.remoteAddress.type == NA_LOOPBACK ) {
+		return true;	// a local client sends a packet every frame
+	}
+	const int full = SV_PACKET_BURST * 1000;
+	const int now = Sys_Milliseconds();
+	auto &b = s_packetBudget[ClientIndex( client )];
+	const int elapsed = std::min( std::max( now - b.time, 0 ), full / MAX_PACKET_RATE + 1 );
+	b.time = now;
+	b.budget = std::min( b.budget + elapsed * MAX_PACKET_RATE, full );
+	if ( b.budget < 1000 ) {
+		return false;
+	}
+	b.budget -= 1000;
+	return true;
+}
+
 // a new connection: the codec holds no message of it yet
 void SV_NetcodecNewClient( const client_t *client ) {
 	s_commands[ClientIndex( client )].sent = 0;
 	s_sendTime[ClientIndex( client )].valid = false;
+	s_packetBudget[ClientIndex( client )].time = Sys_Milliseconds();
+	s_packetBudget[ClientIndex( client )].budget = SV_PACKET_BURST * 1000;
 	SV_NetcodecResetClient( client );
 	for ( eng::PacketBase &base : s_packetBases[ClientIndex( client )] ) {
 		base.seq = -1;
@@ -469,15 +496,16 @@ void SV_NetcodecStats_f( void ) {
 		if ( cl->state < CS_CONNECTED || ( !st.messages && !st.packets ) ) {
 			continue;
 		}
+		const int decoded = st.packets - st.packetsNotDecoded - st.packetsLimited;
 		Com_Printf( "%2d %s^7: %d messages, %.1f bytes per message, %d escaped; %d snapshots: %d without a base asked, "
 			"%d with the asked base refused, %d cut to fit, base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back; "
 			"%d commands sent, %d of them repeats; %d client packets, %.1f bytes per packet, %d not decoded, "
-			"%.2f user commands per packet, %d lost (runs of 1: %d, 2: %d, 3: %d, 4+: %d); "
+			"%d above the packet rate, %.2f user commands per packet, %d lost (runs of 1: %d, 2: %d, 3: %d, 4+: %d); "
 			"send time against the game clock: mean change %.3f ms, max %.3f ms, %d of %d changes of 1 ms or more\n",
 			i, cl->name, st.messages, st.messages ? st.bytes / st.messages : 0.0, st.escaped, st.snapshots, st.noBase,
 			st.baseRefused, st.cut, st.baseAge[0], st.baseAge[1], st.baseAge[2], st.baseAge[3], st.baseAge[4], st.baseAge[5],
 			st.commands, st.repeats, st.packets, st.packets ? st.packetBytes / st.packets : 0.0, st.packetsNotDecoded,
-			st.packets > st.packetsNotDecoded ? (double)st.userCmds / ( st.packets - st.packetsNotDecoded ) : 0.0,
+			st.packetsLimited, decoded ? (double)st.userCmds / decoded : 0.0,
 			st.packetsLost, st.lossRuns[0], st.lossRuns[1], st.lossRuns[2], st.lossRuns[3],
 			st.sendChanges ? st.sendChangeSum / st.sendChanges / 1000.0 : 0.0, st.sendChangeMax / 1000.0,
 			st.sendChangesOver1ms, st.sendChanges );
@@ -530,6 +558,10 @@ const eng::ClientPacket *SV_NetcodecDecodeClientPacket( client_t *client, const 
 	if ( client->netchan.dropped > 0 ) {
 		st.packetsLost += client->netchan.dropped;
 		st.lossRuns[std::min( client->netchan.dropped, 4 ) - 1]++;
+	}
+	if ( !SV_NetcodecPacketAllowed( client ) ) {
+		st.packetsLimited++;
+		return NULL;
 	}
 	if ( size <= 0 ) {
 		st.packetsNotDecoded++;

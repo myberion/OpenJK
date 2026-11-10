@@ -35,6 +35,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "ui/ui_public.h"
 
 #define	RETRANSMIT_TIMEOUT	3000	// time between connection packet retransmits
+#define	CL_PACKET_DUP		2		// each packet repeats the usercmds of the 2 previous packets (plan step 11)
 
 // file full of random crap that gets used to create ja_guid
 #define QKEY_FILE "jakey"
@@ -186,6 +187,7 @@ typedef struct clientConnection_s {
 	int			clientNum;
 	int			lastPacketSentTime;			// for retransmits during connection
 	int			lastPacketTime;				// for timeouts
+	int			nextPacketTime;				// cls.realtime from which the next packet may leave (MAX_PACKET_RATE)
 
 	netadr_t	serverAddress;
 	int			connectTime;				// for connection retransmits
@@ -393,8 +395,6 @@ extern	cvar_t	*cl_nodelta;
 extern	cvar_t	*cl_debugMove;
 extern	cvar_t	*cl_noprint;
 extern	cvar_t	*cl_timegraph;
-extern	cvar_t	*cl_maxpackets;
-extern	cvar_t	*cl_packetdup;
 extern	cvar_t	*cl_shownet;
 extern	cvar_t	*cl_showSend;
 extern	cvar_t	*cl_timeNudge;
@@ -438,8 +438,6 @@ extern	cvar_t	*cl_inGameVideo;
 extern	cvar_t	*cl_consoleKeys;
 extern	cvar_t	*cl_consoleUseScanCode;
 extern	cvar_t	*cl_consoleShiftRequirement;
-
-extern  cvar_t  *cl_lanForcePackets;
 
 extern	cvar_t	*cl_drawRecording;
 

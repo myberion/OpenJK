@@ -206,7 +206,6 @@ int SV_BotAllocateClient(void) {
 	cl->state = CS_ACTIVE;
 	cl->lastPacketTime = svs.time;
 	cl->netchan.remoteAddress.type = NA_BOT;
-	cl->rate = 16384;
 
 	// cannot start recording auto demos here since bot's name is not set yet
 	return i;

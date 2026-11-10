@@ -1966,8 +1966,6 @@ static userinfoValidate_t userinfoFields[] = {
 	UIF( cl_punkbuster,		0, 0 ), // not allowed, q3fill protection
 	UIF( ip,				0, 1 ), // engine adds this at the end
 	UIF( name,				1, 1 ),
-	UIF( rate,				1, 1 ),
-	UIF( snaps,				1, 1 ),
 	UIF( model,				1, 1 ),
 	UIF( forcepowers,		1, 1 ),
 	UIF( color1,			1, 1 ),
@@ -2313,10 +2311,6 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 		gender = GENDER_FEMALE;
 	else
 		gender = GENDER_MALE;
-
-	s = Info_ValueForKey( userinfo, "snaps" );
-	if ( atoi( s ) < sv_fps.integer )
-		trap->SendServerCommand( clientNum, va( "print \"" S_COLOR_YELLOW "Recommend setting /snaps %d or higher to match this server's sv_fps\n\"", sv_fps.integer ) );
 
 	// send over a subset of the userinfo keys so other clients can
 	// print scoreboards, display models, and play custom sounds

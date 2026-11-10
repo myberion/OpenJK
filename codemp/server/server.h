@@ -145,9 +145,10 @@ typedef struct {
 	int			packets;		// client packets received
 	double		packetBytes;
 	int			packetsNotDecoded;	// malformed, or coded against a message whose PacketBase is no longer held
+	int			packetsLimited;	// client packets dropped unread, above MAX_PACKET_RATE and SV_PACKET_BURST
 	int			packetsLost;	// client packets lost on the way (gaps in their netchan sequence)
 	int			lossRuns[4];	// runs of 1, 2, 3, 4 or more consecutive client packets lost
-	int			userCmds;		// user commands received in the decoded packets, the repeats of cl_packetdup included
+	int			userCmds;		// user commands received in the decoded packets, the repeats of CL_PACKET_DUP included
 	int			sendChanges;	// snapshots whose send time was compared with the previous one's (sv_netcodec.cpp)
 	double		sendChangeSum;	// sum of the changes of (real send time - game time) between them, in microseconds
 	int			sendChangeMax;	// the largest change, in microseconds
@@ -195,13 +196,10 @@ typedef struct client_s {
 	int				lastPacketTime;		// svs.time when packet was last received
 	int				lastConnectTime;	// svs.time when connection started
 	int				nextSnapshotTime;	// send another snapshot when svs.time >= nextSnapshotTime
-	qboolean		rateDelayed;		// true if nextSnapshotTime was set based on rate instead of snapshotMsec
+	qboolean		rateDelayed;		// true if nextSnapshotTime was set based on SV_CLIENT_RATE instead of the server frame
 	int				timeoutCount;		// must timeout a few frames in a row so debugging doesn't break
 	clientSnapshot_t	frames[PACKET_BACKUP];	// updates can be delta'd from here
 	int				ping;
-	int				rate;				// bytes / second
-	int				snapshotMsec;		// requests a snapshot every snapshotMsec unless rate choked
-	int				wishSnaps;			// requested snapshot/sec rate
 	int				pureAuthentic;
 	qboolean		gotCP; // TTimo - additional flag to distinguish between a bad pure checksum, and no cp command at all
 	netchan_t		netchan;
@@ -258,12 +256,13 @@ extern	server_t		sv;					// cleared each map
 //FIXME: dedi server probably can't have this..
 extern	refexport_t		*re;					// interface to refresh .dll
 
-extern	cvar_t	*sv_snapsMin;
-extern	cvar_t	*sv_snapsMax;
-extern	cvar_t	*sv_snapsPolicy;
+// Network settings of the server, fixed rather than set by cvars (plan step 11; the shared ones are in qcommon.h): a
+// snapshot every server frame, the rate only paces messages larger than a frame allows (a gamestate, a download block)
+#define SV_CLIENT_RATE			100000	// bytes per second to each client
+#define SV_PACKET_BURST			125		// packets a client may send above MAX_PACKET_RATE at once (one second of them)
+#define SV_ZOMBIE_TIME			2		// seconds to sink messages after a disconnection
+
 extern	cvar_t	*sv_fps;
-extern	cvar_t	*sv_timeout;
-extern	cvar_t	*sv_zombietime;
 extern	cvar_t	*sv_rconPassword;
 extern	cvar_t	*sv_privatePassword;
 extern	cvar_t	*sv_allowDownload;
@@ -280,17 +279,12 @@ extern	cvar_t	*sv_killserver;
 extern	cvar_t	*sv_mapname;
 extern	cvar_t	*sv_mapChecksum;
 extern	cvar_t	*sv_serverid;
-extern	cvar_t	*sv_ratePolicy;
-extern	cvar_t	*sv_clientRate;
-extern	cvar_t	*sv_minRate;
-extern	cvar_t	*sv_maxRate;
 extern	cvar_t	*sv_minPing;
 extern	cvar_t	*sv_maxPing;
 extern	cvar_t	*sv_gametype;
 extern	cvar_t	*sv_pure;
 extern	cvar_t	*sv_floodProtect;
 extern	cvar_t	*sv_floodProtectSlow;
-extern	cvar_t	*sv_lanForceRate;
 extern	cvar_t	*sv_needpass;
 extern	cvar_t	*sv_filterCommands;
 extern	cvar_t	*sv_autoDemo;
