@@ -34,6 +34,7 @@ const uint32_t kMaxEntities = 1024;         // MAX_GENTITIES: entity numbers and
 const uint32_t kAckWindow = 256;            // client packets: the acknowledged message travels as its low 8 bits
 const uint32_t kMaxUserCmds = 32;           // MAX_PACKET_USERCMDS
 const size_t kUserCmdBytes = 28;            // sizeof(usercmd_t)
+const uint32_t kMaxCommandLength = 1023;    // a client command's text: MAX_STRING_CHARS - 1 (longer: not coded)
 
 struct PacketBase;     // client packets, at the end
 struct ClientPacket;
@@ -258,7 +259,7 @@ struct ClientPacket {
 	int32_t serverId;
 	int32_t ack;              // the last server message received
 	int32_t reliableAck;      // the last server command received
-	const Command *commands;  // consecutive sequence numbers, at most kMinCommands
+	const Command *commands;  // consecutive sequence numbers, at most kMinCommands, texts of at most kMaxCommandLength
 	uint32_t numCommands;
 	Move move;
 	const void *userCmds;     // usercmd_t images one after the other: 1 to kMaxUserCmds with a move, none without

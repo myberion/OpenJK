@@ -1,6 +1,6 @@
 # Step 8: client-to-server messages by the codec
 
-Status: **in progress** (started 9 November 2026; part 3 done 10 November 2026, checked in game on the loopback and on the VPS; part 4, the robustness tests, next). Plan: [PLAN.md](../PLAN.md), step 8.
+Status: **done** (9 to 10 November 2026; parts 3 and 4 done 10 November 2026: the engine codes and decodes the client packets with netcodec, checked in game on the loopback and on the VPS; the decoder holds against malformed input). Plan: [PLAN.md](../PLAN.md), step 8.
 
 ## Why recordings, and where
 
@@ -23,7 +23,7 @@ Wanted in the corpus: several separate sessions (one is kept out of training), s
    - Tests (`test/test_client.cpp`): `netcodec.client_synthetic` (100,000 random packets on every path: with and without base, serverId changed, client commands, steps beyond the escape, any angle and byte; hash `0xCFE7E7FEB2FB9F06`) and `netcodec.client_roundtrip` (each traced packet against its base when the recording had it, then again without a base: 163,578 codings; hash `0xC371DB108DA14F6D`). Same hashes with clang x64 and x86; clang-tidy clean.
    - The engine checks the offsets the codec reads (`playerState_t` and `usercmd_t`, `codemp/server/sv_netcodec.cpp`).
 3. **Integration (done 10 November 2026; validated on every compiler, the game built with clang, MSVC and GCC, checked in game).** See "Part 3: what was done" and "Part 3: results" below.
-4. **Robustness first**: malformed-input test and fuzzer target on this decoder before it is relied on (the server decodes data from anyone): mutated copies of synthetic and traced packets decoded with random bases and `latest` values, no fault and decode(encode(decode(x))) == decode(x), as `netcodec.decode_robustness`; a libFuzzer target next to `fuzz/fuzz_decode.cpp` with a seed corpus of coded client packets.
+4. **Robustness (done 10 November 2026)**: the malformed-input test `netcodec.client_robustness`, the libFuzzer target `netcodec_fuzz_client` with its corpus, and a limit on the length of a client command's text. See "Part 4: results" below.
 
 ## Part 3: what was done
 
@@ -74,6 +74,15 @@ Timing against `972172204`, the commit before this part, 10 alternated rounds on
 The library's code grows by 6.3 KB with GCC (the `engine.h` functions of this part).
 
 The decoder reads one 32-byte `ClientBase` instead of five cache lines of the player state, and computes it once per message sent instead of once per packet received. The encoding gain is partly the benchmark's: it computes each packet's base before the timing, while in the engine the client calls `PacketBaseOf` for each packet. The A/B scripts take `BENCH=client` (`ab_clang.sh`, `ab_gcc.sh`; `ABM_BENCH=client` for `ab_msvc.bat`) to time `netcodec_bench_client` instead of `bench_codec`.
+
+## Part 4: results
+
+The server decodes the packets of anyone, so its decoder must hold against any input: return without fault, bound what it builds, and accept only what the encoder can code.
+
+1. **Text length limit.** A client command's text was decoded up to the generic 65,536 characters, 256 commands per packet. Measured (a scratch tool on the release library): the most compressible text (one character repeated, `@`) costs 12.5 characters per byte, so 256 commands of 65,535 characters decode in 54 ms from a 1.3 MB message, and a message of `MAX_MSGLEN` (49,152 bytes, which the netchan reassembles from fragments) in about 25 ms: a cheap way to load a server. A client holds each command in a buffer of `MAX_STRING_CHARS` (so at most 1,023 characters), and the server truncated longer texts anyway (`SV_ClientCommand`; the legacy reader read at most 1,024 characters per string), so the decoder now refuses a packet holding a longer command (`kMaxClientCommandLength`, 1,023; `GetCommandText` takes the limit, the server messages keep theirs) and the engine's `EncodePacket` refuses to code one (`engine::kMaxCommandLength`, checked against `MAX_STRING_CHARS - 1` in `cl_netcodec.cpp`). Worst case now: 256 commands of 1,023 characters, about 1 ms of decoding from a 21 KB message. No format change: the same bytes, the same hashes.
+2. **Malformed-input test** (`test/test_client_robustness.cpp`, `netcodec.client_robustness`, every preset, so under ASan + UBSan too): 20,000 synthetic packets (`test/client_synthetic.h`, the generator of `netcodec.client_synthetic`, now shared), 20 mutated copies of each (`test/mutate.h`, the mutations of `netcodec.decode_robustness`, now shared: bits flipped, bytes changed, truncated, inserted, deleted, appended, random bytes), each decoded with a random `latest` (near the acknowledge, or anywhere) and one of three lookups (the packet's own base, another base for any message, none). 400,000 malformed inputs decoded without fault; 211,783 accepted, each coded again against the base its decoding used and decoded again to the same packet (0 refused, 0 different); a command of 1,023 characters decodes and one of 1,024 is refused.
+3. **libFuzzer target** (`fuzz/fuzz_client.cpp`, `netcodec_fuzz_client`, preset `mingw-clang-fuzz`): a fixed server state (last message sent 1,000; one base, that of a synthetic packet, held for any acknowledged message), the same checks as the test, aborting on any difference. 10 minutes from 256 synthetic seeds (`--write-seeds=<dir>`): 21.1 million inputs (35,000 per second), no fault, no abort, no input slower than 1 s, 591 MB at most. The corpus, minimised with `-merge=1`, is committed in `fuzz/corpus_client` (188 inputs, about 10 KB, binary in `.gitattributes`); both committed corpora replay without fault. Run: `netcodec_fuzz_client -max_len=4096 -timeout=10 -rss_limit_mb=2048 -max_total_time=<s> <work dir> fuzz/corpus_client` (the sanitizer runtime DLLs of llvm-mingw, in `x86_64-w64-mingw32/bin`, must be in the `PATH`).
+4. Validated: clang Release, x86, ASan + UBSan, Debug, clang-tidy (nothing reported) here; `validate.sh` (GCC 12 Release, Debug, ASan, x86, Clang 14) and `validate.bat` (MSVC x64 Release and Debug, x86, ASan) all OK, the same figures in every preset; the game built with clang, GCC and MSVC.
 
 ## How the corpus was recorded (part 1)
 

@@ -39,6 +39,7 @@ static_assert( MAX_SNAPSHOT_ENTITIES == eng::kMaxSnapshotEntities, "entities per
 static_assert( MAX_GENTITIES == eng::kMaxEntities, "entity numbers" );
 static_assert( sizeof( entityState_t ) == 532 && offsetof( entityState_t, number ) == 0, "entity images of the codec" );
 static_assert( sizeof( playerState_t ) == 1552, "player-state images of the codec" );
+static_assert( MAX_STRING_CHARS - 1 == eng::kMaxCommandLength, "client commands: the server decodes at most MAX_STRING_CHARS - 1 characters" );
 
 static eng::ClientCodec &Codec( void ) {
 	static eng::ClientCodec codec;

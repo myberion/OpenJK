@@ -86,8 +86,9 @@ Every packet the client sends (about 60 per second) is coded by `netcodec` too: 
 | User-command key (XOR with the checksum feed, the acknowledge and a hash of the last command) | yes | removed |
 | End of packet | a `clc_EOF` byte | none |
 | A move of -128 | read back as -127 | exact |
+| A client command longer than 1,023 characters (no client can send one: it holds them in buffers of 1,024) | the first 1,024 characters read, the rest read as the next fields of the packet | the packet is refused, as malformed |
 
-Coding the first user command against the acknowledged snapshot needs both sides to hold that snapshot. The server keeps, for each client, the few values a packet is coded against for each of its last 256 messages (32 bytes each: 8 KB per client, 256 KB for 32 clients), so it can decode any packet whose acknowledge it reads without ambiguity. The client codes against the acknowledged message only while it is sure the server has sent fewer than 256 messages since: the time since that message arrived plus the round-trip time it measures, over the time between the server's messages, must stay under 128 messages (6.4 s at `sv_fps` 20). Otherwise, or when one of these is unknown (right after a gamestate), the packet is coded without it: about twice larger (estimate), never wrong. A packet the server cannot decode (malformed, or coded against a message it no longer holds) is dropped and counted by `svnetstats`.
+Coding the first user command against the acknowledged snapshot needs both sides to hold that snapshot. The server keeps, for each client, the few values a packet is coded against for each of its last 256 messages (32 bytes each: 8 KB per client, 256 KB for 32 clients), so it can decode any packet whose acknowledge it reads without ambiguity. The client codes against the acknowledged message only while it is sure the server has sent fewer than 256 messages since: the time since that message arrived plus the round-trip time it measures, over the time between the server's messages, must stay under 128 messages (6.4 s at `sv_fps` 20). Otherwise, or when one of these is unknown (right after a gamestate), the packet is coded without it: about twice larger (estimate), never wrong. A packet the server cannot decode (malformed, or coded against a message it no longer holds) is dropped and counted by `svnetstats`. Since the server decodes packets from anyone, the decoder bounds everything it builds (counts, text lengths) and is tested with 400,000 malformed packets on every build and with a fuzzer (plan step 8, part 4).
 
 ### The ping
 
@@ -222,7 +223,7 @@ Made on the way while testing, each in its own commit, mostly as TaystJK does.
 | | OpenJK | this branch |
 |---|---|---|
 | New library | | `codemp/netcodec/`: C++20 inside, a C++11 interface for the engine (`engine.h`), trained tables compiled in; linked by the client and the dedicated server |
-| Tests | | round trip on about 36,000 recorded messages, 100,100 synthetic messages, malformed-input test and fuzzer, determinism hashes per compiler, pmove determinism (game against cgame, compiler against compiler); client packets: 100,000 synthetic packets, the recorded packets through the library and through the engine interface |
+| Tests | | round trip on about 36,000 recorded messages, 100,100 synthetic messages, malformed-input test and fuzzer, determinism hashes per compiler, pmove determinism (game against cgame, compiler against compiler); client packets: 100,000 synthetic packets, the recorded packets through the library and through the engine interface, 400,000 malformed packets, and a fuzzer |
 | Compilers checked | | MSVC (x64, x86), GCC 12 (x64, x86) and 16 (x64), Clang (llvm-mingw on Windows, Clang 14 on Linux) |
 | `.gitattributes`, `.gitignore` | | line endings of scripts, demo files and local traces ignored |
 | Study and plan | | `docs_rewrite/netcode/` (this folder) |
@@ -244,7 +245,6 @@ Made on the way while testing, each in its own commit, mostly as TaystJK does.
 | subject | where |
 |---|---|
 | Protocol number, handshake, support of the old protocol, old demos | end of the plan |
-| Malformed-input test and fuzzer for the client packet decoder (the server decodes data from anyone) | plan step 8, part 4 |
 | Acknowledgements, reliable path, downloads | plan step 10 |
 | Network settings measured at run time (rate, snaps, packets, interpolation delay) | plan step 11 |
 | Encryption, or a replacement for the removed XOR | plan step 12 |

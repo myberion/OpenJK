@@ -185,7 +185,7 @@ bool GetClientPacket(In &io, int64_t latest, const ClientBaseLookup &lookup, Cli
 		for (ClientCommand &c : p.commands) {
 			c.seq = seq++;
 			c.text.clear();
-			if (!GetCommandText(io, c.text)) return false;
+			if (!GetCommandText(io, c.text, kMaxClientCommandLength)) return false;
 		}
 	}
 	p.move = static_cast<Move>(io.Symbol(Of(kMove)));

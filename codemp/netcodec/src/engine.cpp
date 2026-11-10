@@ -19,6 +19,7 @@ static_assert(kMinCommands >= (2 * kCommandWindow) + 2, "the command history the
 static_assert(kAckWindow == netcodec::kAckWindow, "acknowledge window");
 static_assert(kMaxUserCmds == netcodec::kMaxUserCmds && kUserCmdBytes == netcodec::kUserCmdBytes, "user commands");
 static_assert(kMinCommands >= netcodec::kMaxClientCommands, "client commands");
+static_assert(kMaxCommandLength == netcodec::kMaxClientCommandLength, "client command texts");
 static_assert(sizeof(PacketBase) == 32, "the server keeps kAckWindow of them per client (09-changes-from-openjk.md)");
 
 [[nodiscard]] uint32_t Slot(int32_t seq) noexcept { return static_cast<uint32_t>(seq) % kPacketBackup; }
@@ -368,6 +369,7 @@ size_t ClientCodec::EncodePacket(const ClientPacket &p, const PacketBase *base, 
 	const std::span<const Command> commands(p.commands, p.numCommands);
 	e.commands.resize(commands.size());
 	for (size_t i = 0; i < commands.size(); i++) {
+		if (commands[i].length > kMaxCommandLength) return 0;   // the server would refuse the packet
 		e.commands[i].seq = commands[i].seq;
 		e.commands[i].text.assign(commands[i].text, commands[i].length);
 	}

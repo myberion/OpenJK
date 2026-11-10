@@ -217,6 +217,9 @@ struct SnapshotOut {
 inline constexpr size_t kUserCmdBytes = 28;      // sizeof(usercmd_t)
 inline constexpr uint32_t kMaxUserCmds = 32;     // MAX_PACKET_USERCMDS
 inline constexpr uint32_t kMaxClientCommands = 256;   // decoder limit (MAX_RELIABLE_COMMANDS)
+// decoder limit on a client command's text (MAX_STRING_CHARS - 1: the client holds each in a buffer of MAX_STRING_CHARS),
+// against packets that decode into far more text than a client can send
+inline constexpr size_t kMaxClientCommandLength = 1023;
 inline constexpr uint32_t kAckWindow = 256;      // the acknowledged message travels as its low 8 bits
 
 // A usercmd_t image: serverTime, angles[3], buttons (32-bit integers at offsets 0, 4, 8, 12, 16), then the bytes
@@ -280,7 +283,8 @@ struct ClientBaseLookup {
 };
 
 // Decodes a client packet. latest: the last message the server sent (the acknowledge is the latest number at or below
-// it with the coded low 8 bits). False on malformed input or an acknowledged message the server does not hold.
+// it with the coded low 8 bits). False on malformed input (a client command longer than kMaxClientCommandLength
+// included) or an acknowledged message the server does not hold.
 [[nodiscard]] bool DecodeClientPacket(std::span<const uint8_t> bytes, int64_t latest, const ClientBaseLookup &lookup,
                                       ClientPacket &out);
 

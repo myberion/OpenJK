@@ -142,10 +142,10 @@ template <class O> void PutCommandText(O &io, std::string_view text) {
 	io.Symbol(ctx::CommandText(prev), 0);
 }
 
-[[nodiscard]] inline bool GetCommandText(In &io, std::string &text) {
+[[nodiscard]] inline bool GetCommandText(In &io, std::string &text, size_t maxLength = In::kMaxString) {
 	uint32_t prev = 0;
 	for (uint32_t b = io.Symbol(ctx::CommandText(0)); b != 0; b = io.Symbol(ctx::CommandText(prev))) {
-		if (text.size() >= In::kMaxString) return false;
+		if (text.size() >= maxLength) return false;
 		text.push_back(static_cast<char>(b));
 		prev = b;
 	}

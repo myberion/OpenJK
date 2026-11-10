@@ -29,5 +29,6 @@
 *.bat text eol=crlf
 *.sh  text eol=lf
 
-# libFuzzer corpus of netcodec: raw bytes, never normalised
+# libFuzzer corpora of netcodec: raw bytes, never normalised
 codemp/netcodec/fuzz/corpus/** binary
+codemp/netcodec/fuzz/corpus_client/** binary
