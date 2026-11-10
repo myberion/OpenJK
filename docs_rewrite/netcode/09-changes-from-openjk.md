@@ -204,7 +204,7 @@ Two console commands are added for statistics, each printing its counters since 
 
 | command | side | what it prints |
 |---|---|---|
-| `svnetstats` | server | for each client: messages, bytes per message, messages sent raw (escapes), snapshots without a base, snapshots whose base was refused, snapshots cut to fit, base age; server commands sent and how many were repeats; client packets, bytes per packet, packets not decoded |
+| `svnetstats` | server | for each client: messages, bytes per message, messages sent raw (escapes), snapshots without a base, snapshots whose base was refused, snapshots cut to fit, base age; server commands sent and how many were repeats; client packets, bytes per packet, packets not decoded, user commands per packet, client packets lost on the way and the length of each run of losses; how much the time a snapshot leaves changes against the game clock it carries (mean and largest change between consecutive snapshots, measured in microseconds), which the client would otherwise take for network jitter (plan step 11) |
 | `netstats` | client | messages lost on the way, messages not decoded, bytes per message, snapshots without a base, base age; client packets sent, bytes per packet, packets coded without a base |
 
 Configuration files that still set a removed cvar are harmless: the value is stored and never read. The other network settings (`rate`, `snaps`, `cl_maxpackets`, ...) are unchanged for now; plan step 11 replaces them with values measured at run time.

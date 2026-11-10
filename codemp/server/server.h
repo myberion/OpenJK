@@ -145,6 +145,13 @@ typedef struct {
 	int			packets;		// client packets received
 	double		packetBytes;
 	int			packetsNotDecoded;	// malformed, or coded against a message whose PacketBase is no longer held
+	int			packetsLost;	// client packets lost on the way (gaps in their netchan sequence)
+	int			lossRuns[4];	// runs of 1, 2, 3, 4 or more consecutive client packets lost
+	int			userCmds;		// user commands received in the decoded packets, the repeats of cl_packetdup included
+	int			sendChanges;	// snapshots whose send time was compared with the previous one's (sv_netcodec.cpp)
+	double		sendChangeSum;	// sum of the changes of (real send time - game time) between them, in microseconds
+	int			sendChangeMax;	// the largest change, in microseconds
+	int			sendChangesOver1ms;	// changes of 1 ms or more
 } netcodecStats_t;
 
 

@@ -30,6 +30,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "netcodec/engine.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 
 namespace eng = netcodec::engine;
@@ -85,9 +86,35 @@ static struct {
 	int		time;		// when the carrier was sent (Sys_Milliseconds)
 } s_commands[MAX_CLIENTS];
 
+// The time a snapshot leaves against the game clock it carries (sv.time), for svnetstats (plan step 11): the client
+// takes any change of it for network jitter. Measured with the steady clock in microseconds, since Sys_Milliseconds
+// moves by whole milliseconds.
+static struct {
+	long long	offset;		// real send time - game time of the last snapshot sent, in microseconds
+	bool		valid;
+} s_sendTime[MAX_CLIENTS];
+
+static void SV_NetcodecMeasureSend( client_t *client ) {
+	const long long now = (long long)std::chrono::duration_cast<std::chrono::microseconds>(
+		std::chrono::steady_clock::now().time_since_epoch() ).count();
+	const long long offset = now - (long long)sv.time * 1000;
+	auto &last = s_sendTime[ClientIndex( client )];
+	if ( last.valid ) {
+		netcodecStats_t &st = client->netcodecStats;
+		const long long change = offset > last.offset ? offset - last.offset : last.offset - offset;
+		st.sendChanges++;
+		st.sendChangeSum += (double)change;
+		st.sendChangeMax = std::max( st.sendChangeMax, (int)std::min( change, 1000000000LL ) );
+		st.sendChangesOver1ms += change >= 1000 ? 1 : 0;
+	}
+	last.offset = offset;
+	last.valid = true;
+}
+
 // a new connection: the codec holds no message of it yet
 void SV_NetcodecNewClient( const client_t *client ) {
 	s_commands[ClientIndex( client )].sent = 0;
+	s_sendTime[ClientIndex( client )].valid = false;
 	SV_NetcodecResetClient( client );
 	for ( eng::PacketBase &base : s_packetBases[ClientIndex( client )] ) {
 		base.seq = -1;
@@ -331,6 +358,9 @@ static bool SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSna
 	msg.data = buf;
 	msg.maxsize = sizeof( buf );
 	msg.cursize = (int)size;
+	if ( sm.snapshot && size && client->netchan.remoteAddress.type != NA_BOT ) {
+		SV_NetcodecMeasureSend( client );
+	}
 	SV_SendMessageToClient( &msg, client );
 	return size != 0;
 }
@@ -441,10 +471,16 @@ void SV_NetcodecStats_f( void ) {
 		}
 		Com_Printf( "%2d %s^7: %d messages, %.1f bytes per message, %d escaped; %d snapshots: %d without a base asked, "
 			"%d with the asked base refused, %d cut to fit, base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back; "
-			"%d commands sent, %d of them repeats; %d client packets, %.1f bytes per packet, %d not decoded\n",
+			"%d commands sent, %d of them repeats; %d client packets, %.1f bytes per packet, %d not decoded, "
+			"%.2f user commands per packet, %d lost (runs of 1: %d, 2: %d, 3: %d, 4+: %d); "
+			"send time against the game clock: mean change %.3f ms, max %.3f ms, %d of %d changes of 1 ms or more\n",
 			i, cl->name, st.messages, st.messages ? st.bytes / st.messages : 0.0, st.escaped, st.snapshots, st.noBase,
 			st.baseRefused, st.cut, st.baseAge[0], st.baseAge[1], st.baseAge[2], st.baseAge[3], st.baseAge[4], st.baseAge[5],
-			st.commands, st.repeats, st.packets, st.packets ? st.packetBytes / st.packets : 0.0, st.packetsNotDecoded );
+			st.commands, st.repeats, st.packets, st.packets ? st.packetBytes / st.packets : 0.0, st.packetsNotDecoded,
+			st.packets > st.packetsNotDecoded ? (double)st.userCmds / ( st.packets - st.packetsNotDecoded ) : 0.0,
+			st.packetsLost, st.lossRuns[0], st.lossRuns[1], st.lossRuns[2], st.lossRuns[3],
+			st.sendChanges ? st.sendChangeSum / st.sendChanges / 1000.0 : 0.0, st.sendChangeMax / 1000.0,
+			st.sendChangesOver1ms, st.sendChanges );
 		Com_Memset( &st, 0, sizeof( st ) );
 	}
 }
@@ -491,6 +527,10 @@ const eng::ClientPacket *SV_NetcodecDecodeClientPacket( client_t *client, const 
 	netcodecStats_t &st = client->netcodecStats;
 
 	st.packets++;
+	if ( client->netchan.dropped > 0 ) {
+		st.packetsLost += client->netchan.dropped;
+		st.lossRuns[std::min( client->netchan.dropped, 4 ) - 1]++;
+	}
 	if ( size <= 0 ) {
 		st.packetsNotDecoded++;
 		return NULL;
@@ -501,6 +541,9 @@ const eng::ClientPacket *SV_NetcodecDecodeClientPacket( client_t *client, const 
 		st.packetsNotDecoded++;
 		Com_DPrintf( "netcodec: packet of %s not decoded\n", client->name );
 		return NULL;
+	}
+	if ( packet.move != eng::Move::kNone ) {
+		st.userCmds += (int)packet.numUserCmds;
 	}
 	if ( sv_netcodecCompare->integer ) {
 		SV_NetcodecComparePacket( client, packet, (size_t)size );
