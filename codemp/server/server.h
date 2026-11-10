@@ -138,6 +138,7 @@ typedef struct {
 	int			noBase;			// snapshots for which no base was asked (new client, map change, client asked for a full one)
 	int			baseRefused;	// a base was asked but the codec coded without one (its own base no longer held)
 	int			escaped;		// messages sent in their raw form
+	int			cut;			// snapshots too large, sent with only the entities nearest to the player
 	int			baseAge[6];		// snapshots coded against a base 1, 2, 3, 4, 5 to 8, 9 or more messages back
 	int			packets;		// client packets received
 	double		packetBytes;
@@ -265,6 +266,7 @@ extern	cvar_t	*sv_reconnectlimit;
 extern	cvar_t	*sv_showghoultraces;
 extern	cvar_t	*sv_showloss;
 extern	cvar_t	*sv_netcodecCompare;
+extern	cvar_t	*sv_netcodecMaxBytes;
 extern	cvar_t	*sv_killserver;
 extern	cvar_t	*sv_mapname;
 extern	cvar_t	*sv_mapChecksum;

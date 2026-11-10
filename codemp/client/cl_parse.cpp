@@ -398,6 +398,8 @@ Command strings are just saved off until cgame asks for them
 when it transitions a snapshot
 =====================
 */
+void CL_CheckSVStringEdRef( char *buf, const char *str );	// cl_cgame.cpp
+
 void CL_ParseCommandString( int seq, const char *s ) {
 	int		index;
 
@@ -456,6 +458,17 @@ void CL_ParseCommandString( int seq, const char *s ) {
 	}
 	*/
 	Q_strncpyz( clc.serverCommands[ index ], s, sizeof( clc.serverCommands[ index ] ) );
+
+	// Before cgame runs (while connecting or loading) nothing executes the server commands, so a "disconnect" (the
+	// server dropped this client, for example because its gamestate does not fit in a message) is handled here, as
+	// CL_GetServerCommand handles it once cgame runs; otherwise the client would keep waiting for the gamestate, the
+	// server sending to the dropped slot until it frees it
+	if ( !cls.cgameStarted && !Q_strncmp( s, "disconnect", 10 ) && ( s[10] == '\0' || s[10] == ' ' ) ) {
+		char strEd[MAX_STRING_CHARS];	// MAX_STRINGED_SV_STRING of cl_cgame.cpp
+		Cmd_TokenizeString( s );
+		CL_CheckSVStringEdRef( strEd, Cmd_Argv( 1 ) );
+		Com_Error( ERR_SERVERDISCONNECT, "%s: %s\n", SE_GetString( "MP_SVGAME_SERVER_DISCONNECTED" ), strEd );
+	}
 }
 
 

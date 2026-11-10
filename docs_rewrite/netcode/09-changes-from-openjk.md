@@ -21,7 +21,7 @@ This page lists every change of the branch outside the study documents, grouped 
 | Rounding rule of `SnapVector` | differs between compilers | to nearest, ties to even, everywhere | a Windows client and a Linux server agree |
 | Server defaults | `sv_fps` 40, `sv_clientRate` 50000 | `sv_fps` 20, `sv_clientRate` 25000 | the conditions of the measurements |
 | Removed cvars | | `pmove_float`, `pmove_fixed`, `pmove_msec`, `sv_padPackets` | movement now always behaves as OpenJK with `pmove_float 1` and `pmove_fixed 0` (section 7) |
-| Added cvars | | `sv_netcodecCompare` (debug) | byte comparison with the legacy format, both directions |
+| Added cvars | | `sv_netcodecCompare`, `sv_netcodecMaxBytes` (debug) | byte comparison with the legacy format, both directions; a lower message size limit to test oversized messages |
 | Client fixes outside the netcode | | menu cursor speed, font aspect, keypad and right modifier keys, server browser state (servers answering in under 1 ms were hidden) | |
 
 ## 1. The server-to-client format
@@ -42,7 +42,7 @@ Every message the server sends to a client (snapshot, server commands, gamestate
 | Game directory (`svc_setgame`) | a separate message | carried by the next message |
 | Map instance (`serverId`) | only in the system-info config string | also in every message, coded as "unchanged" (a fraction of a bit) except after a map change or a `map_restart`, so that the client's packets can code theirs as "the same as in the message I acknowledge" (plan step 8) |
 | End of message | an `svc_EOF` byte | none (the codec knows the length) |
-| Oversized message | the server clears it and sends it empty | if a message codes larger than 1 KB, it is also coded raw and the smaller is sent; a worst case stays close to the raw size |
+| Oversized message | the server clears it and sends it empty | if a message codes larger than 1 KB, it is also coded raw and the smaller is sent; a worst case stays close to the raw size. A snapshot still larger than the 49,152-byte limit is sent with the entities nearest to the player (the others come back in the next message); a gamestate that large drops the client, which returns to the menu with the reason |
 | Precision | what the field widths allow | exactly what the server holds |
 
 ### Results
@@ -194,6 +194,7 @@ What it implies: players used to the 125 or 333 fps jumps lose them, and a jump 
 | `sv_clientRate` | 50000 | 25000 | the client's default rate; same delay threshold as OpenJK's pair (messages from 1,202 bytes) |
 | `sv_padPackets` | adds padding bytes | removed | it padded only the legacy format |
 | `sv_netcodecCompare` | | added (debug, 0 by default) | also codes each message and each client packet in the legacy format and prints the byte ratios, every 10 s (1) or every message (2) |
+| `sv_netcodecMaxBytes` | | added (debug, 0 by default: 49,152 bytes) | the largest message the server codes, to test what happens to larger ones: snapshots are cut to the nearest entities, a gamestate drops the client |
 | `pmove_float`, `pmove_fixed`, `pmove_msec` | game and cgame cvars | removed | section 7 |
 | `cl_shownet` | levels 1 to 4, -1, -2 | levels 1, 2 and 3 | section 1 |
 
@@ -201,7 +202,7 @@ Two console commands are added for statistics, each printing its counters since 
 
 | command | side | what it prints |
 |---|---|---|
-| `svnetstats` | server | for each client: messages, bytes per message, messages sent raw (escapes), snapshots without a base, snapshots whose base was refused, base age; client packets, bytes per packet, packets not decoded |
+| `svnetstats` | server | for each client: messages, bytes per message, messages sent raw (escapes), snapshots without a base, snapshots whose base was refused, snapshots cut to fit, base age; client packets, bytes per packet, packets not decoded |
 | `netstats` | client | messages lost on the way, messages not decoded, bytes per message, snapshots without a base, base age; client packets sent, bytes per packet, packets coded without a base |
 
 Configuration files that still set a removed cvar are harmless: the value is stored and never read. The other network settings (`rate`, `snaps`, `cl_maxpackets`, ...) are unchanged for now; plan step 11 replaces them with values measured at run time.
@@ -216,6 +217,7 @@ Made on the way while testing, each in its own commit, mostly as TaystJK does.
 | `r_aspectCorrectFonts` | narrowed the spacing but not the glyphs: letters overlapped | narrows both | `tr_font.cpp` |
 | Keypad with num lock on | keypad keys became digits everywhere, so `KP_*` binds never fired in game | digits only while typing (and not while binding a key) | `sdl_input.cpp`, `ui_shared.c` |
 | Right shift, ctrl, alt | the same keys as the left ones | keys of their own (`RSHIFT`, `RCTRL`, `RALT`), bindable apart; shortcuts accept either side | `cl_keys.cpp`, `sdl_input.cpp`, `ui_shared.c` |
+| Dropped while connecting | a client dropped before its cgame runs (kicked while loading, for example) kept waiting for the gamestate: only cgame executed the `disconnect` server command | the `disconnect` command is handled as soon as it arrives when cgame does not run yet: back to the menu with the reason | `cl_parse.cpp` |
 | Server browser: whether a server answered | a ping of 0 meant "request sent", "no answer" and "answered in 0 ms" at once, so a server answering in under 1 ms (same machine or LAN) was hidden from the list | each server has a state of its own (not asked, waiting, answered, no answer); the ping is only a measure and 0 ms is valid; the UI reads the state through a new import, `trap->ext.LAN_GetServerState` | `client.h`, `cl_main.cpp`, `cl_lan.cpp`, `cl_uiapi.cpp`, `ui_public.h`, `ui_main.c`, `ui_syscalls.c` |
 
 ## 10. Build and repository

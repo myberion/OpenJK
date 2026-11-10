@@ -994,6 +994,7 @@ void SV_Init (void) {
 	sv_showghoultraces = Cvar_Get ("sv_showghoultraces", "0", 0);
 	sv_showloss = Cvar_Get ("sv_showloss", "0", 0);
 	sv_netcodecCompare = Cvar_Get ("sv_netcodecCompare", "0", CVAR_TEMP, "Debug: also code each message in the legacy format and print the byte ratio (1: every 10 seconds, 2: every message)");
+	sv_netcodecMaxBytes = Cvar_Get ("sv_netcodecMaxBytes", "0", CVAR_TEMP, "Debug: the largest message the server codes, in bytes (0: MAX_MSGLEN, 49152), to test what happens to larger ones: snapshots are cut, a gamestate drops the client");
 	sv_killserver = Cvar_Get ("sv_killserver", "0", 0);
 	sv_mapChecksum = Cvar_Get ("sv_mapChecksum", "", CVAR_ROM);
 	sv_lanForceRate = Cvar_Get ("sv_lanForceRate", "1", CVAR_ARCHIVE_ND );

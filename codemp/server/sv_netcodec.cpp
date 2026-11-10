@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "server.h"
 #include "netcodec/engine.h"
 
+#include <algorithm>
 #include <cstddef>
 
 namespace eng = netcodec::engine;
@@ -173,15 +174,76 @@ static size_t SV_NetcodecEncode( client_t *client, const eng::ServerMessage &sm,
 	return Codec().Encode( sm, s_frames[ClientIndex( client )], ring, svs.nextSnapshotEntities, commands, baselines, out, outSize, delta, record );
 }
 
-// codes the message, keeps its snapshot's Frame and sends it
-static void SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSnapshot_t *oldframe, int lastframe ) {
+// A snapshot message that does not fit in outSize bytes is coded again with only the entities nearest to the player,
+// as many as fit (a binary search over their count), instead of being sent empty; the others are absent from this
+// snapshot only (the next ones code them against their baseline again). The frame's entities, which only this message
+// uses, are rewritten in place in the ring. Returns the size (0: it does not fit even without entities) and how many
+// entities were left out.
+static size_t SV_NetcodecFitSnapshot( client_t *client, eng::ServerMessage &sm, byte *out, size_t outSize, uint32_t &delta, eng::Record &record, int &left ) {
+	static entityState_t all[MAX_SNAPSHOT_ENTITIES];
+	clientSnapshot_t *frame = &client->frames[sm.seq & PACKET_MASK];
+	const int n = frame->num_entities;
+	int order[MAX_SNAPSHOT_ENTITIES];
+	float dist[MAX_SNAPSHOT_ENTITIES];
+
+	for ( int i = 0; i < n; i++ ) {
+		all[i] = svs.snapshotEntities[( frame->first_entity + i ) % svs.numSnapshotEntities];
+		dist[i] = DistanceSquared( all[i].pos.trBase, frame->ps.origin );
+		order[i] = i;
+	}
+	std::sort( order, order + n, [&]( int a, int b ) { return dist[a] != dist[b] ? dist[a] < dist[b] : a < b; } );
+
+	// codes the message with the k entities nearest to the player, in the order of their numbers
+	const auto code = [&]( int k ) -> size_t {
+		bool keep[MAX_SNAPSHOT_ENTITIES] = {};
+		for ( int j = 0; j < k; j++ ) {
+			keep[order[j]] = true;
+		}
+		int m = 0;
+		for ( int i = 0; i < n; i++ ) {
+			if ( keep[i] ) {
+				svs.snapshotEntities[( frame->first_entity + m++ ) % svs.numSnapshotEntities] = all[i];
+			}
+		}
+		frame->num_entities = k;
+		sm.frame.numEntities = (uint32_t)k;
+		return SV_NetcodecEncode( client, sm, out, outSize, delta, record );
+	};
+
+	left = 0;
+	if ( !code( 0 ) ) {
+		code( n );	// restores the frame; the message goes out empty
+		return 0;
+	}
+	int fits = 0, tooLarge = n;
+	while ( tooLarge - fits > 1 ) {
+		const int mid = ( fits + tooLarge ) / 2;
+		if ( code( mid ) ) {
+			fits = mid;
+		} else {
+			tooLarge = mid;
+		}
+	}
+	left = n - fits;
+	return code( fits );	// the ring, delta and record of the last call must be those of the message sent
+}
+
+// codes the message, keeps its snapshot's Frame and sends it; false if it could not be coded (sent empty)
+static bool SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSnapshot_t *oldframe, int lastframe ) {
 	static byte buf[MAX_MSGLEN];
 	eng::Frame *frames = s_frames[ClientIndex( client )];
 	eng::Record record = {};
 	uint32_t delta = 0;
 	msg_t msg;
+	// sv_netcodecMaxBytes (debug): a smaller limit than MAX_MSGLEN, to test what happens to larger messages
+	const int maxBytes = sv_netcodecMaxBytes->integer;
+	const size_t outSize = maxBytes > 0 && maxBytes < MAX_MSGLEN ? (size_t)maxBytes : sizeof( buf );
+	int left = 0;
 
-	const size_t size = SV_NetcodecEncode( client, sm, buf, sizeof( buf ), delta, record );
+	size_t size = SV_NetcodecEncode( client, sm, buf, outSize, delta, record );
+	if ( !size && sm.snapshot ) {
+		size = SV_NetcodecFitSnapshot( client, sm, buf, outSize, delta, record, left );
+	}
 
 	eng::Frame &slot = frames[sm.seq % PACKET_BACKUP];
 	eng::PacketBase &packetBase = s_packetBases[ClientIndex( client )][sm.seq % eng::kAckWindow];
@@ -189,12 +251,19 @@ static void SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSna
 	packetBase.seq = -1;
 	if ( !size ) {
 		// the legacy code cleared an overflowed message too, and sent it empty
-		Com_Printf( "WARNING: message for %s not coded (too large or malformed)\n", client->name );
+		Com_Printf( "WARNING: message for %s not coded (larger than %d bytes, or malformed)\n", client->name, (int)outSize );
 	} else {
 		netcodecStats_t &st = client->netcodecStats;
 		st.messages++;
 		st.bytes += (double)size;
 		st.escaped += Codec().Escaped() ? 1 : 0;
+		if ( left ) {
+			st.cut++;
+			if ( outSize == sizeof( buf ) ) {
+				Com_Printf( "WARNING: snapshot for %s larger than %d bytes: sent with the %d entities nearest to the player, %d left out\n",
+					client->name, (int)outSize, (int)sm.frame.numEntities, left );
+			}
+		}
 		if ( sm.snapshot ) {
 			slot = sm.frame;
 			slot.seq = sm.seq;
@@ -220,6 +289,7 @@ static void SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSna
 	msg.maxsize = sizeof( buf );
 	msg.cursize = (int)size;
 	SV_SendMessageToClient( &msg, client );
+	return size != 0;
 }
 
 void SV_NetcodecSendGameState( client_t *client ) {
@@ -233,7 +303,11 @@ void SV_NetcodecSendGameState( client_t *client ) {
 	sm.numConfigStrings = MAX_CONFIGSTRINGS;
 	sm.clientNum = ClientIndex( client );
 	sm.checksum = sv.checksumFeed;
-	SV_NetcodecSend( client, sm, NULL, 0 );
+	if ( !SV_NetcodecSend( client, sm, NULL, 0 ) ) {
+		// the client cannot play without it: dropped, with the reason (CL_ParseCommandString shows it before cgame runs)
+		Com_Printf( S_COLOR_YELLOW "WARNING: the gamestate does not fit in a message: %s dropped\n", client->name );
+		SV_DropClient( client, "gamestate too large for a message" );
+	}
 }
 
 // The gamestate at the start of a server demo (svrecord, sv_autoDemo); the demo then holds every message sent. The
@@ -323,10 +397,10 @@ void SV_NetcodecStats_f( void ) {
 			continue;
 		}
 		Com_Printf( "%2d %s^7: %d messages, %.1f bytes per message, %d escaped; %d snapshots: %d without a base asked, "
-			"%d with the asked base refused, base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back; "
+			"%d with the asked base refused, %d cut to fit, base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back; "
 			"%d client packets, %.1f bytes per packet, %d not decoded\n",
 			i, cl->name, st.messages, st.messages ? st.bytes / st.messages : 0.0, st.escaped, st.snapshots, st.noBase,
-			st.baseRefused, st.baseAge[0], st.baseAge[1], st.baseAge[2], st.baseAge[3], st.baseAge[4], st.baseAge[5],
+			st.baseRefused, st.cut, st.baseAge[0], st.baseAge[1], st.baseAge[2], st.baseAge[3], st.baseAge[4], st.baseAge[5],
 			st.packets, st.packets ? st.packetBytes / st.packets : 0.0, st.packetsNotDecoded );
 		Com_Memset( &st, 0, sizeof( st ) );
 	}

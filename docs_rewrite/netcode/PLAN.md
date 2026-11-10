@@ -132,6 +132,8 @@ Today each client packet (about 60 per second, `CL_WritePacket`) carries the ser
 
 Depends on: steps 7 and 8.
 
+**Done on 10 November 2026** ([progress/step-09-safety-limits.md](progress/step-09-safety-limits.md)): the escape path and the worst case were done in step 6; a snapshot too large is sent with the entities nearest to the player, a gamestate too large drops the client with the reason (the client now handles a `disconnect` before cgame runs), `sv_netcodecMaxBytes` (debug) tests both; checked in game; no CI (owner: the validations stay on the VMs).
+
 - Escape path: done in step 6 per message (owner, 7 November 2026), not per entity: a message coded larger than 1 KB is also coded with its fields raw and the smaller is sent, which bounds the worst case to about the raw layout ([progress/step-06-cpp-codec.md](progress/step-06-cpp-codec.md), part D).
 - Size cap: on overflow, retry with fewer entities or a full-state message; never drop a snapshot silently (today the engine clears the message and prints a warning, `server/sv_snapshot.cpp:852`).
 - Fuzz corpus and sanitizer builds in CI.
