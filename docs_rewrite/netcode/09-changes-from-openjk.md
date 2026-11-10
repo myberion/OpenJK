@@ -14,6 +14,8 @@ This page lists every change of the branch outside the study documents, grouped 
 | Ping | server frame clock (50 ms steps at `sv_fps` 20), time of the last packet acknowledging a message | real time, first packet acknowledging the message | a more precise ping |
 | Protocol number | 26 | **26, unchanged for now** | an OpenJK client and a branch server do not understand each other, and nothing refuses the connection |
 | Reliable server commands kept | 128 | 256 | needed by the codec; a little more memory |
+| Server commands sent | repeated in every message until acknowledged (2.6 times each on real games) | sent once; resent only when their message is lost, or with a newer command so that they stay in order | up to 4 % fewer bytes on real games; a command in a lost message arrives about one ping later |
+| While awaiting the gamestate | the client sends one packet a second | the client sends at its normal rate | a lost gamestate fragment costs about a round trip instead of a second or more |
 | Demos | copy of the network messages | server: copy; client: coded again for the demo | old demos cannot be played back |
 | UDP downloads | up to 8 blocks per message, as the rate allows | 1 block per message | same speed on the internet at default rates, about 3 times slower on a LAN |
 | Player velocity | rounded to integers every frame (unless `pmove_float 1`) | never rounded | exact velocity, jumps no longer depend on the frame rate |
@@ -202,7 +204,7 @@ Two console commands are added for statistics, each printing its counters since 
 
 | command | side | what it prints |
 |---|---|---|
-| `svnetstats` | server | for each client: messages, bytes per message, messages sent raw (escapes), snapshots without a base, snapshots whose base was refused, snapshots cut to fit, base age; client packets, bytes per packet, packets not decoded |
+| `svnetstats` | server | for each client: messages, bytes per message, messages sent raw (escapes), snapshots without a base, snapshots whose base was refused, snapshots cut to fit, base age; server commands sent and how many were repeats; client packets, bytes per packet, packets not decoded |
 | `netstats` | client | messages lost on the way, messages not decoded, bytes per message, snapshots without a base, base age; client packets sent, bytes per packet, packets coded without a base |
 
 Configuration files that still set a removed cvar are harmless: the value is stored and never read. The other network settings (`rate`, `snaps`, `cl_maxpackets`, ...) are unchanged for now; plan step 11 replaces them with values measured at run time.

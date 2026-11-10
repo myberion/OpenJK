@@ -143,6 +143,8 @@ Depends on: steps 7 and 8.
 
 Depends on: steps 7 and 8. The options and the decision procedure are in [07](07-transport-study.md).
 
+**Done on 10 November 2026** ([progress/step-10-acks-reliable.md](progress/step-10-acks-reliable.md)), scoped from the measurements of steps 7 and 8 (owner): the netchan improved in place (07 section 7.7 answered); server commands not repeated while their message is in flight (up to 4 % fewer bytes on real games); the gamestate resent about a round trip after a loss. The items below that are not done, and why (the user-command resend in particular, too late for the server, becomes adaptive redundancy in step 11), are in the step document. Checked in game, locally and on the VPS with simulated loss.
+
 - Acknowledgement record in every client packet (bitfield of the last 32 or more messages); the server uses the newest acknowledged snapshot as base.
 - Gamestate, server commands and client commands on a reliable path with its own fast resend, instead of the 1,000 ms gamestate resend wait; snapshots never wait behind reliable data. Measured on the held-out demos (step 6): every server command is sent 2.59 times on average (repeated in every message until acknowledged), about 60 % of the command bytes.
 - Client input: every `usercmd` not yet acknowledged is resent in each packet, up to a cap; removes `cl_packetdup`.

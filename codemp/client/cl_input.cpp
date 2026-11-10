@@ -1436,14 +1436,9 @@ qboolean CL_ReadyToSendPacket( void ) {
 		return qfalse;
 	}
 
-	// if we don't have a valid gamestate yet, only send
-	// one packet a second
-	if ( cls.state != CA_ACTIVE &&
-		cls.state != CA_PRIMED &&
-		!*clc.downloadTempName &&
-		cls.realtime - clc.lastPacketSentTime < 1000 ) {
-		return qfalse;
-	}
+	// While awaiting the gamestate the client sends at the normal rate (plan step 10; it sent one packet a second): the
+	// server resends a gamestate as soon as the client acknowledges a later message (SV_ExecuteClientMessage), so a
+	// lost gamestate fragment now costs about one round trip instead of a second or more.
 
 	// send every frame for loopbacks
 	if ( clc.netchan.remoteAddress.type == NA_LOOPBACK ) {

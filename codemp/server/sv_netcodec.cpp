@@ -72,8 +72,22 @@ void SV_NetcodecResetClient( const client_t *client ) {
 	}
 }
 
+// Server commands are not repeated while the message that carries them may still arrive (plan step 10). A message
+// sends the commands not yet acknowledged when there is a new one, or when the last message that sent them is known
+// lost (the client acknowledged it or a later message without acknowledging the commands) or still unacknowledged
+// after twice the ping; otherwise it sends none. A message that sends commands sends them all from the client's
+// acknowledge on, as before, so the client receives them in order and the codec's record of the commands the client
+// holds stays true. Bots (their demos) and clients not yet in the game send every command until acknowledged, as
+// before (no ping measured yet).
+static struct {
+	int		carrier;	// the last message that sent commands, up to sent
+	int		sent;		// the last command sent
+	int		time;		// when the carrier was sent (Sys_Milliseconds)
+} s_commands[MAX_CLIENTS];
+
 // a new connection: the codec holds no message of it yet
 void SV_NetcodecNewClient( const client_t *client ) {
+	s_commands[ClientIndex( client )].sent = 0;
 	SV_NetcodecResetClient( client );
 	for ( eng::PacketBase &base : s_packetBases[ClientIndex( client )] ) {
 		base.seq = -1;
@@ -146,12 +160,41 @@ static int SV_NetcodecAcknowledged( const client_t *client ) {
 	return client->reliableAcknowledge;
 }
 
-// every message starts with the last client command received and the server commands not yet acknowledged
+// whether this message sends the commands not yet acknowledged (see s_commands); it records them as sent if so
+static bool SV_NetcodecCommandsDue( const client_t *client, int seq ) {
+	auto &c = s_commands[ClientIndex( client )];
+	const int now = Sys_Milliseconds();
+	const bool due = client->state != CS_ACTIVE || client->netchan.remoteAddress.type == NA_BOT
+		|| client->reliableSequence > c.sent			// a new command
+		|| client->messageAcknowledge >= c.carrier		// the carrier arrived without them: lost
+		|| now - c.time > 2 * client->ping;				// no news of the carrier
+	if ( due ) {
+		c.carrier = seq;
+		c.sent = client->reliableSequence;
+		c.time = now;
+	}
+	return due;
+}
+
+// every message starts with the last client command received and the server commands not yet acknowledged (all of
+// them, or none while they are in flight: SV_NetcodecCommandsDue)
 static void SV_NetcodecBegin( client_t *client, eng::ServerMessage &sm ) {
+	const int acknowledged = SV_NetcodecAcknowledged( client );
 	sm.seq = client->netchan.outgoingSequence;
 	sm.ack = client->lastClientCommand;
 	sm.serverId = sv.serverId;
-	sm.firstCommand = SV_NetcodecAcknowledged( client ) + 1;	// the commands firstCommand to reliableSequence (none if above it)
+	sm.firstCommand = acknowledged + 1;	// the commands firstCommand to reliableSequence (none if above it)
+	if ( client->reliableSequence > acknowledged ) {
+		netcodecStats_t &st = client->netcodecStats;
+		const int previous = s_commands[ClientIndex( client )].sent;
+		if ( SV_NetcodecCommandsDue( client, sm.seq ) ) {
+			const int alreadySent = previous < client->reliableSequence ? previous : client->reliableSequence;
+			st.commands += client->reliableSequence - acknowledged;
+			st.repeats += alreadySent > acknowledged ? alreadySent - acknowledged : 0;
+		} else {
+			sm.firstCommand = client->reliableSequence + 1;
+		}
+	}
 	client->reliableSent = client->reliableSequence;
 }
 
@@ -398,10 +441,10 @@ void SV_NetcodecStats_f( void ) {
 		}
 		Com_Printf( "%2d %s^7: %d messages, %.1f bytes per message, %d escaped; %d snapshots: %d without a base asked, "
 			"%d with the asked base refused, %d cut to fit, base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back; "
-			"%d client packets, %.1f bytes per packet, %d not decoded\n",
+			"%d commands sent, %d of them repeats; %d client packets, %.1f bytes per packet, %d not decoded\n",
 			i, cl->name, st.messages, st.messages ? st.bytes / st.messages : 0.0, st.escaped, st.snapshots, st.noBase,
 			st.baseRefused, st.cut, st.baseAge[0], st.baseAge[1], st.baseAge[2], st.baseAge[3], st.baseAge[4], st.baseAge[5],
-			st.packets, st.packets ? st.packetBytes / st.packets : 0.0, st.packetsNotDecoded );
+			st.commands, st.repeats, st.packets, st.packets ? st.packetBytes / st.packets : 0.0, st.packetsNotDecoded );
 		Com_Memset( &st, 0, sizeof( st ) );
 	}
 }

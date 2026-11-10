@@ -139,6 +139,8 @@ typedef struct {
 	int			baseRefused;	// a base was asked but the codec coded without one (its own base no longer held)
 	int			escaped;		// messages sent in their raw form
 	int			cut;			// snapshots too large, sent with only the entities nearest to the player
+	int			commands;		// server commands sent, counting each time one is sent
+	int			repeats;		// of them, commands sent before
 	int			baseAge[6];		// snapshots coded against a base 1, 2, 3, 4, 5 to 8, 9 or more messages back
 	int			packets;		// client packets received
 	double		packetBytes;

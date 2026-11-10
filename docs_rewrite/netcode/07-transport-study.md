@@ -155,7 +155,7 @@ Design notes whichever option is chosen:
 
 ## 7.7 Questions for the owner (needed before step 1)
 
-Answered so far (4 November 2026): compatibility with the old protocol and mods is not required; network settings should be computed, not configured. The questions below are still open.
+Answered so far (4 November 2026): compatibility with the old protocol and mods is not required; network settings should be computed, not configured. Answered on 10 November 2026 (owner, plan step 10): no authenticated encryption for now (possible later as a libsodium layer without a backend); 32 players (`MAX_CLIENTS` unchanged); IPv6 later; the server browser and master-server protocols are kept; so the netchan is improved in place (option A). Question 6 (Apache-2.0 / OpenSSL 3) does not arise with that choice.
 
 1. Is authenticated encryption a requirement? If yes, is a backend that issues connect tokens acceptable, or must anyone be able to connect to a public server directly?
 2. Target number of simultaneous players per server (the answer decides between libraries with client caps, 100 for yojimbo as documented, and larger designs).
