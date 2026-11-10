@@ -1,6 +1,6 @@
 # What this branch changes in OpenJK, why, and what it implies
 
-Last update: 9 November 2026. Branch `feature/poc-netcode`, compared with OpenJK `master` at `260c59c29`. Multiplayer only (`codemp/` and the shared code it uses); single player is not built.
+Last update: 10 November 2026. Branch `feature/poc-netcode`, compared with OpenJK `master` at `260c59c29`. Multiplayer only (`codemp/` and the shared code it uses); single player is not built.
 
 This page lists every change of the branch outside the study documents, grouped by subject, with the reason and the consequences. It avoids code: file names are given so that each change can be found, and the details are in the step documents of [progress/](progress/README.md). The work follows the owner's goals stated in the [README](README.md): no loss of precision, no compatibility constraint, as few network settings as possible, a netcode other JKA forks can reuse, Windows and Linux.
 
@@ -9,8 +9,9 @@ This page lists every change of the branch outside the study documents, grouped 
 | area | OpenJK | this branch | main consequence |
 |---|---|---|---|
 | Server-to-client messages | Huffman bitstream (`msg.cpp`, `huffman.cpp`) | new message codec, `netcodec` (rANS with per-field statistics and prediction) | about 0.38 to 0.45 of the bytes, values exact |
-| Client-to-server messages | Huffman bitstream | **unchanged for now**; coded by netcodec in plan step 8 | |
-| Netchan obfuscation (XOR) server to client | yes | removed | to revisit with real encryption (plan step 12) |
+| Client-to-server messages | Huffman bitstream, user commands XORed with a key | netcodec, the user commands coded against the snapshot the client acknowledges | about 0.25 of the bytes (40.7 to 10.1 per packet on recorded games), values exact |
+| Netchan obfuscation (XOR) | yes, both directions | removed in both directions | to revisit with real encryption (plan step 12) |
+| Ping | server frame clock (50 ms steps at `sv_fps` 20), time of the last packet acknowledging a message | real time, first packet acknowledging the message | a more precise ping |
 | Protocol number | 26 | **26, unchanged for now** | an OpenJK client and a branch server do not understand each other, and nothing refuses the connection |
 | Reliable server commands kept | 128 | 256 | needed by the codec; a little more memory |
 | Demos | copy of the network messages | server: copy; client: coded again for the demo | old demos cannot be played back |
@@ -19,8 +20,8 @@ This page lists every change of the branch outside the study documents, grouped 
 | Missiles | positions and velocities rounded | exact | trajectories exactly as the server computes them |
 | Rounding rule of `SnapVector` | differs between compilers | to nearest, ties to even, everywhere | a Windows client and a Linux server agree |
 | Server defaults | `sv_fps` 40, `sv_clientRate` 50000 | `sv_fps` 20, `sv_clientRate` 25000 | the conditions of the measurements |
-| Removed cvars | | `pmove_float`, `pmove_fixed`, `pmove_msec`, `sv_padPackets` | movement now always behaves as OpenJK with `pmove_float 1` and `pmove_fixed 0` (section 6) |
-| Added cvars | | `sv_netcodecCompare`, `sv_recordClientPackets` (debug) | byte comparison with the legacy format; recordings of the client packets for plan step 8 |
+| Removed cvars | | `pmove_float`, `pmove_fixed`, `pmove_msec`, `sv_padPackets` | movement now always behaves as OpenJK with `pmove_float 1` and `pmove_fixed 0` (section 7) |
+| Added cvars | | `sv_netcodecCompare` (debug) | byte comparison with the legacy format, both directions |
 | Client fixes outside the netcode | | menu cursor speed, font aspect, keypad and right modifier keys, server browser state (servers answering in under 1 ms were hidden) | |
 
 ## 1. The server-to-client format
@@ -60,8 +61,7 @@ Tested in game over UDP with simulated loss (5 % and 20 % of the server's messag
 
 ### What does not change
 
-- The client-to-server direction: user commands, client commands, their XOR and Huffman coding (plan step 8 changes it).
-- Connectionless messages (`getinfo`, `getstatus`, `connect`, the master server): the server browser works as before (one display defect fixed, section 8).
+- Connectionless messages (`getinfo`, `getstatus`, `connect`, the master server): the server browser works as before (one display defect fixed, section 9).
 - The choice of the base snapshot (the newest one the client acknowledged), `PACKET_BACKUP` (32), the rate and snapshot-rate rules, the netchan fragmentation.
 - The legacy writer is kept in the server, only to compare sizes (`sv_netcodecCompare`).
 
@@ -72,11 +72,48 @@ Tested in game over UDP with simulated loss (5 % and 20 % of the server's messag
 - `cl_shownet 1` still prints the packet sizes and `cl_shownet 3` the snapshot line; `cl_shownet 2` prints one line per decoded operation (commands, gamestate, game directory, snapshot with its base and entity count, download block, map change). The per-entity and per-field output (levels 2 and 4, -1, -2) is gone, since the codec has no per-field trace.
 - A message the client cannot decode (only possible if it no longer holds the base the server used) is dropped whole; the client then asks for a full snapshot, as before, and the commands are sent again until acknowledged.
 
-## 2. Netchan obfuscation removed from server to client
+## 2. The client-to-server format and the ping
 
-OpenJK XORs each server message with a key made of the challenge, the sequence number and the last command texts. The client found the key from the acknowledge number read in clear at the start of the message; the codec now codes that number, so the scheme could not stay as it was. It was never security: anyone who sees the connection can undo it. It is removed in the server-to-client direction (`sv_net_chan.cpp`, `cl_net_chan.cpp`); the client-to-server direction keeps it. Whether to restore an equivalent or replace it with real encryption is decided in plan step 12.
+### What changes
 
-## 3. Reliable command buffer: 128 to 256 commands
+Every packet the client sends (about 60 per second) is coded by `netcodec` too: on the client, `CL_WritePacket` hands the values to `CL_NetcodecWritePacket` (`cl_netcodec.cpp`); on the server, `SV_ExecuteClientMessage` takes them from `SV_NetcodecDecodeClientPacket` (`sv_netcodec.cpp`). What the server does with the decoded values is unchanged: the acknowledge checks, the `serverId` checks (`map_restart`, gamestate resent), the client commands with the flood protection, then the user commands with the `sv_legacyFixes` clamps.
+
+| | OpenJK (legacy format) | this branch (netcodec) |
+|---|---|---|
+| `serverId`, last server message received, last server command received | three 32-bit values through Huffman | the message as its low 8 bits (the server takes the nearest number at or below its last message sent); `serverId` as "the same as in that message"; the command acknowledge against the commands that message carried |
+| Client commands | text through Huffman, each with its sequence number | their count, the first sequence number against that message, the texts coded as the server's command texts |
+| User commands | the first against an empty command, the others against the previous one, XORed with a key, through Huffman | the first against the snapshot of the acknowledged message (time against its `commandTime`, view angles against its angles less `delta_angles`, weapon, force power and item against its own), the others against the previous one, each field with its own statistics |
+| User-command key (XOR with the checksum feed, the acknowledge and a hash of the last command) | yes | removed |
+| End of packet | a `clc_EOF` byte | none |
+| A move of -128 | read back as -127 | exact |
+
+Coding the first user command against the acknowledged snapshot needs both sides to hold that snapshot. The server keeps, for each client, the few values a packet is coded against for each of its last 256 messages (32 bytes each: 8 KB per client, 256 KB for 32 clients), so it can decode any packet whose acknowledge it reads without ambiguity. The client codes against the acknowledged message only while it is sure the server has sent fewer than 256 messages since: the time since that message arrived plus the round-trip time it measures, over the time between the server's messages, must stay under 128 messages (6.4 s at `sv_fps` 20). Otherwise, or when one of these is unknown (right after a gamestate), the packet is coded without it: about twice larger (estimate), never wrong. A packet the server cannot decode (malformed, or coded against a message it no longer holds) is dropped and counted by `svnetstats`.
+
+### The ping
+
+| | OpenJK | this branch |
+|---|---|---|
+| When a message was sent | `svs.time`, the server's frame clock (it moves once per frame: 50 ms steps at `sv_fps` 20) | the real time (`Sys_Milliseconds`) |
+| When it was acknowledged | `svs.time` again, written by every packet acknowledging it (a client sends about three packets per message, so the last one counted) | the real time of the first packet acknowledging it |
+| An acknowledge older than the frame history | could write into the frame of a newer message | ignored |
+| "Not acknowledged yet" | a time of -1 (any time at or below 0 counted as none) | an explicit flag |
+
+The ping is still the average over the last 32 messages (`SV_CalcPings`). It is now the real round trip of a message, without the frame-clock steps and without the extra packet intervals; in-game values are to be compared with OpenJK's.
+
+### Results
+
+On the six games recorded in plan step 8 (81,789 packets): 40.68 bytes per packet in the legacy format, 10.07 with netcodec (the game kept out of training: 38.58 to 9.89). Coding takes 0.34 to 0.40 and decoding 0.74 to 0.86 of the legacy time (warm measurement, clang, MSVC, GCC 12, Clang 14). Every compiler produces the same bytes.
+
+### What does not change
+
+- Connectionless messages, including `connect`, whose user info is still compressed with Huffman (decided with the protocol number at the end of the plan).
+- `cl_packetdup`, `cl_maxpackets`, `cl_nodelta`: the client still resends the user commands of the previous packet and still asks for a full snapshot (`clc_moveNoDelta`) when it misses the last one.
+
+## 3. Netchan obfuscation removed
+
+OpenJK XORs each message, in both directions, with a key made of the challenge, the sequence number or the `serverId` and acknowledge, and the last command texts. The receiver found the key from the numbers read in clear at the start of the message; the codec now codes those numbers, so the scheme could not stay as it was. It was never security: anyone who sees the connection can undo it. It is removed in both directions (`sv_net_chan.cpp`, `cl_net_chan.cpp`), with the user-command key of the client packets. Whether to restore an equivalent or replace it with real encryption is decided in plan step 12.
+
+## 4. Reliable command buffer: 128 to 256 commands
 
 | | OpenJK | this branch |
 |---|---|---|
@@ -87,7 +124,7 @@ OpenJK XORs each server message with a key made of the challenge, the sequence n
 
 Why: a server command is coded against an earlier command up to 127 commands back, so both sides must keep at least 256 to always hold the same reference. The client-to-server buffer uses the same constant and grows too.
 
-## 4. Demos
+## 5. Demos
 
 A demo is played back by the normal decoder starting from an empty state, so every message in it may only refer to what the demo itself contains: its base snapshot, that base's own base, and the commands it is coded against.
 
@@ -98,13 +135,13 @@ A demo is played back by the normal decoder starting from an empty state, so eve
 | Client demo (`record`) content | copy of the messages received | each decoded message is coded again for the demo, against the demo's previous snapshot, with the commands it brought and without its download block |
 | Client demo start | asks the server for a full snapshot and waits for it | nothing asked of the server |
 | Gamestate at the start | legacy format | coded, with the last 127 server commands |
-| Cost | none | server: none with `sv_autoDemo`; about one round trip of full snapshots after a `svrecord` in the middle of a game. Client: one more coding per message, about 1.5 µs |
+| Cost | none | server: none with `sv_autoDemo`; about one round trip of full snapshots after a `svrecord` in the middle of a game. Client: one more coding per message, about 1.5 Âµs |
 
 Why the two sides differ: the server records every message it sends and receives the client's packets in order, so a copy is complete once its start is right. The client cannot know which earlier messages the server's next ones will refer to, and losses or messages it could not decode would leave holes; coding the demo again makes it complete by construction.
 
 What it implies: demos recorded with OpenJK or 1.01 cannot be played back by this build, and the reverse (a reader or converter for the old format is decided with the protocol number). The files keep the `.dm_26` extension for now. Client demos no longer contain download blocks (useless at playback). As in OpenJK, server demos still open when the server quits have no end marker; the player stops cleanly at the end of such a file.
 
-## 5. Downloads over UDP
+## 6. Downloads over UDP
 
 | | OpenJK | this branch |
 |---|---|---|
@@ -114,7 +151,7 @@ What it implies: demos recorded with OpenJK or 1.01 cannot be played back by thi
 
 Why: the codec carries one download operation per message. A better download path (several blocks, or a channel of its own next to the reliable data) is part of plan step 10. HTTP downloads are not affected.
 
-## 6. Game code: precision and physics
+## 7. Game code: precision and physics
 
 These changes are in the game module and cgame (`codemp/game/`, `codemp/cgame/`) and in the shared math code. The interface between the engine and the modules is unchanged, but the server's game module and the client's cgame must come from the same source, since cgame predicts the movement with the same code.
 
@@ -146,28 +183,27 @@ The velocity in more detail:
 
 What it implies: players used to the 125 or 333 fps jumps lose them, and a jump designed for them on a map may no longer pass. A physics fully independent of the frame rate needs a fixed step, a gameplay question left to plan step 14. A mod that takes this game code loses the three `pmove_*` cvars; a mod with its own game code keeps its own physics, as long as its game and cgame match each other.
 
-## 7. Settings
+## 8. Settings
 
 | cvar | OpenJK | this branch | why |
 |---|---|---|---|
 | `sv_fps` | 40 | 20 | the snapshot rate of the captures and demos the codec was measured and trained on |
 | `sv_clientRate` | 50000 | 25000 | the client's default rate; same delay threshold as OpenJK's pair (messages from 1,202 bytes) |
 | `sv_padPackets` | adds padding bytes | removed | it padded only the legacy format |
-| `sv_netcodecCompare` | | added (debug, 0 by default) | also codes each message in the legacy format and prints the byte ratio, every 10 s (1) or every message (2) |
-| `sv_recordClientPackets` | | added (debug, 0 by default) | writes each client's packets to a file (`clientpackets/` under the home path, one file per connection), the data to measure and train the client-to-server format of plan step 8 |
-| `pmove_float`, `pmove_fixed`, `pmove_msec` | game and cgame cvars | removed | section 6 |
+| `sv_netcodecCompare` | | added (debug, 0 by default) | also codes each message and each client packet in the legacy format and prints the byte ratios, every 10 s (1) or every message (2) |
+| `pmove_float`, `pmove_fixed`, `pmove_msec` | game and cgame cvars | removed | section 7 |
 | `cl_shownet` | levels 1 to 4, -1, -2 | levels 1, 2 and 3 | section 1 |
 
 Two console commands are added for statistics, each printing its counters since the previous call:
 
 | command | side | what it prints |
 |---|---|---|
-| `svnetstats` | server | for each client: messages, bytes per message, messages sent raw (escapes), snapshots without a base, snapshots whose base was refused, base age |
-| `netstats` | client | messages lost on the way, messages not decoded, bytes per message, snapshots without a base, base age |
+| `svnetstats` | server | for each client: messages, bytes per message, messages sent raw (escapes), snapshots without a base, snapshots whose base was refused, base age; client packets, bytes per packet, packets not decoded |
+| `netstats` | client | messages lost on the way, messages not decoded, bytes per message, snapshots without a base, base age; client packets sent, bytes per packet, packets coded without a base |
 
 Configuration files that still set a removed cvar are harmless: the value is stored and never read. The other network settings (`rate`, `snaps`, `cl_maxpackets`, ...) are unchanged for now; plan step 11 replaces them with values measured at run time.
 
-## 8. Client fixes outside the netcode
+## 9. Client fixes outside the netcode
 
 Made on the way while testing, each in its own commit, mostly as TaystJK does.
 
@@ -179,17 +215,17 @@ Made on the way while testing, each in its own commit, mostly as TaystJK does.
 | Right shift, ctrl, alt | the same keys as the left ones | keys of their own (`RSHIFT`, `RCTRL`, `RALT`), bindable apart; shortcuts accept either side | `cl_keys.cpp`, `sdl_input.cpp`, `ui_shared.c` |
 | Server browser: whether a server answered | a ping of 0 meant "request sent", "no answer" and "answered in 0 ms" at once, so a server answering in under 1 ms (same machine or LAN) was hidden from the list | each server has a state of its own (not asked, waiting, answered, no answer); the ping is only a measure and 0 ms is valid; the UI reads the state through a new import, `trap->ext.LAN_GetServerState` | `client.h`, `cl_main.cpp`, `cl_lan.cpp`, `cl_uiapi.cpp`, `ui_public.h`, `ui_main.c`, `ui_syscalls.c` |
 
-## 9. Build and repository
+## 10. Build and repository
 
 | | OpenJK | this branch |
 |---|---|---|
 | New library | | `codemp/netcodec/`: C++20 inside, a C++11 interface for the engine (`engine.h`), trained tables compiled in; linked by the client and the dedicated server |
-| Tests | | round trip on about 36,000 recorded messages, 100,100 synthetic messages, malformed-input test and fuzzer, determinism hashes per compiler, pmove determinism (game against cgame, compiler against compiler) |
+| Tests | | round trip on about 36,000 recorded messages, 100,100 synthetic messages, malformed-input test and fuzzer, determinism hashes per compiler, pmove determinism (game against cgame, compiler against compiler); client packets: 100,000 synthetic packets, the recorded packets through the library and through the engine interface |
 | Compilers checked | | MSVC (x64, x86), GCC 12 (x64, x86) and 16 (x64), Clang (llvm-mingw on Windows, Clang 14 on Linux) |
 | `.gitattributes`, `.gitignore` | | line endings of scripts, demo files and local traces ignored |
 | Study and plan | | `docs_rewrite/netcode/` (this folder) |
 
-## 10. Compatibility summary
+## 11. Compatibility summary
 
 | combination | works |
 |---|---|
@@ -201,13 +237,12 @@ Made on the way while testing, each in its own commit, mostly as TaystJK does.
 | Server browser, master server, `getstatus` / `getinfo` | yes, unchanged |
 | Configuration files from OpenJK | yes; removed cvars are ignored |
 
-## 11. Not changed yet
+## 12. Not changed yet
 
 | subject | where |
 |---|---|
 | Protocol number, handshake, support of the old protocol, old demos | end of the plan |
-| Statistics counters, tests under loss, Linux server with Windows client | step 7, part 5 |
-| Client-to-server messages coded by netcodec (user commands, client commands), their XOR and user-command key dropped | plan step 8 |
+| Malformed-input test and fuzzer for the client packet decoder (the server decodes data from anyone) | plan step 8, part 4 |
 | Acknowledgements, reliable path, downloads | plan step 10 |
 | Network settings measured at run time (rate, snaps, packets, interpolation delay) | plan step 11 |
 | Encryption, or a replacement for the removed XOR | plan step 12 |

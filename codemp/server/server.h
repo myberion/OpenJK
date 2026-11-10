@@ -105,8 +105,9 @@ typedef struct clientSnapshot_s {
 	int				first_entity;		// into the circular sv_packet_entities[]
 										// the entities MUST be in increasing state number
 										// order, otherwise the delta compression will fail
-	int				messageSent;		// time the message was transmitted
-	int				messageAcked;		// time the message was acked
+	int				messageSent;		// real time the message was transmitted (Sys_Milliseconds), for the ping
+	int				messageAcked;		// real time of the first packet that acknowledged it, when acked
+	qboolean		acked;				// a packet acknowledged the message
 	int				messageSize;		// used to rate drop packets
 } clientSnapshot_t;
 
@@ -138,6 +139,9 @@ typedef struct {
 	int			baseRefused;	// a base was asked but the codec coded without one (its own base no longer held)
 	int			escaped;		// messages sent in their raw form
 	int			baseAge[6];		// snapshots coded against a base 1, 2, 3, 4, 5 to 8, 9 or more messages back
+	int			packets;		// client packets received
+	double		packetBytes;
+	int			packetsNotDecoded;	// malformed, or coded against a message whose PacketBase is no longer held
 } netcodecStats_t;
 
 
@@ -261,7 +265,6 @@ extern	cvar_t	*sv_reconnectlimit;
 extern	cvar_t	*sv_showghoultraces;
 extern	cvar_t	*sv_showloss;
 extern	cvar_t	*sv_netcodecCompare;
-extern	cvar_t	*sv_recordClientPackets;
 extern	cvar_t	*sv_killserver;
 extern	cvar_t	*sv_mapname;
 extern	cvar_t	*sv_mapChecksum;
@@ -399,17 +402,18 @@ int SV_SnapshotFlags( const client_t *client );
 void SV_WriteSnapshotToClient( client_t *client, msg_t *msg, clientSnapshot_t *oldframe, int lastframe );
 
 //
-// sv_netcodec.cpp: every server-to-client message is coded by netcodec (plan step 7)
+// sv_netcodec.cpp: every server-to-client message is coded by netcodec (plan step 7), every client packet decoded by it
+// (plan step 8)
 //
+namespace netcodec { namespace engine { struct ClientPacket; } }
+void SV_NetcodecNewClient( const client_t *client );
 void SV_NetcodecResetClient( const client_t *client );
 void SV_NetcodecSendGameState( client_t *client );
 void SV_NetcodecSendMapChange( client_t *client );
 void SV_NetcodecSendSnapshot( client_t *client, const char *setGame );
 size_t SV_NetcodecDemoGameState( client_t *client, byte *out, size_t outSize );
 void SV_NetcodecStats_f( void );
-void SV_NetcodecRecordClientPacket( client_t *client, const msg_t *msg );
-void SV_NetcodecRecordClose( const client_t *client );
-void SV_NetcodecRecordCloseAll( void );
+const netcodec::engine::ClientPacket *SV_NetcodecDecodeClientPacket( client_t *client, const msg_t *msg );
 
 //
 // sv_game.c

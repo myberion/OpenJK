@@ -703,8 +703,8 @@ void SV_SendMessageToClient( msg_t *msg, client_t *client ) {
 
 	// record information about the message
 	client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageSize = msg->cursize;
-	client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageSent = svs.time;
-	client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageAcked = -1;
+	client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageSent = Sys_Milliseconds();	// real time: svs.time moves once per server frame
+	client->frames[client->netchan.outgoingSequence & PACKET_MASK].acked = qfalse;
 
 	// save the message to demo.  this must happen before sending over network as that encodes the backing databuf
 	if ( client->demo.demorecording ) {

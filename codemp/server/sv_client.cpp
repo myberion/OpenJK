@@ -34,6 +34,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #endif
 
 #include "server/sv_gameapi.h"
+#include "netcodec/engine.h"
+
+namespace eng = netcodec::engine;
 
 static void SV_CloseDownload( client_t *cl );
 
@@ -311,7 +314,7 @@ gotnewcl:
 
 	// save the address
 	Netchan_Setup (NS_SERVER, &newcl->netchan , from, qport);
-	SV_NetcodecResetClient( newcl );	// the message codec holds no snapshot of this client yet
+	SV_NetcodecNewClient( newcl );	// the message codec holds no message of this client yet
 
 	// save the userinfo
 	Q_strncpyz( newcl->userinfo, userinfo, sizeof(newcl->userinfo) );
@@ -402,8 +405,6 @@ void SV_DropClient( client_t *drop, const char *reason ) {
 		Com_DPrintf( "Going to CS_ZOMBIE for %s\n", drop->name );
 		drop->state = CS_ZOMBIE;		// become free in a few seconds
 	}
-
-	SV_NetcodecRecordClose( drop );
 
 	if ( drop->demo.demorecording ) {
 		SV_StopRecordDemo( drop );
@@ -1189,18 +1190,23 @@ void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK ) {
 SV_ClientCommand
 ===============
 */
-static qboolean SV_ClientCommand( client_t *cl, msg_t *msg ) {
-	int		seq;
-	const char	*s;
+static qboolean SV_ClientCommand( client_t *cl, const eng::Command &command ) {
+	const int	seq = command.seq;
+	char		s[MAX_STRING_CHARS];
 	qboolean clientOk = qtrue;
-
-	seq = MSG_ReadLong( msg );
-	s = MSG_ReadString( msg );
 
 	// see if we have already executed it
 	if ( cl->lastClientCommand >= seq ) {
 		return qtrue;
 	}
+
+	// the decoded text, at most MAX_STRING_CHARS - 1 characters, format specifiers made harmless as the legacy string
+	// reader did ('%' became '.')
+	const uint32_t n = command.length < sizeof( s ) - 1 ? command.length : (uint32_t)sizeof( s ) - 1;
+	for ( uint32_t i = 0; i < n; i++ ) {
+		s[i] = command.text[i] == '%' ? '.' : command.text[i];
+	}
+	s[n] = 0;
 
 	Com_DPrintf( "clientCommand: %s : %i : %s\n", cl->name, seq, s );
 
@@ -1278,12 +1284,10 @@ On very fast clients, there may be multiple usercmd packed into
 each of the backup packets.
 ==================
 */
-static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
-	int			i, key;
+static void SV_UserMove( client_t *cl, const eng::ClientPacket &packet, qboolean delta ) {
+	int			i;
 	int			cmdCount;
-	usercmd_t	nullcmd;
 	usercmd_t	cmds[MAX_PACKET_USERCMDS];
-	usercmd_t	*cmd, *oldcmd;
 
 	if ( delta ) {
 		cl->deltaMessage = cl->messageAcknowledge;
@@ -1291,7 +1295,7 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 		cl->deltaMessage = -1;
 	}
 
-	cmdCount = MSG_ReadByte( msg );
+	cmdCount = (int)packet.numUserCmds;
 
 	if ( cmdCount < 1 ) {
 		Com_Printf( "cmdCount < 1\n" );
@@ -1303,32 +1307,28 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 		return;
 	}
 
-	// use the checksum feed in the key
-	key = sv.checksumFeed;
-	// also use the message acknowledge
-	key ^= cl->messageAcknowledge;
-	// also use the last acknowledged server command in the key
-	key ^= Com_HashKey(cl->reliableCommands[ cl->reliableAcknowledge & (MAX_RELIABLE_COMMANDS-1) ], 32);
-
-	Com_Memset( &nullcmd, 0, sizeof(nullcmd) );
-	oldcmd = &nullcmd;
-	for ( i = 0 ; i < cmdCount ; i++ ) {
-		cmd = &cmds[i];
-		MSG_ReadDeltaUsercmdKey( msg, key, oldcmd, cmd );
-		if ( sv_legacyFixes->integer ) {
+	Com_Memcpy( cmds, packet.userCmds, cmdCount * sizeof( usercmd_t ) );
+	if ( sv_legacyFixes->integer ) {
+		for ( i = 0 ; i < cmdCount ; i++ ) {
 			// block "charge jump" and other nonsense
-			if ( cmd->forcesel == FP_LEVITATION || cmd->forcesel >= NUM_FORCE_POWERS ) {
-				cmd->forcesel = 0xFFu;
+			if ( cmds[i].forcesel == FP_LEVITATION || cmds[i].forcesel >= NUM_FORCE_POWERS ) {
+				cmds[i].forcesel = 0xFFu;
 			}
 
 			// affects speed calculation
-			cmd->angles[ROLL] = 0;
+			cmds[i].angles[ROLL] = 0;
 		}
-		oldcmd = cmd;
 	}
 
-	// save time for ping calculation
-	cl->frames[ cl->messageAcknowledge & PACKET_MASK ].messageAcked = svs.time;
+	// save the real time of the first acknowledge of the message for the ping calculation, while its frame still holds
+	// it (a message being sent in fragments already took the slot PACKET_BACKUP messages back)
+	if ( cl->netchan.outgoingSequence - cl->messageAcknowledge < PACKET_BACKUP ) {
+		clientSnapshot_t *frame = &cl->frames[ cl->messageAcknowledge & PACKET_MASK ];
+		if ( !frame->acked ) {
+			frame->acked = qtrue;
+			frame->messageAcked = Sys_Milliseconds();
+		}
+	}
 
 	// TTimo
 	// catch the no-cp-yet situation before SV_ClientEnterWorld
@@ -1396,19 +1396,19 @@ USER CMD EXECUTION
 ===================
 SV_ExecuteClientMessage
 
-Parse a client packet
+Parse a client packet, decoded by netcodec (sv_netcodec.cpp)
 ===================
 */
 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
-	int			c;
 	int			serverId;
 
-	SV_NetcodecRecordClientPacket( cl, msg );	// sv_recordClientPackets
+	const eng::ClientPacket *packet = SV_NetcodecDecodeClientPacket( cl, msg );
+	if ( !packet ) {
+		return;	// malformed, or coded against a message the server no longer holds
+	}
 
-	MSG_Bitstream(msg);
-
-	serverId = MSG_ReadLong( msg );
-	cl->messageAcknowledge = MSG_ReadLong( msg );
+	serverId = packet->serverId;
+	cl->messageAcknowledge = packet->ack;
 
 	if (cl->messageAcknowledge < 0) {
 		// usually only hackers create messages like this
@@ -1417,7 +1417,7 @@ void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
 		return;
 	}
 
-	cl->reliableAcknowledge = MSG_ReadLong( msg );
+	cl->reliableAcknowledge = packet->reliableAck;
 
 	// NOTE: when the client message is fux0red the acknowledgement numbers
 	// can be out of range, this could cause the server to send thousands of server
@@ -1464,33 +1464,19 @@ void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
 		cl->oldServerTime = 0;
 	}
 
-	// read optional clientCommand strings
-	do {
-		c = MSG_ReadByte( msg );
-		if ( c == clc_EOF ) {
-			break;
-		}
-		if ( c != clc_clientCommand ) {
-			break;
-		}
-		if ( !SV_ClientCommand( cl, msg ) ) {
+	// the client commands not yet acknowledged
+	for ( uint32_t i = 0; i < packet->numCommands; i++ ) {
+		if ( !SV_ClientCommand( cl, packet->commands[i] ) ) {
 			return;	// we couldn't execute it because of the flood protection
 		}
 		if (cl->state == CS_ZOMBIE) {
 			return;	// disconnect command
 		}
-	} while ( 1 );
-
-	// read the usercmd_t
-	if ( c == clc_move ) {
-		SV_UserMove( cl, msg, qtrue );
-	} else if ( c == clc_moveNoDelta ) {
-		SV_UserMove( cl, msg, qfalse );
-	} else if ( c != clc_EOF ) {
-		Com_Printf( "WARNING: bad command byte for client %i\n", cl - svs.clients );
 	}
-//	if ( msg->readcount != msg->cursize ) {
-//		Com_Printf( "WARNING: Junk at end of packet for client %i\n", cl - svs.clients );
-//	}
+
+	// the usercmd_t
+	if ( packet->move != eng::Move::kNone ) {
+		SV_UserMove( cl, *packet, packet->move == eng::Move::kDelta ? qtrue : qfalse );
+	}
 }
 

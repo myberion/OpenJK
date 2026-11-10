@@ -90,22 +90,15 @@ struct BaseValues {
 	BaseValues v;
 	if (b == nullptr) return v;
 	v.has = true;
-	v.serverId = b->header->serverId;
-	v.cmdSeq = b->header->cmdSeq;
-	v.ack = b->header->ack;
-	v.commandTime = Load32(b->ps, kPsCommandTime);
-	for (size_t a = 0; a < 3; a++) {
-		const auto pattern = static_cast<uint32_t>(Load32(b->ps, kPsViewAngles + (4 * a)));
-		v.angles[a] = static_cast<uint32_t>(OldIndex(pattern) - Load32(b->ps, kPsDeltaAngles + (4 * a))) & 0xFFFFU;
-	}
-	v.first[2] = static_cast<uint8_t>(Load32(b->ps, kPsWeapon));
-	v.first[3] = static_cast<uint8_t>(Load32(b->ps, kPsForceSelected));
-	v.first[4] = static_cast<uint8_t>(Load32(b->ps, kPsHoldable));
+	v.serverId = b->serverId;
+	v.cmdSeq = b->cmdSeq;
+	v.ack = b->ack;
+	v.commandTime = b->commandTime;
+	v.angles = b->angles;
+	v.first[2] = b->weapon;
+	v.first[3] = b->forceSelected;
+	v.first[4] = b->holdable;
 	return v;
-}
-
-[[nodiscard]] bool UsableBase(const ClientBase *b) noexcept {
-	return b == nullptr || (b->header != nullptr && b->ps.size() >= kPlayerBytes);
 }
 
 [[nodiscard]] bool Valid(const ClientPacket &p) noexcept {
@@ -116,8 +109,10 @@ struct BaseValues {
 	return p.move <= Move::kNoDelta && !p.userCmds.empty() && p.userCmds.size() <= kMaxUserCmds;
 }
 
+static_assert(kAckWindow == 256, "the acknowledged message travels as its low 8 bits");
+
 template <class O> void PutClientPacket(O &io, const ClientPacket &p, const BaseValues &b) {
-	io.Raw(static_cast<uint64_t>(p.ack) & 0xFFU, 8);
+	io.Raw(static_cast<uint64_t>(p.ack) & (kAckWindow - 1), 8);
 	io.Symbol(Of(kBase), b.has ? 1 : 0);
 	if (b.has) {
 		const bool same = p.serverId == b.serverId;
@@ -170,11 +165,11 @@ template <class O> void PutClientPacket(O &io, const ClientPacket &p, const Base
 
 bool GetClientPacket(In &io, int64_t latest, const ClientBaseLookup &lookup, ClientPacket &p) {
 	const uint64_t low = io.Raw(8);
-	p.ack = latest - static_cast<int64_t>((static_cast<uint64_t>(latest) - low) & 0xFFU);
+	p.ack = latest - static_cast<int64_t>((static_cast<uint64_t>(latest) - low) & (kAckWindow - 1));
 	BaseValues b;
 	if (io.Symbol(Of(kBase)) != 0) {
 		ClientBase cb;
-		if (!lookup.Find(p.ack, cb) || cb.header == nullptr || cb.ps.size() < kPlayerBytes) return false;
+		if (!lookup.Find(p.ack, cb)) return false;
 		b = Values(&cb);
 		p.serverId = io.Symbol(Of(kSameServerId)) != 0 ? b.serverId : S32(static_cast<uint32_t>(io.Raw(32)));
 		p.reliableAck = b.cmdSeq + Unzz(io.Class(Of(kRelAck)));
@@ -240,8 +235,22 @@ bool GetClientPacket(In &io, int64_t latest, const ClientBaseLookup &lookup, Cli
 } // namespace
 } // namespace detail
 
+ClientBase ClientBaseOf(const HeaderRecord &header, std::span<const uint8_t> ps) noexcept {
+	using detail::Load32;
+	ClientBase b{ .serverId = header.serverId, .cmdSeq = header.cmdSeq, .ack = header.ack,
+	              .commandTime = Load32(ps, detail::kPsCommandTime) };
+	for (size_t a = 0; a < 3; a++) {
+		const auto pattern = static_cast<uint32_t>(Load32(ps, detail::kPsViewAngles + (4 * a)));
+		b.angles[a] = static_cast<uint32_t>(detail::OldIndex(pattern) - Load32(ps, detail::kPsDeltaAngles + (4 * a))) & 0xFFFFU;
+	}
+	b.weapon = static_cast<uint8_t>(Load32(ps, detail::kPsWeapon));
+	b.forceSelected = static_cast<uint8_t>(Load32(ps, detail::kPsForceSelected));
+	b.holdable = static_cast<uint8_t>(Load32(ps, detail::kPsHoldable));
+	return b;
+}
+
 bool ClientPacketEncoder::Encode(const ClientPacket &p, const ClientBase *base, size_t maxBytes, std::vector<uint8_t> &out) {
-	if (!detail::Valid(p) || !detail::UsableBase(base)) return false;
+	if (!detail::Valid(p)) return false;
 	const detail::Model &m = detail::Model::Get();
 	if (ops_.empty()) ops_.resize(1024);
 	if (scratch_.size() < maxBytes) scratch_.resize(maxBytes);
@@ -267,7 +276,7 @@ bool DecodeClientPacket(std::span<const uint8_t> bytes, int64_t latest, const Cl
 }
 
 bool CountClientPacket(const ClientPacket &p, const ClientBase *base, SymbolCounts &counts) {
-	if (!detail::Valid(p) || !detail::UsableBase(base) || counts.symbols.size() != detail::ctx::kCount ||
+	if (!detail::Valid(p) || counts.symbols.size() != detail::ctx::kCount ||
 	    counts.rawBits.size() != detail::ctx::kCount)
 		return false;
 	detail::CountOut io(counts);

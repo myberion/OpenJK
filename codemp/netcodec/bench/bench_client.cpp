@@ -1,4 +1,5 @@
-// netcodec_bench_client: the client packets recorded by the server (sv_recordClientPackets, plan step 8), decoded as
+// netcodec_bench_client: the client packets recorded by the server in the legacy format (plan step 8, part 1: the
+// server's sv_recordClientPackets, removed once the packets were coded by netcodec), decoded as
 // the server does with OpenJK's own msg.cpp and coded again as the client does (the bytes must be identical), with
 // where the bytes go; then each packet coded by netcodec and decoded again (the packet must come back unchanged), with
 // the sizes and the coding times of both (cold: the fastest of 3 passes over every packet; warm: the fastest of 5
@@ -46,7 +47,11 @@ struct Kept {
 	std::vector<uint8_t> userCmds;
 };
 
-// The file of sv_recordClientPackets (codemp/server/sv_netcodec.cpp: ClientPacketFileHeader, ClientPacketRecord).
+// The recorded file (.jkcp, little-endian): a FileHeader ("JKCP", version 1, sizeof(Record)), then per packet a
+// Record followed by its length bytes, as SV_ExecuteClientMessage read them (after the netchan header, the obfuscation
+// XOR removed). The Record holds sv.time and Sys_Milliseconds() at arrival, the user-command key the server derived
+// for the packet, and the acknowledged snapshot's server time (-1 when the server no longer held it) with its player
+// state's fields that match user-command fields (0 without a snapshot).
 struct FileHeader {
 	std::array<char, 4> magic;
 	int32_t version;
@@ -327,7 +332,7 @@ int Netcodec(const std::vector<netcodec::trace::ClientTraceStream> &streams, dou
 		uint64_t bytesNew = 0, bytesLegacy = 0;
 		for (size_t i = 0; i < s.packets.size(); i++, idx++) {
 			Item &it = items[idx];
-			it.base = netcodec::ClientBase{ .header = &it.header, .ps = it.ps };
+			it.base = netcodec::ClientBaseOf(it.header, it.ps);
 			const netcodec::ClientBase *base = it.t->hasBase ? &it.base : nullptr;
 			if (!enc.Encode(it.t->packet, base, 1 << 16, it.coded)) { failures++; continue; }
 			lookup.base = base;

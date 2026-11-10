@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 		for (const trace::ClientTraceStream &s : streams)
 			for (const trace::ClientTracePacket &t : s.packets) {
 				t.FillBase(header, ps);
-				const ClientBase base{ .header = &header, .ps = ps };
+				const ClientBase base = ClientBaseOf(header, ps);
 				packets++;
 				if (!CountClientPacket(t.packet, t.hasBase ? &base : nullptr, counts)) refused++;
 			}

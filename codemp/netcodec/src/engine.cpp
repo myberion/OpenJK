@@ -4,6 +4,7 @@
 #include "netcodec/codec.h"
 
 #include <algorithm>
+#include <cstring>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -15,6 +16,10 @@ namespace {
 static_assert(kMaxEntities == netcodec::kMaxEntities, "entity numbers");
 static_assert(kCommandWindow == netcodec::kCommandWindow, "command window");
 static_assert(kMinCommands >= (2 * kCommandWindow) + 2, "the command history the codec needs");
+static_assert(kAckWindow == netcodec::kAckWindow, "acknowledge window");
+static_assert(kMaxUserCmds == netcodec::kMaxUserCmds && kUserCmdBytes == netcodec::kUserCmdBytes, "user commands");
+static_assert(kMinCommands >= netcodec::kMaxClientCommands, "client commands");
+static_assert(sizeof(PacketBase) == 32, "the server keeps kAckWindow of them per client (09-changes-from-openjk.md)");
 
 [[nodiscard]] uint32_t Slot(int32_t seq) noexcept { return static_cast<uint32_t>(seq) % kPacketBackup; }
 
@@ -70,6 +75,12 @@ private:
 	std::span<const char> texts_;
 };
 
+[[nodiscard]] ClientBase ToClientBase(const PacketBase &b) noexcept {
+	return ClientBase{ .serverId = b.serverId, .cmdSeq = b.cmdSeq, .ack = b.ack, .commandTime = b.commandTime,
+	                   .angles = { b.angles[0], b.angles[1], b.angles[2] }, .weapon = b.weapon,
+	                   .forceSelected = b.forceSelected, .holdable = b.holdable };
+}
+
 // the op at index used of msg, reusing its storage (no allocation once warm)
 Op &Next(Message &msg, size_t &used, OpType type) {
 	if (used == msg.ops.size()) msg.ops.emplace_back();
@@ -86,6 +97,8 @@ struct ServerCodec::Impl {
 	MessageEncoder enc;
 	Message msg;
 	std::vector<uint8_t> out;
+	netcodec::ClientPacket packet;   // the last decoded client packet, and its commands as the engine sees them
+	std::vector<Command> commands;
 };
 
 ServerCodec::ServerCodec() : impl_(std::make_unique<Impl>()) {}
@@ -171,6 +184,59 @@ size_t ServerCodec::Encode(const ServerMessage &msg, const Frame *frames, const 
 
 bool ServerCodec::Escaped() const { return impl_->enc.Escaped(); }
 
+namespace {
+
+// the acknowledged message's PacketBase, when the server still holds it
+class AckLookup final : public ClientBaseLookup {
+public:
+	explicit AckLookup(std::span<const PacketBase> bases) noexcept : bases_(bases) {}
+
+	[[nodiscard]] bool Find(int64_t seq, ClientBase &base) const override {
+		if (seq < 0) return false;
+		const PacketBase &b = bases_[static_cast<size_t>(seq % kAckWindow)];
+		if (b.seq != seq) return false;
+		base = ToClientBase(b);
+		return true;
+	}
+
+private:
+	std::span<const PacketBase> bases_;
+};
+
+} // namespace
+
+bool ServerCodec::DecodePacket(const uint8_t *bytes, size_t size, int32_t latest, const PacketBase *bases, ClientPacket &packet) {
+	netcodec::ClientPacket &d = impl_->packet;
+	const AckLookup lookup(std::span<const PacketBase>(bases, kAckWindow));
+	if (!DecodeClientPacket(std::span<const uint8_t>(bytes, size), latest, lookup, d)) return false;
+	impl_->commands.clear();
+	for (const ClientCommand &c : d.commands)
+		impl_->commands.push_back(Command{ .seq = static_cast<int32_t>(c.seq), .text = c.text.c_str(), .length = ToU32(c.text.size()) });
+	packet = ClientPacket{ .serverId = static_cast<int32_t>(d.serverId),
+	                       .ack = static_cast<int32_t>(d.ack),
+	                       .reliableAck = static_cast<int32_t>(d.reliableAck),
+	                       .commands = impl_->commands.data(),
+	                       .numCommands = ToU32(impl_->commands.size()),
+	                       .move = static_cast<Move>(d.move),
+	                       .userCmds = d.userCmds.data(),
+	                       .numUserCmds = ToU32(d.userCmds.size()) };
+	return true;
+}
+
+PacketBase PacketBaseOf(const Frame &frame) {
+	const ClientBase b = ClientBaseOf(Header(frame.record, nullptr), PlayerBytes(frame.ps));
+	return PacketBase{ .seq = frame.seq,
+	                   .serverId = static_cast<int32_t>(b.serverId),
+	                   .cmdSeq = static_cast<int32_t>(b.cmdSeq),
+	                   .ack = static_cast<int32_t>(b.ack),
+	                   .commandTime = static_cast<int32_t>(b.commandTime),
+	                   .angles = { static_cast<uint16_t>(b.angles[0]), static_cast<uint16_t>(b.angles[1]),
+	                               static_cast<uint16_t>(b.angles[2]) },
+	                   .weapon = b.weapon,
+	                   .forceSelected = b.forceSelected,
+	                   .holdable = b.holdable };
+}
+
 // ------------------------------------------------------------------ client
 
 namespace {
@@ -212,6 +278,9 @@ struct ClientCodec::Impl {
 	Message msg;
 	std::vector<Command> commands;
 	std::vector<ConfigString> configStrings;
+	ClientPacketEncoder packetEncoder;
+	netcodec::ClientPacket packet;   // the packet being coded, as the encoder takes it
+	std::vector<uint8_t> out;
 };
 
 ClientCodec::ClientCodec() : impl_(std::make_unique<Impl>()) {}
@@ -288,6 +357,28 @@ bool ClientCodec::Decode(const uint8_t *bytes, size_t size, int32_t seq, const F
 	msg.configStrings = impl_->configStrings.data();
 	msg.numConfigStrings = ToU32(impl_->configStrings.size());
 	return true;
+}
+
+size_t ClientCodec::EncodePacket(const ClientPacket &p, const PacketBase *base, uint8_t *out, size_t outSize) {
+	if ((base != nullptr && base->seq != p.ack) || p.numCommands > kMinCommands || p.numUserCmds > kMaxUserCmds) return 0;
+	netcodec::ClientPacket &e = impl_->packet;
+	e.serverId = p.serverId;
+	e.ack = p.ack;
+	e.reliableAck = p.reliableAck;
+	const std::span<const Command> commands(p.commands, p.numCommands);
+	e.commands.resize(commands.size());
+	for (size_t i = 0; i < commands.size(); i++) {
+		e.commands[i].seq = commands[i].seq;
+		e.commands[i].text.assign(commands[i].text, commands[i].length);
+	}
+	e.move = static_cast<netcodec::Move>(p.move);
+	const std::span<const uint8_t> cmds(static_cast<const uint8_t *>(p.userCmds), size_t{ p.numUserCmds } * kUserCmdBytes);
+	e.userCmds.resize(p.numUserCmds);
+	for (size_t i = 0; i < e.userCmds.size(); i++) std::memcpy(e.userCmds[i].data(), cmds.subspan(i * kUserCmdBytes, kUserCmdBytes).data(), kUserCmdBytes);
+	const ClientBase b = base != nullptr ? ToClientBase(*base) : ClientBase{};
+	if (!impl_->packetEncoder.Encode(e, base != nullptr ? &b : nullptr, outSize, impl_->out)) return 0;
+	std::ranges::copy(impl_->out, out);
+	return impl_->out.size();
 }
 
 } // namespace netcodec::engine

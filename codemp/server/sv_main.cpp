@@ -47,7 +47,6 @@ cvar_t	*sv_reconnectlimit;		// minimum seconds between connect messages
 cvar_t	*sv_showghoultraces;	// report ghoul2 traces
 cvar_t	*sv_showloss;			// report when usercmds are lost
 cvar_t	*sv_netcodecCompare;		// debug: also code each message in the legacy format, print the byte ratio
-cvar_t	*sv_recordClientPackets;	// debug: write each client's packets to a file (plan step 8)
 cvar_t	*sv_killserver;			// menu system can set to 1 to shut server down
 cvar_t	*sv_mapname;
 cvar_t	*sv_mapChecksum;
@@ -874,7 +873,7 @@ void SV_CalcPings( void ) {
 		total = 0;
 		count = 0;
 		for ( j = 0 ; j < PACKET_BACKUP ; j++ ) {
-			if ( cl->frames[j].messageAcked <= 0 ) {
+			if ( !cl->frames[j].acked ) {
 				continue;
 			}
 			delta = cl->frames[j].messageAcked - cl->frames[j].messageSent;

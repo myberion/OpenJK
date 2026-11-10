@@ -534,6 +534,7 @@ void CL_NetcodecReset( void );
 void CL_NetcodecParseServerMessage( msg_t *msg );
 qboolean CL_NetcodecRecordGameState( void );
 void CL_NetcodecStats_f( void );
+qboolean CL_NetcodecWritePacket( msg_t *buf, int count, qboolean delta );
 
 //====================================================================
 

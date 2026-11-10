@@ -18,11 +18,13 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 ===========================================================================
 */
 
-// sv_netcodec.cpp -- every server-to-client message is coded by the message codec (codemp/netcodec, plan step 7).
-// The codec reads the engine's own data in place: the client's snapshots (client_t::frames), the shared entity ring
-// (svs.snapshotEntities), the reliable commands (client_t::reliableCommands) and the baselines
-// (sv.svEntities[].baseline). Next to the engine's frames, each client has one netcodec Frame per message slot, which
-// describes the snapshot a message held, so that later messages can be coded against it.
+// sv_netcodec.cpp -- every server-to-client message is coded by the message codec (codemp/netcodec, plan step 7),
+// and every client packet is decoded by it (plan step 8). The codec reads the engine's own data in place: the client's
+// snapshots (client_t::frames), the shared entity ring (svs.snapshotEntities), the reliable commands
+// (client_t::reliableCommands) and the baselines (sv.svEntities[].baseline). Next to the engine's frames, each client
+// has one netcodec Frame per message slot, which describes the snapshot a message held, so that later messages can be
+// coded against it, and one PacketBase per message for its last kAckWindow messages, which the client's packets are
+// coded against.
 
 #include "server.h"
 #include "netcodec/engine.h"
@@ -53,6 +55,11 @@ static eng::ServerCodec &Codec( void ) {
 
 static eng::Frame s_frames[MAX_CLIENTS][PACKET_BACKUP];
 
+// What the client's packets are coded against: one per message with a snapshot, for the last kAckWindow messages
+// (slot seq % kAckWindow). Reset only at connection: unlike the frames, a gamestate or a demo does not reset them, since
+// a packet may acknowledge a message sent before either.
+static eng::PacketBase s_packetBases[MAX_CLIENTS][eng::kAckWindow];
+
 static int ClientIndex( const client_t *client ) {
 	return (int)( client - svs.clients );
 }
@@ -64,9 +71,35 @@ void SV_NetcodecResetClient( const client_t *client ) {
 	}
 }
 
-// sv_netcodecCompare: the same message in the legacy format (huffman bitstream), for its size only
-static int s_cmpMessages, s_cmpTime;
-static double s_cmpCodec, s_cmpLegacy;
+// a new connection: the codec holds no message of it yet
+void SV_NetcodecNewClient( const client_t *client ) {
+	SV_NetcodecResetClient( client );
+	for ( eng::PacketBase &base : s_packetBases[ClientIndex( client )] ) {
+		base.seq = -1;
+	}
+}
+
+// sv_netcodecCompare: the same message or client packet in the legacy format (huffman bitstream), for its size only;
+// the byte counts are printed every 10 seconds (every message or packet with 2)
+struct netcodecCompare_t {
+	int		count, time;
+	double	codec, legacy;
+};
+
+static netcodecCompare_t s_cmpMessages, s_cmpPackets;
+
+static void SV_NetcodecCompareAdd( netcodecCompare_t &c, const char *what, const char *unit, size_t codecBytes, int legacyBytes ) {
+	c.count++;
+	c.codec += (double)codecBytes;
+	c.legacy += (double)legacyBytes;
+	if ( sv_netcodecCompare->integer > 1 || svs.time - c.time >= 10000 || svs.time < c.time ) {
+		Com_Printf( "netcodec: %d %s, %.1f bytes per %s against %.1f in the legacy format (ratio %.3f)\n",
+			c.count, what, c.codec / c.count, unit, c.legacy / c.count, c.legacy > 0 ? c.codec / c.legacy : 0.0 );
+		c.count = 0;
+		c.codec = c.legacy = 0;
+		c.time = svs.time;
+	}
+}
 
 static void SV_NetcodecCompare( client_t *client, const eng::ServerMessage &sm, clientSnapshot_t *oldframe, int lastframe, size_t codecBytes ) {
 	static byte buf[MAX_MSGLEN];
@@ -101,18 +134,7 @@ static void SV_NetcodecCompare( client_t *client, const eng::ServerMessage &sm, 
 	if ( msg.overflowed ) {
 		return;
 	}
-
-	s_cmpMessages++;
-	s_cmpCodec += (double)codecBytes;
-	s_cmpLegacy += (double)msg.cursize;
-	if ( sv_netcodecCompare->integer > 1 || svs.time - s_cmpTime >= 10000 || svs.time < s_cmpTime ) {
-		Com_Printf( "netcodec: %d messages, %.1f bytes per message against %.1f in the legacy format (ratio %.3f)\n",
-			s_cmpMessages, s_cmpCodec / s_cmpMessages, s_cmpLegacy / s_cmpMessages,
-			s_cmpLegacy > 0 ? s_cmpCodec / s_cmpLegacy : 0.0 );
-		s_cmpMessages = 0;
-		s_cmpCodec = s_cmpLegacy = 0;
-		s_cmpTime = svs.time;
-	}
+	SV_NetcodecCompareAdd( s_cmpMessages, "messages", "message", codecBytes, msg.cursize );
 }
 
 // the last server command the client acknowledged (for a bot recording a demo, the last one it was sent)
@@ -162,7 +184,9 @@ static void SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSna
 	const size_t size = SV_NetcodecEncode( client, sm, buf, sizeof( buf ), delta, record );
 
 	eng::Frame &slot = frames[sm.seq % PACKET_BACKUP];
+	eng::PacketBase &packetBase = s_packetBases[ClientIndex( client )][sm.seq % eng::kAckWindow];
 	slot.seq = -1;
+	packetBase.seq = -1;
 	if ( !size ) {
 		// the legacy code cleared an overflowed message too, and sent it empty
 		Com_Printf( "WARNING: message for %s not coded (too large or malformed)\n", client->name );
@@ -175,6 +199,7 @@ static void SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSna
 			slot = sm.frame;
 			slot.seq = sm.seq;
 			slot.record = record;
+			packetBase = eng::PacketBaseOf( slot );
 			st.snapshots++;
 			if ( !sm.delta ) {
 				st.noBase++;
@@ -294,110 +319,74 @@ void SV_NetcodecStats_f( void ) {
 	for ( int i = 0; i < sv_maxclients->integer; i++ ) {
 		client_t *cl = &svs.clients[i];
 		netcodecStats_t &st = cl->netcodecStats;
-		if ( cl->state < CS_CONNECTED || !st.messages ) {
+		if ( cl->state < CS_CONNECTED || ( !st.messages && !st.packets ) ) {
 			continue;
 		}
 		Com_Printf( "%2d %s^7: %d messages, %.1f bytes per message, %d escaped; %d snapshots: %d without a base asked, "
-			"%d with the asked base refused, base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back\n",
-			i, cl->name, st.messages, st.bytes / st.messages, st.escaped, st.snapshots, st.noBase, st.baseRefused,
-			st.baseAge[0], st.baseAge[1], st.baseAge[2], st.baseAge[3], st.baseAge[4], st.baseAge[5] );
+			"%d with the asked base refused, base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back; "
+			"%d client packets, %.1f bytes per packet, %d not decoded\n",
+			i, cl->name, st.messages, st.messages ? st.bytes / st.messages : 0.0, st.escaped, st.snapshots, st.noBase,
+			st.baseRefused, st.baseAge[0], st.baseAge[1], st.baseAge[2], st.baseAge[3], st.baseAge[4], st.baseAge[5],
+			st.packets, st.packets ? st.packetBytes / st.packets : 0.0, st.packetsNotDecoded );
 		Com_Memset( &st, 0, sizeof( st ) );
 	}
 }
 
-// sv_recordClientPackets (debug, plan step 8): each client's packets are written, as SV_ExecuteClientMessage reads them
-// (after the netchan header, the obfuscation XOR already removed), to clientpackets/client<n>_<date>.jkcp under the
-// home path, one file per connection, for the measurements and the training data of the client-to-server format.
-// File: ClientPacketFileHeader, then per packet a ClientPacketRecord followed by its length bytes; little-endian.
-struct ClientPacketFileHeader {
-	char magic[4];              // "JKCP"
-	int32_t version;            // 1
-	int32_t recordSize;         // sizeof( ClientPacketRecord )
-};
+// sv_netcodecCompare on client packets: the same packet in the legacy format, with the user-command key
+static void SV_NetcodecComparePacket( client_t *client, const eng::ClientPacket &p, size_t codecBytes ) {
+	static byte buf[MAX_MSGLEN];
+	usercmd_t cmds[MAX_PACKET_USERCMDS + 1] = {};	// cmds[0]: the null command the first one is coded against
+	msg_t msg;
 
-struct ClientPacketRecord {
-	int32_t svTime;             // sv.time at arrival
-	int32_t realTime;           // Sys_Milliseconds() at arrival
-	int32_t key;                // the usercmd key SV_UserMove derives for this packet
-	int32_t snapTime;           // server time of the acknowledged snapshot, -1 if the server no longer holds it
-	int32_t commandTime;        // then its player state's fields that match usercmd fields (0 without a snapshot)
-	float viewangles[3];
-	int32_t deltaAngles[3];
-	int32_t weapon;
-	int32_t forcePowerSelected;
-	int32_t holdableItem;
-	int32_t length;             // bytes that follow
-};
-static_assert( sizeof( ClientPacketRecord ) == 15 * 4, "no padding in the file records" );
-
-static fileHandle_t s_recordFiles[MAX_CLIENTS];
-
-void SV_NetcodecRecordClose( const client_t *client ) {
-	fileHandle_t &f = s_recordFiles[ClientIndex( client )];
-	if ( f ) {
-		FS_FCloseFile( f );
-		f = 0;
+	MSG_Init( &msg, buf, sizeof( buf ) );
+	msg.allowoverflow = qtrue;
+	MSG_Bitstream( &msg );
+	MSG_WriteLong( &msg, p.serverId );
+	MSG_WriteLong( &msg, p.ack );
+	MSG_WriteLong( &msg, p.reliableAck );
+	for ( uint32_t i = 0; i < p.numCommands; i++ ) {
+		MSG_WriteByte( &msg, clc_clientCommand );
+		MSG_WriteLong( &msg, p.commands[i].seq );
+		MSG_WriteString( &msg, p.commands[i].text );
 	}
-}
-
-void SV_NetcodecRecordCloseAll( void ) {
-	for ( fileHandle_t &f : s_recordFiles ) {
-		if ( f ) {
-			FS_FCloseFile( f );
-			f = 0;
+	if ( p.move != eng::Move::kNone ) {
+		const int key = sv.checksumFeed ^ p.ack ^ Com_HashKey( client->reliableCommands[p.reliableAck & ( MAX_RELIABLE_COMMANDS - 1 )], 32 );
+		Com_Memcpy( &cmds[1], p.userCmds, p.numUserCmds * sizeof( usercmd_t ) );
+		MSG_WriteByte( &msg, p.move == eng::Move::kDelta ? clc_move : clc_moveNoDelta );
+		MSG_WriteByte( &msg, (int)p.numUserCmds );
+		for ( uint32_t i = 1; i <= p.numUserCmds; i++ ) {
+			MSG_WriteDeltaUsercmdKey( &msg, key, &cmds[i - 1], &cmds[i] );
 		}
 	}
-}
-
-void SV_NetcodecRecordClientPacket( client_t *client, const msg_t *msg ) {
-	const int ci = ClientIndex( client );
-	fileHandle_t &f = s_recordFiles[ci];
-	if ( !sv_recordClientPackets->integer ) {
-		SV_NetcodecRecordClose( client );
+	MSG_WriteByte( &msg, clc_EOF );
+	if ( msg.overflowed ) {
 		return;
 	}
-	if ( !f ) {
-		qtime_t t;
-		Com_RealTime( &t );
-		const char *name = va( "clientpackets/client%d_%04d%02d%02d-%02d%02d%02d.jkcp", ci, 1900 + t.tm_year, 1 + t.tm_mon,
-			t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec );
-		f = FS_FOpenFileWrite( name );
-		if ( !f ) {
-			Com_Printf( S_COLOR_YELLOW "Cannot write %s, sv_recordClientPackets set to 0\n", name );
-			Cvar_Set( "sv_recordClientPackets", "0" );
-			return;
-		}
-		const ClientPacketFileHeader header = { { 'J', 'K', 'C', 'P' }, 1, (int32_t)sizeof( ClientPacketRecord ) };
-		FS_Write( &header, sizeof( header ), f );
-		Com_Printf( "Recording the packets of client %d to %s\n", ci, name );
-	}
+	SV_NetcodecCompareAdd( s_cmpPackets, "client packets", "packet", codecBytes, msg.cursize );
+}
 
-	// the header as SV_ExecuteClientMessage reads it, for the key of SV_UserMove and the acknowledged snapshot
-	msg_t peek = *msg;
-	MSG_Bitstream( &peek );
-	MSG_ReadLong( &peek );  // serverId
-	const int ack = MSG_ReadLong( &peek );
-	const int reliableAck = MSG_ReadLong( &peek );
+// Decodes a client packet (the payload after the netchan header). NULL if it is malformed or coded against a message
+// whose PacketBase the server no longer holds: the packet is then dropped. The packet points into the codec until the
+// next one is decoded.
+const eng::ClientPacket *SV_NetcodecDecodeClientPacket( client_t *client, const msg_t *msg ) {
+	static eng::ClientPacket packet;
+	const int size = msg->cursize - msg->readcount;
+	netcodecStats_t &st = client->netcodecStats;
 
-	ClientPacketRecord rec = {};
-	rec.svTime = sv.time;
-	rec.realTime = Sys_Milliseconds();
-	rec.key = sv.checksumFeed ^ ack ^ Com_HashKey( client->reliableCommands[reliableAck & ( MAX_RELIABLE_COMMANDS - 1 )], 32 );
-	rec.snapTime = -1;
-	const eng::Frame &frame = s_frames[ci][( ack & 0x7fffffff ) % PACKET_BACKUP];
-	if ( ack >= 0 && frame.seq == ack ) {
-		const playerState_t *ps = static_cast<const playerState_t *>( frame.ps );
-		rec.snapTime = (int32_t)frame.record.time;
-		rec.commandTime = ps->commandTime;
-		for ( int i = 0; i < 3; i++ ) {
-			rec.viewangles[i] = ps->viewangles[i];
-			rec.deltaAngles[i] = ps->delta_angles[i];
-		}
-		rec.weapon = ps->weapon;
-		rec.forcePowerSelected = ps->fd.forcePowerSelected;
-		rec.holdableItem = ps->stats[STAT_HOLDABLE_ITEM];
+	st.packets++;
+	if ( size <= 0 ) {
+		st.packetsNotDecoded++;
+		return NULL;
 	}
-	rec.length = msg->cursize - msg->readcount;
-	FS_Write( &rec, sizeof( rec ), f );
-	FS_Write( msg->data + msg->readcount, rec.length, f );
+	st.packetBytes += size;
+	if ( !Codec().DecodePacket( msg->data + msg->readcount, (size_t)size, client->netchan.outgoingSequence - 1,
+		s_packetBases[ClientIndex( client )], packet ) ) {
+		st.packetsNotDecoded++;
+		Com_DPrintf( "netcodec: packet of %s not decoded\n", client->name );
+		return NULL;
+	}
+	if ( sv_netcodecCompare->integer ) {
+		SV_NetcodecComparePacket( client, packet, (size_t)size );
+	}
+	return &packet;
 }

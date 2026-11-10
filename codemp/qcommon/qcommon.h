@@ -1044,9 +1044,6 @@ int		Huff_getBit( byte *fout, int *offset);
 
 extern huffman_t clientHuffTables;
 
-#define SV_DECODE_START		12
-#define	CL_ENCODE_START		12
-
 inline int Round(float value)
 {
 	return((int)floorf(value + 0.5f));

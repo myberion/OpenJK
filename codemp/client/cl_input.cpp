@@ -1479,59 +1479,24 @@ CL_WritePacket
 Create and send the command packet to the server
 Including both the reliable commands and the usercmds
 
-During normal gameplay, a client packet will contain something like:
-
-4	sequence number
-2	qport
-4	serverid
-4	acknowledged sequence number
-4	clc.serverCommandSequence
-<optional reliable commands>
-1	clc_move or clc_moveNoDelta
-1	command count
-<count * usercmds>
-
+After the netchan header (sequence number, qport), a client packet holds the serverId, the last server message and
+server command received, the client commands not yet acknowledged and the usercmds of the last few packets, all coded
+by netcodec (CL_NetcodecWritePacket, plan step 8).
 ===================
 */
 void CL_WritePacket( void ) {
 	msg_t		buf;
 	byte		data[MAX_MSGLEN];
-	int			i, j;
-	usercmd_t	*cmd, *oldcmd;
-	usercmd_t	nullcmd;
 	int			packetNum;
 	int			oldPacketNum;
-	int			count, key;
+	int			count;
 
 	// don't send anything if playing back a demo
 	if ( clc.demoplaying || cls.state == CA_CINEMATIC ) {
 		return;
 	}
 
-	Com_Memset( &nullcmd, 0, sizeof(nullcmd) );
-	oldcmd = &nullcmd;
-
 	MSG_Init( &buf, data, sizeof(data) );
-
-	MSG_Bitstream( &buf );
-	// write the current serverId so the server
-	// can tell if this is from the current gameState
-	MSG_WriteLong( &buf, cl.serverId );
-
-	// write the last message we received, which can
-	// be used for delta compression, and is also used
-	// to tell if we dropped a gamestate
-	MSG_WriteLong( &buf, clc.serverMessageSequence );
-
-	// write the last reliable message we received
-	MSG_WriteLong( &buf, clc.serverCommandSequence );
-
-	// write any unacknowledged clientCommands
-	for ( i = clc.reliableAcknowledge + 1 ; i <= clc.reliableSequence ; i++ ) {
-		MSG_WriteByte( &buf, clc_clientCommand );
-		MSG_WriteLong( &buf, i );
-		MSG_WriteString( &buf, clc.reliableCommands[ i & (MAX_RELIABLE_COMMANDS-1) ] );
-	}
 
 	// we want to send all the usercmds that were generated in the last
 	// few packet, so even if a couple packets are dropped in a row,
@@ -1547,43 +1512,22 @@ void CL_WritePacket( void ) {
 		count = MAX_PACKET_USERCMDS;
 		Com_Printf("MAX_PACKET_USERCMDS\n");
 	}
-	if ( count >= 1 ) {
-		if ( cl_showSend->integer ) {
-			Com_Printf( "(%i)", count );
-		}
+	if ( count >= 1 && cl_showSend->integer ) {
+		Com_Printf( "(%i)", count );
+	}
 
-		// begin a client move command
-		if ( cl_nodelta->integer || !cl.snap.valid
-			|| clc.serverMessageSequence != cl.snap.messageNum ) {
-			MSG_WriteByte (&buf, clc_moveNoDelta);
-		} else {
-			MSG_WriteByte (&buf, clc_move);
-		}
+	// the usercmds are a delta (clc_move) unless the last message's snapshot is missing (clc_moveNoDelta: the server
+	// sends a full snapshot)
+	const qboolean delta = ( !cl_nodelta->integer && cl.snap.valid && clc.serverMessageSequence == cl.snap.messageNum ) ? qtrue : qfalse;
+	if ( !CL_NetcodecWritePacket( &buf, count, delta ) ) {
+		return;
+	}
 
-		// write the command count
-		MSG_WriteByte( &buf, count );
-
-		// use the checksum feed in the key
-		key = clc.checksumFeed;
-		// also use the message acknowledge
-		key ^= clc.serverMessageSequence;
-		// also use the last acknowledged server command in the key
-		key ^= Com_HashKey(clc.serverCommands[ clc.serverCommandSequence & (MAX_RELIABLE_COMMANDS-1) ], 32);
-
-		// write all the commands, including the predicted command
-		for ( i = 0 ; i < count ; i++ ) {
-			j = (cl.cmdNumber - count + i + 1) & CMD_MASK;
-			cmd = &cl.cmds[j];
-			MSG_WriteDeltaUsercmdKey (&buf, key, oldcmd, cmd);
-			oldcmd = cmd;
-		}
-
-		if (cl.gcmdSentValue)
-		{ //hmm, just clear here, I guess.. hoping it will resolve issues with gencmd values sometimes not going through.
-			cl.gcmdSendValue = qfalse;
-			cl.gcmdSentValue = qfalse;
-			cl.gcmdValue = 0;
-		}
+	if ( count >= 1 && cl.gcmdSentValue )
+	{ //hmm, just clear here, I guess.. hoping it will resolve issues with gencmd values sometimes not going through.
+		cl.gcmdSendValue = qfalse;
+		cl.gcmdSentValue = qfalse;
+		cl.gcmdValue = 0;
 	}
 
 	//
@@ -1591,7 +1535,7 @@ void CL_WritePacket( void ) {
 	//
 	packetNum = clc.netchan.outgoingSequence & PACKET_MASK;
 	cl.outPackets[ packetNum ].p_realtime = cls.realtime;
-	cl.outPackets[ packetNum ].p_serverTime = oldcmd->serverTime;
+	cl.outPackets[ packetNum ].p_serverTime = count >= 1 ? cl.cmds[ cl.cmdNumber & CMD_MASK ].serverTime : 0;
 	cl.outPackets[ packetNum ].p_cmdNumber = cl.cmdNumber;
 	clc.lastPacketSentTime = cls.realtime;
 

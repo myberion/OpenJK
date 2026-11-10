@@ -217,6 +217,7 @@ struct SnapshotOut {
 inline constexpr size_t kUserCmdBytes = 28;      // sizeof(usercmd_t)
 inline constexpr uint32_t kMaxUserCmds = 32;     // MAX_PACKET_USERCMDS
 inline constexpr uint32_t kMaxClientCommands = 256;   // decoder limit (MAX_RELIABLE_COMMANDS)
+inline constexpr uint32_t kAckWindow = 256;      // the acknowledged message travels as its low 8 bits
 
 // A usercmd_t image: serverTime, angles[3], buttons (32-bit integers at offsets 0, 4, 8, 12, 16), then the bytes
 // weapon, forcesel, invensel, generic_cmd, forwardmove, rightmove, upmove (20 to 26). As in the legacy format, the
@@ -239,11 +240,22 @@ struct ClientPacket {
 	std::vector<UserCmd> userCmds;           // 1 to kMaxUserCmds with a move, none without
 };
 
-// The acknowledged message as both sides hold it: its record and its player state (playerState_t).
+// The acknowledged message as both sides hold it: the values of its record and of its player state that a packet is
+// coded against (ClientBaseOf). The server keeps them for its last kAckWindow messages, the client takes them from its
+// frame of the message it acknowledges.
 struct ClientBase {
-	const HeaderRecord *header = nullptr;
-	std::span<const uint8_t> ps;
+	int64_t serverId = 0;
+	int64_t cmdSeq = 0;
+	int64_t ack = 0;
+	int64_t commandTime = 0;
+	std::array<uint32_t, 3> angles{};      // the view angle indices less delta_angles, 16 bits
+	uint8_t weapon = 0;                    // the low byte of weapon, fd.forcePowerSelected, stats[STAT_HOLDABLE_ITEM]
+	uint8_t forceSelected = 0;
+	uint8_t holdable = 0;
 };
+
+// The values of a message with its record and its player state (playerState_t, kPlayerBytes).
+[[nodiscard]] ClientBase ClientBaseOf(const HeaderRecord &header, std::span<const uint8_t> ps) noexcept;
 
 class ClientPacketEncoder {
 public:

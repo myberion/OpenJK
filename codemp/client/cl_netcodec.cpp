@@ -18,11 +18,12 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 ===========================================================================
 */
 
-// cl_netcodec.cpp -- the server's messages are decoded by the message codec (codemp/netcodec, plan step 7). The
-// codec writes the snapshot's entities into cl.parseEntities in place, and its player states and the gamestate's
-// baselines where it is told; the CL_Parse* functions of cl_parse.cpp then apply what it decoded, as they applied
-// what the legacy reader parsed. Next to cl.snapshots, one netcodec Frame per message slot describes the snapshot a
-// message held, so that later messages can be decoded against it.
+// cl_netcodec.cpp -- the server's messages are decoded by the message codec (codemp/netcodec, plan step 7), and the
+// client's packets coded by it (plan step 8). The codec writes the snapshot's entities into cl.parseEntities in place,
+// and its player states and the gamestate's baselines where it is told; the CL_Parse* functions of cl_parse.cpp then
+// apply what it decoded, as they applied what the legacy reader parsed. Next to cl.snapshots, one netcodec Frame per
+// message slot describes the snapshot a message held, so that later messages can be decoded against it, and the
+// client's packets coded against the last one.
 
 #include "client.h"
 #include "cl_cgameapi.h"
@@ -45,6 +46,7 @@ static eng::ClientCodec &Codec( void ) {
 }
 
 static eng::Frame s_frames[PACKET_BACKUP];
+static int s_arrival[PACKET_BACKUP];	// the real time the message of each frame arrived (client packets)
 
 // the baselines the codec decodes a gamestate into and decodes snapshots against: a copy of its own, since a
 // gamestate clears the client state (cl.entityBaselines included) after it is decoded; CL_ParseGamestateEnd copies it
@@ -188,6 +190,9 @@ static const char *Sanitized( const char *text, uint32_t length, char *buf, size
 
 // netstats: the message codec's statistics since the last netstats
 static struct {
+	int		packets;		// client packets sent
+	double	packetBytes;
+	int		packetsNoBase;	// coded without the message they acknowledge (see CL_NetcodecPacketBase)
 	int		messages;
 	int		lost;			// gaps in the message sequence: lost on the way (or dropped by the netchan)
 	int		notDecoded;		// empty, malformed, or coded against a snapshot this client no longer holds
@@ -199,15 +204,21 @@ static struct {
 } s_stats;
 
 void CL_NetcodecStats_f( void ) {
-	if ( !s_stats.messages ) {
-		Com_Printf( "No server message since the last netstats.\n" );
+	if ( !s_stats.messages && !s_stats.packets ) {
+		Com_Printf( "No server message or client packet since the last netstats.\n" );
 		return;
 	}
-	Com_Printf( "%d messages (%d lost on the way, %d not decoded), %.1f bytes per message; %d snapshots: %d without a base, "
-		"base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back\n",
-		s_stats.messages, s_stats.lost, s_stats.notDecoded, s_stats.bytes / s_stats.messages, s_stats.snapshots,
-		s_stats.noBase, s_stats.baseAge[0], s_stats.baseAge[1], s_stats.baseAge[2], s_stats.baseAge[3], s_stats.baseAge[4],
-		s_stats.baseAge[5] );
+	if ( s_stats.messages ) {
+		Com_Printf( "%d messages (%d lost on the way, %d not decoded), %.1f bytes per message; %d snapshots: %d without a base, "
+			"base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back\n",
+			s_stats.messages, s_stats.lost, s_stats.notDecoded, s_stats.bytes / s_stats.messages, s_stats.snapshots,
+			s_stats.noBase, s_stats.baseAge[0], s_stats.baseAge[1], s_stats.baseAge[2], s_stats.baseAge[3], s_stats.baseAge[4],
+			s_stats.baseAge[5] );
+	}
+	if ( s_stats.packets ) {
+		Com_Printf( "%d client packets, %.1f bytes per packet, %d without a base\n", s_stats.packets,
+			s_stats.packetBytes / s_stats.packets, s_stats.packetsNoBase );
+	}
 	const int lastSeq = s_stats.lastSeq;
 	Com_Memset( &s_stats, 0, sizeof( s_stats ) );
 	s_stats.lastSeq = lastSeq;
@@ -342,6 +353,7 @@ void CL_NetcodecParseServerMessage( msg_t *msg ) {
 		CL_ParseSnapshot( &newSnap );	// copies it to cl.snapshots[slot]
 
 		eng::Frame &f = s_frames[slot];
+		s_arrival[slot] = cls.realtime;
 		f.seq = seq;
 		f.ps = &cl.snapshots[slot].ps;
 		f.vps = cm.vehicle ? &cl.snapshots[slot].vps : NULL;
@@ -369,4 +381,113 @@ void CL_NetcodecParseServerMessage( msg_t *msg ) {
 	if ( clc.demorecording ) {
 		CL_NetcodecDemoRecord( cm, seq, oldCommand + 1, oldSnapshot );
 	}
+}
+
+// Client packets (plan step 8). A packet's user commands are coded against the message it acknowledges (the last one
+// received, clc.serverMessageSequence) when the client holds that message's snapshot and the server surely still holds
+// its PacketBase and reads the acknowledge right: the server keeps the PacketBases of its last kAckWindow messages, and
+// the acknowledge travels as its low 8 bits. So the messages the server has sent since must be fewer than kAckWindow
+// when the packet arrives. Their number is estimated from the time since the message arrived plus the round-trip time,
+// over the time between the server's messages (the snapshot times of the message and of its own base), with a margin
+// of 2; when one of them is unknown, the packet is coded without a base.
+
+// per packet sent, for the round-trip time: its netchan sequence, its real time, the server time of its last user
+// command (moved: it had user commands)
+static struct {
+	int		seq;
+	int		sent;
+	int		serverTime;
+	bool	moved;
+} s_sent[eng::kAckWindow];
+
+// The round-trip time seen with the message of frame f: from the sending of the newest packet whose last user command
+// the server had executed in it (at or before its snapshot's commandTime) to its arrival, as the legacy client's ping
+// (CL_ParseSnapshot) but over the last kAckWindow packets. qfalse if none of them is found.
+static qboolean CL_NetcodecRoundTrip( const eng::Frame &f, int &rtt ) {
+	const int commandTime = static_cast<const playerState_t *>( f.ps )->commandTime;
+	const int last = clc.netchan.outgoingSequence - 1;
+
+	for ( int seq = last; seq >= 1 && last - seq < (int)eng::kAckWindow; seq-- ) {
+		const auto &s = s_sent[seq % eng::kAckWindow];
+		if ( s.seq != seq ) {
+			break;	// not sent by this connection
+		}
+		if ( s.moved && s.serverTime <= commandTime ) {
+			rtt = s_arrival[f.seq & PACKET_MASK] - s.sent;
+			return rtt >= 0 ? qtrue : qfalse;
+		}
+	}
+	return qfalse;
+}
+
+// the frame of the message the next packet acknowledges, when the packet may be coded against it (see above)
+static const eng::Frame *CL_NetcodecPacketBase( void ) {
+	const int seq = clc.serverMessageSequence;
+	const eng::Frame &f = s_frames[seq & PACKET_MASK];
+	if ( f.seq != seq || f.record.olderSeq < 0 ) {
+		return NULL;	// no snapshot held, or no earlier one for the time between messages
+	}
+	const eng::Frame &older = s_frames[f.record.olderSeq & PACKET_MASK];
+	const int64_t between = f.record.time - older.record.time;	// over seq - olderSeq messages
+	int rtt = 0;
+	if ( older.seq != f.record.olderSeq || between <= 0 || !CL_NetcodecRoundTrip( f, rtt ) ) {
+		return NULL;
+	}
+	const int64_t elapsed = (int64_t)( cls.realtime - s_arrival[seq & PACKET_MASK] ) + rtt;
+	if ( elapsed * ( seq - f.record.olderSeq ) >= (int64_t)( eng::kAckWindow / 2 ) * between ) {
+		return NULL;
+	}
+	return &f;
+}
+
+// Codes the client packet into buf: the serverId, the last server message and server command received, the client
+// commands not yet acknowledged, and the last count user commands (none if count < 1), as a delta or asking for a full
+// snapshot. qfalse if it could not be coded (too large): nothing is sent.
+qboolean CL_NetcodecWritePacket( msg_t *buf, int count, qboolean delta ) {
+	static eng::Command commands[MAX_RELIABLE_COMMANDS];
+	static usercmd_t cmds[MAX_PACKET_USERCMDS];
+	eng::ClientPacket p = {};
+	eng::PacketBase base = {};
+
+	p.serverId = cl.serverId;
+	p.ack = clc.serverMessageSequence;
+	p.reliableAck = clc.serverCommandSequence;
+	for ( int i = clc.reliableAcknowledge + 1; i <= clc.reliableSequence && p.numCommands < MAX_RELIABLE_COMMANDS; i++ ) {
+		eng::Command &c = commands[p.numCommands++];
+		c.seq = i;
+		c.text = clc.reliableCommands[i & ( MAX_RELIABLE_COMMANDS - 1 )];
+		c.length = (uint32_t)strlen( c.text );
+	}
+	p.commands = commands;
+	if ( count >= 1 ) {
+		for ( int i = 0; i < count; i++ ) {
+			cmds[i] = cl.cmds[( cl.cmdNumber - count + i + 1 ) & CMD_MASK];
+		}
+		p.move = delta ? eng::Move::kDelta : eng::Move::kNoDelta;
+		p.userCmds = cmds;
+		p.numUserCmds = (uint32_t)count;
+	}
+
+	const eng::Frame *frame = CL_NetcodecPacketBase();
+	if ( frame ) {
+		base = eng::PacketBaseOf( *frame );
+	}
+	const size_t size = Codec().EncodePacket( p, frame ? &base : NULL, buf->data, (size_t)buf->maxsize );
+	if ( !size ) {
+		Com_Printf( "WARNING: client packet not coded (too large)\n" );
+		return qfalse;
+	}
+	buf->cursize = (int)size;
+
+	const int seq = clc.netchan.outgoingSequence;
+	auto &s = s_sent[seq % eng::kAckWindow];
+	s.seq = seq;
+	s.sent = cls.realtime;
+	s.moved = count >= 1;
+	s.serverTime = count >= 1 ? cmds[count - 1].serverTime : 0;
+
+	s_stats.packets++;
+	s_stats.packetBytes += (double)size;
+	s_stats.packetsNoBase += frame ? 0 : 1;
+	return qtrue;
 }

@@ -29,59 +29,11 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 ==============
 CL_Netchan_Encode
 
-	// first 12 bytes of the data are always:
-	long serverId;
-	long messageAcknowledge;
-	long reliableAcknowledge;
-
+Removed with the client packets coded by netcodec (plan step 8, owner 9 November 2026): the client-to-server payload was
+XORed with a key made of the challenge, the serverId, the acknowledge and the last command texts, read in clear at
+the start of the packet, which the codec now codes. Whether to restore an equivalent is decided in plan step 12.
 ==============
 */
-static void CL_Netchan_Encode( msg_t *msg ) {
-	int serverId, messageAcknowledge, reliableAcknowledge;
-	int i, index, srdc, sbit, soob;
-	byte key, *string;
-
-	if ( msg->cursize <= CL_ENCODE_START ) {
-		return;
-	}
-
-        srdc = msg->readcount;
-        sbit = msg->bit;
-        soob = msg->oob;
-
-        msg->bit = 0;
-        msg->readcount = 0;
-        msg->oob = (qboolean)0;
-
-        serverId = MSG_ReadLong(msg);
-	messageAcknowledge = MSG_ReadLong(msg);
-	reliableAcknowledge = MSG_ReadLong(msg);
-
-        msg->oob = (qboolean)soob;
-        msg->bit = sbit;
-        msg->readcount = srdc;
-
-	string = (byte *)clc.serverCommands[ reliableAcknowledge & (MAX_RELIABLE_COMMANDS-1) ];
-	index = 0;
-	//
-	key = clc.challenge ^ serverId ^ messageAcknowledge;
-	for (i = CL_ENCODE_START; i < msg->cursize; i++) {
-		// modify the key with the last received now acknowledged server command
-		if (!string[index])
-			index = 0;
-		if (/*string[index] > 127 || */	// eurofix: remove this so we can chat in european languages...	-ste
-			string[index] == '%')
-		{
-			key ^= '.' << (i & 1);
-		}
-		else {
-			key ^= string[index] << (i & 1);
-		}
-		index++;
-		// encode the data with this key
-		*(msg->data + i) = (*(msg->data + i)) ^ key;
-	}
-}
 
 /*
 ==============
@@ -89,8 +41,7 @@ CL_Netchan_Decode
 
 Removed with the message codec (plan step 7, owner 8 November 2026): the server's payload was XORed with a key
 chosen from the reliable acknowledge read in clear at the start of the message, which the codec now codes (see
-SV_Netchan_Encode). Whether to restore an equivalent is decided in plan step 12; the client-to-server direction keeps
-it (CL_Netchan_Encode).
+SV_Netchan_Encode). Whether to restore an equivalent is decided in plan step 12.
 ==============
 */
 #endif
@@ -112,14 +63,7 @@ CL_Netchan_Transmit
 ================
 */
 void CL_Netchan_Transmit( netchan_t *chan, msg_t* msg ) {
-//	int i;
-	MSG_WriteByte( msg, clc_EOF );
-//	for(i=CL_ENCODE_START;i<msg->cursize;i++) {
-//		chksum[i-CL_ENCODE_START] = msg->data[i];
-//	}
-
-//	Huff_Compress( msg, CL_ENCODE_START );
-	CL_Netchan_Encode( msg );
+	// the message codec's bytes, as they are: no clc_EOF and no XOR (see CL_Netchan_Encode above)
 	Netchan_Transmit( chan, msg->cursize, msg->data );
 }
 

@@ -1,7 +1,8 @@
 @echo off
 rem Validation of netcodec on Windows (Visual Studio): configure, build and test the MSVC presets (x64 Release and
 rem Debug, Win32 Release, x64 with AddressSanitizer), then the size benchmark, the codec benchmark (two runs) and the
-rem Win32 trainers, which must rewrite the committed tables unchanged. Needs the traces of
+rem Win32 trainers, which must rewrite the committed tables unchanged, then the game (build-openjk\msvc-x64, Release)
+rem when that build directory exists. Needs the traces of
 rem docs_rewrite\netcode\data\traces (export_rans_trace.py, export_codec_trace.py, export_demo_traces.py, and the
 rem client traces of netcodec_bench_client --trace).
 rem Run from anywhere (cmd or PowerShell): codemp\netcodec\scripts\validate.bat
@@ -23,15 +24,15 @@ rem the sources' contents at the start, compared at the end: a file changed duri
 for /f %%h in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0source_hash.ps1" "%CD%"') do set "START_HASH=%%h"
 
 call :step "msvc-x64: configure" cmake --preset msvc-x64
-call :buildstep "msvc-x64-release: build" msvc-x64-release
+call :buildstep "msvc-x64-release: build" --preset msvc-x64-release
 call :step "msvc-x64-release: tests" ctest --preset msvc-x64-release
-call :buildstep "msvc-x64-debug: build" msvc-x64-debug
+call :buildstep "msvc-x64-debug: build" --preset msvc-x64-debug
 call :step "msvc-x64-debug: tests" ctest --preset msvc-x64-debug
 call :step "msvc-x86: configure" cmake --preset msvc-x86
-call :buildstep "msvc-x86-release: build" msvc-x86-release
+call :buildstep "msvc-x86-release: build" --preset msvc-x86-release
 call :step "msvc-x86-release: tests" ctest --preset msvc-x86-release
 call :step "msvc-asan: configure" cmake --preset msvc-asan
-call :buildstep "msvc-asan: build" msvc-asan
+call :buildstep "msvc-asan: build" --preset msvc-asan
 call :step "msvc-asan: tests" ctest --preset msvc-asan
 
 call :bench "size benchmark, msvc-x64" size "%B%\msvc-x64\bench\Release\netcodec_bench_size.exe" "%T%\holdout.bin"
@@ -42,6 +43,14 @@ call :step "trainer msvc-x86: train" "%B%\msvc-x86\tools\Release\netcodec_train.
 call :step "trainer msvc-x86 writes the committed tables" fc.exe /b "%OUT%\tables.inc" src\generated\jka_tables.inc
 call :step "client trainer msvc-x86: train" "%B%\msvc-x86\tools\Release\netcodec_train_client.exe" "%OUT%\client_tables.inc" "%T%\client_train.bin"
 call :step "client trainer msvc-x86 writes the committed client tables" fc.exe /b "%OUT%\client_tables.inc" src\generated\jka_client_tables.inc
+
+rem the engine and its glue to the codec (sv_netcodec.cpp, cl_netcodec.cpp, ...), which the presets above do not build
+set "G=..\..\build-openjk\msvc-x64"
+if exist "%G%\CMakeCache.txt" (
+	call :buildstep "game build, msvc-x64 Release" "%G%" --config Release
+) else (
+	>> "%SUMMARY%" echo skip  game build: no %G%
+)
 
 call :out ""
 call :out "=== results"
@@ -106,19 +115,27 @@ type "%OUT%\%FILE%.txt" >> "%LOG%"
 if !RC!==0 (>> "%SUMMARY%" echo ok    !NAME!) else (>> "%SUMMARY%" echo FAIL  !NAME!& set FAILED=1)
 exit /b 0
 
-rem ---- one build: label, then the build preset. A failed build is retried once from clean: on the virtual
-rem machine's shared folder MSVC sometimes leaves a corrupt object or PDB (LNK1103); a real error fails twice.
+rem ---- one build: label, then the arguments of cmake --build. A failed build is retried once from clean: on the
+rem virtual machine's shared folder MSVC sometimes leaves a corrupt object or PDB (LNK1103); a real error fails twice.
 :buildstep
 set "NAME=%~1"
+shift
+set "ARGS="
+:collectbuild
+if "%~1"=="" goto runbuild
+set ARGS=!ARGS! %1
+shift
+goto collectbuild
+:runbuild
 call :out ""
 call :out "=== %NAME%"
-cmake --build --preset %~2 --parallel > "%OUT%\step.txt" 2>&1
+cmake --build !ARGS! --parallel > "%OUT%\step.txt" 2>&1
 set RC=!ERRORLEVEL!
 type "%OUT%\step.txt"
 type "%OUT%\step.txt" >> "%LOG%"
 if not !RC!==0 (
 	call :out "=== %NAME%: failed, built again from clean"
-	cmake --build --preset %~2 --parallel --clean-first > "%OUT%\step.txt" 2>&1
+	cmake --build !ARGS! --parallel --clean-first > "%OUT%\step.txt" 2>&1
 	set RC=!ERRORLEVEL!
 	type "%OUT%\step.txt"
 	type "%OUT%\step.txt" >> "%LOG%"

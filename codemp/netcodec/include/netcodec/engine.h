@@ -1,4 +1,5 @@
-// netcodec: the engine's interface to the message codec (server to client).
+// netcodec: the engine's interface to the message codec (server to client), and to the client packets (client to
+// server, at the end).
 //
 // Compiled by the engine's own translation units, so this header is C++11: plain structures, pointers and sizes. The
 // library converts them to the views of codec.h and reads and writes the engine's arrays in place:
@@ -17,6 +18,7 @@
 // still be in the shared ring, otherwise the message is coded without a base (the client cannot know).
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -29,6 +31,12 @@ const uint32_t kMinCommands = 256;          // commands both sides keep at least
 const uint32_t kCommandWindow = 127;        // a server command is coded against an earlier one at most this far back
 const uint32_t kMaxSnapshotEntities = 256;  // MAX_SNAPSHOT_ENTITIES
 const uint32_t kMaxEntities = 1024;         // MAX_GENTITIES: entity numbers and baselines
+const uint32_t kAckWindow = 256;            // client packets: the acknowledged message travels as its low 8 bits
+const uint32_t kMaxUserCmds = 32;           // MAX_PACKET_USERCMDS
+const size_t kUserCmdBytes = 28;            // sizeof(usercmd_t)
+
+struct PacketBase;     // client packets, at the end
+struct ClientPacket;
 
 // Entity states one after the other, used as a ring: the entity i of a snapshot whose first entity is `first` (an
 // absolute index, as the engine counts) is state (first + i) % count.
@@ -125,6 +133,12 @@ public:
 	// the smaller form is sent); for statistics.
 	bool Escaped() const;   // NOLINT(modernize-use-nodiscard): this header is C++11
 
+	// Decodes a client packet (see ClientPacket below). latest: the last message sent to this client
+	// (netchan.outgoingSequence - 1); bases: its kAckWindow PacketBases. Returns false if the packet is malformed or
+	// coded against a message whose PacketBase is no longer held: drop it.
+	bool DecodePacket(const uint8_t *bytes, size_t size, int32_t latest, const PacketBase *bases,
+	                  ClientPacket &packet);
+
 private:
 	struct Impl;
 	std::unique_ptr<Impl> impl_;
@@ -205,9 +219,50 @@ public:
 	bool Decode(const uint8_t *bytes, size_t size, int32_t seq, const Frame *frames, const EntityRing &ring,
 	            const CommandRing &commands, const ClientTarget &target, ClientMessage &msg);
 
+	// Codes the client packet p into out (outSize bytes); returns its size, or 0 if p is malformed or does not fit.
+	// base: the PacketBase of the message p acknowledges (base->seq == p.ack), or nullptr to code p without it.
+	size_t EncodePacket(const ClientPacket &p, const PacketBase *base, uint8_t *out, size_t outSize);
+
 private:
 	struct Impl;
 	std::unique_ptr<Impl> impl_;
+};
+
+// ------------------------------------------------------------------------------------------------------------------
+// Client packets (client to server): the acknowledges, the client commands not yet acknowledged and the user commands.
+// A packet decodes alone. Its user commands are coded against the message it acknowledges, when the client says so:
+// the server must then still hold that message's PacketBase, so it keeps one for each of its last kAckWindow messages
+// to the client (slot seq % kAckWindow; the acknowledge is read unambiguously over the same window).
+
+// What a packet is coded against: the values of an acknowledged message (record and player state, PacketBaseOf).
+struct PacketBase {
+	int32_t seq;                      // -1: the slot holds no message with a snapshot
+	int32_t serverId;
+	int32_t cmdSeq;
+	int32_t ack;
+	int32_t commandTime;
+	std::array<uint16_t, 3> angles;   // the view angle indices less delta_angles
+	uint8_t weapon;
+	uint8_t forceSelected;
+	uint8_t holdable;
+};
+
+// The PacketBase of a frame that holds a snapshot (seq, ps and record set); the same on both sides.
+PacketBase PacketBaseOf(const Frame &frame);
+
+enum class Move : uint8_t { kNone = 0, kDelta = 1, kNoDelta = 2 };   // no user command, clc_move, clc_moveNoDelta
+
+// One client packet. Encoded: the texts and the user commands are the caller's. Decoded: they point into the
+// ServerCodec until its next DecodePacket.
+struct ClientPacket {
+	int32_t serverId;
+	int32_t ack;              // the last server message received
+	int32_t reliableAck;      // the last server command received
+	const Command *commands;  // consecutive sequence numbers, at most kMinCommands
+	uint32_t numCommands;
+	Move move;
+	const void *userCmds;     // usercmd_t images one after the other: 1 to kMaxUserCmds with a move, none without
+	uint32_t numUserCmds;
 };
 
 } // namespace engine
