@@ -96,7 +96,7 @@ Depends on: steps 2 and 5. **In progress** (7 November 2026): rANS and whole-mes
 | `tests` | golden traces, synthetic fuzz, garbage-input fuzz, determinism | section 4 |
 
 - Interfaces (shape only): `bytes = Encode(base*, header, ops, baselines, tables)`; `ops = Decode(bytes, lookupBase(delta) -> base*, baselines, tables)`, where `lookupBase` is called after the delta has been decoded (as `msg_get` in `codec2.py`). All bounds are checked while decoding (entity numbers below `MAX_GENTITIES`, field indices below the table length, string and download lengths, end of input); a failure drops the message.
-- Check: with the same tables, the C++ encoder produces byte-identical output to the Python codec on all recordings; 0 mismatches on at least 100,000 synthetic messages; random and mutated bytes never crash under ASAN / UBSAN; angle decode and P2 prediction bit-identical on MSVC, GCC and Clang, x86 and x64, optimised and not, for all 65,536 indices and for the recorded positions; encode about 2 microseconds per snapshot on an optimised build (study: 1 to 2 Âµs for 300 symbols).
+- Check: with the same tables, the C++ encoder produces byte-identical output to the Python codec on all recordings; 0 mismatches on at least 100,000 synthetic messages; random and mutated bytes never crash under ASAN / UBSAN; angle decode and P2 prediction bit-identical on MSVC, GCC and Clang, x86 and x64, optimised and not, for all 65,536 indices and for the recorded positions; encode about 2 microseconds per snapshot on an optimised build (study: 1 to 2 µs for 300 symbols).
 - Then (owner, 7 November 2026): an inventory of the places where the game code rounds networked values before the codec (`SnapVector`, `ANGLE2SHORT`, ...), each with what the client loses and what its removal would cost in bytes; the owner decides case by case ([progress/step-06-cpp-codec.md](progress/step-06-cpp-codec.md), part F).
 
 ### Step 7: integration in the engine (M)
@@ -188,6 +188,8 @@ Not studied; the largest unexplored potential (05 section 5.7):
 
 ## 3. Order at a glance
 
+Order of work (owner, 10 November 2026): step 14 comes right after step 11, before steps 12 (encryption, not wanted for now) and 13 (retraining on recordings of this build).
+
 | step | what | depends on | effort |
 |---|---|---|---|
 | 1 | prediction modes and rANS trick in the Python codec | none | S |
@@ -203,7 +205,7 @@ Not studied; the largest unexplored potential (05 section 5.7):
 | 11 | settings computed at run time | 10 | M |
 | 12 | transport security decision | 10, 11 | M to L |
 | 13 | live measurement | 7 to 12 | M |
-| 14 | beyond the codec | | L |
+| 14 | beyond the codec (after step 11) | 11 | L |
 
 ## 4. Test matrix
 

@@ -140,7 +140,7 @@ A demo is played back by the normal decoder starting from an empty state, so eve
 | Client demo (`record`) content | copy of the messages received | each decoded message is coded again for the demo, against the demo's previous snapshot, with the commands it brought and without its download block |
 | Client demo start | asks the server for a full snapshot and waits for it | nothing asked of the server |
 | Gamestate at the start | legacy format | coded, with the last 127 server commands |
-| Cost | none | server: none with `sv_autoDemo`; about one round trip of full snapshots after a `svrecord` in the middle of a game. Client: one more coding per message, about 1.5 Âµs |
+| Cost | none | server: none with `sv_autoDemo`; about one round trip of full snapshots after a `svrecord` in the middle of a game. Client: one more coding per message, about 1.5 µs |
 
 Why the two sides differ: the server records every message it sends and receives the client's packets in order, so a copy is complete once its start is right. The client cannot know which earlier messages the server's next ones will refer to, and losses or messages it could not decode would leave holes; coding the demo again makes it complete by construction.
 
@@ -249,8 +249,8 @@ Made on the way while testing, each in its own commit, mostly as TaystJK does.
 | subject | where |
 |---|---|
 | Protocol number, handshake, support of the old protocol, old demos | end of the plan |
-| Acknowledgements, reliable path, downloads | plan step 10 |
-| Network settings measured at run time (rate, snaps, packets, interpolation delay) | plan step 11 |
+| An acknowledgement bitfield, several UDP download blocks per message, a snapshot history sized from the round trip (not done in step 10, reasons in its document) | later, if wanted |
+| Network settings measured at run time (rate, snaps, packets, interpolation delay, the user-command redundancy instead of `cl_packetdup`) | plan step 11 |
 | Encryption, or a replacement for the removed XOR | plan step 12 |
 | Tables retrained on games of this build | plan step 13 |
-| Fixed physics step, prediction and interpolation audit | plan step 14 |
+| Fixed physics step, prediction and interpolation audit, lag compensation | plan step 14 (right after step 11) |

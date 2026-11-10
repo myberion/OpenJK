@@ -139,10 +139,10 @@ build-netcodec/mingw-clang-release/bench/netcodec_bench_client.exe docs_rewrite/
 
   | compiler | bytes per packet | encoding (client), warm | decoding (server), warm | encoding, cold | decoding, cold |
   |---|---|---|---|---|---|
-  | clang x64 (llvm-mingw, this machine) | 40.68 â†’ 10.07 | 563 â†’ 197 (0.35) | 295 â†’ 253 (0.86) | 1,170 â†’ 270 (0.23) | 423 â†’ 320 (0.76) |
-  | MSVC x64 (Windows VM) | 40.68 â†’ 10.07 | 529 â†’ 213 (0.40) | 344 â†’ 282 (0.82) | 1,148 â†’ 311 (0.27) | 462 â†’ 362 (0.78) |
-  | GCC 12 x64 (Debian VM; the server target) | 40.68 â†’ 10.07 | 401 â†’ 161 (0.40) | 276 â†’ 225 (0.81) | 903 â†’ 207 (0.23) | 641 â†’ 277 (0.43) |
-  | Clang 14 x64 (Debian VM) | 40.68 â†’ 10.07 | 588 â†’ 197 (0.34) | 335 â†’ 249 (0.74) | 1,171 â†’ 243 (0.21) | 474 â†’ 314 (0.66) |
+  | clang x64 (llvm-mingw, this machine) | 40.68 → 10.07 | 563 → 197 (0.35) | 295 → 253 (0.86) | 1,170 → 270 (0.23) | 423 → 320 (0.76) |
+  | MSVC x64 (Windows VM) | 40.68 → 10.07 | 529 → 213 (0.40) | 344 → 282 (0.82) | 1,148 → 311 (0.27) | 462 → 362 (0.78) |
+  | GCC 12 x64 (Debian VM; the server target) | 40.68 → 10.07 | 401 → 161 (0.40) | 276 → 225 (0.81) | 903 → 207 (0.23) | 641 → 277 (0.43) |
+  | Clang 14 x64 (Debian VM) | 40.68 → 10.07 | 588 → 197 (0.34) | 335 → 249 (0.74) | 1,171 → 243 (0.21) | 474 → 314 (0.66) |
 
   Four times fewer bytes and faster in both directions. A server with 64 players at 63 packets per second each decodes about 4,000 packets per second: about 1.3 ms per second, 0.13 % of a core (legacy 0.17 %).
 - The legacy coder sizes a message as `bit / 8 + 1` bytes (`msg.cpp`), so a packet ending on a byte boundary (12 % here) carries one more byte that nothing writes: on the client, whatever its stack held at that place (obfuscated by the XOR, but sent). The reader compares only the bytes holding bits.
