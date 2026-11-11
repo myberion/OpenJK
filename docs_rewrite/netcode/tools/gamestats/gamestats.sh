@@ -41,14 +41,16 @@ run() {
 	local chunk=$(( 30 * fps ))
 	{
 		echo "set sv_maxclients 20"
-		echo "set sv_fps $fps"
+		echo "set sv_fps 125"
 		echo "set g_gametype 0"
 		echo "set fraglimit 0"
 		echo "set timelimit 0"
 		echo "set g_weaponDisable 524279"
 		# the game seeds its random numbers with the milliseconds since the process started: a random wait before
-		# the map loads gives each server its own seed
-		echo "wait $(( RANDOM % 40 + 1 ))"
+		# the map loads, in frames of 8 ms whatever the rate tested (400 values, at most 3.2 s), gives each server
+		# its own seed (40 values of the frame of the rate tested gave the same seed, so the same game, twice)
+		echo "wait $(( RANDOM % 400 + 1 ))"
+		echo "set sv_fps $fps"
 		echo "devmap mp/ffa3"
 		if [ -n "$cvars" ]; then echo "set $cvars"; fi
 		# FAST=1: each frame advances the game by one interval and the server runs them as fast as it can (about 8 times
