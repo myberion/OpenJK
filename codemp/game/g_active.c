@@ -50,9 +50,28 @@ damage values to that client for pain blends and kicks, and
 global pain sound events for all clients.
 ===============
 */
+// Records this server frame's damage and returns the damage taken over the last 50 ms (plan step 14): the pain threshold
+// of P_DamageFeedback was tuned on one 50 ms frame of the 20 Hz server; at 125 Hz the same blow is spread over several
+// frames, each below it (identical at 20 Hz, where the window holds this frame only).
+static int P_RecentDamage( gclient_t *client, int damage ) {
+	int total = 0;
+	int i;
+
+	client->painDamageHead = ( client->painDamageHead + 1 ) % ARRAY_LEN( client->painDamage );
+	client->painDamage[client->painDamageHead] = damage;
+	client->painDamageTime[client->painDamageHead] = level.time;
+	for ( i = 0; i < (int)ARRAY_LEN( client->painDamage ); i++ ) {
+		if ( client->painDamageTime[i] > level.time - 50 && client->painDamageTime[i] <= level.time ) {
+			total += client->painDamage[i];
+		}
+	}
+	return total;
+}
+
 void P_DamageFeedback( gentity_t *player ) {
 	gclient_t	*client;
 	float	count;
+	int		recentDamage;
 	vec3_t	angles;
 
 	client = player->client;
@@ -65,6 +84,7 @@ void P_DamageFeedback( gentity_t *player ) {
 	if ( count == 0 ) {
 		return;		// didn't take any damage
 	}
+	recentDamage = P_RecentDamage( client, (int)count );
 
 	if ( count > 255 ) {
 		count = 255;
@@ -100,7 +120,7 @@ void P_DamageFeedback( gentity_t *player ) {
 
 		// don't do more than two pain sounds a second
 		// nmckenzie: also don't make him loud and whiny if he's only getting nicked.
-		if ( level.time - client->ps.painTime < 500 || count < 10) {
+		if ( level.time - client->ps.painTime < 500 || recentDamage < 10) {
 			return;
 		}
 		P_SetTwitchInfo(client);

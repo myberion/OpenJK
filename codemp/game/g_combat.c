@@ -2110,6 +2110,8 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	if ( !attacker )
 		return;
 
+	g_stats.deaths++;
+
 	//check player stuff
 	g_dontFrickinCheck = qfalse;
 
@@ -5386,6 +5388,9 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			}
 		}
 		targ->health = targ->health - take;
+		if ( mod == MOD_FORCE_DARK && targ->client ) {
+			g_stats.forceDamage += take;
+		}
 
 		if ( (targ->flags&FL_UNDYING) )
 		{//take damage down to 1, but never die

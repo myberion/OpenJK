@@ -1453,6 +1453,7 @@ static QINLINE qboolean WP_SabersCheckLock2( gentity_t *attacker, gentity_t *def
 	}
 
 	//DONE!
+	g_stats.saberLocks++;
 	return qtrue;
 }
 
@@ -2827,8 +2828,25 @@ FIXME: test the intersection to see if the sabers really did intersect (weren't 
 */
 extern qboolean tri_tri_intersect(vec3_t V0,vec3_t V1,vec3_t V2,vec3_t U0,vec3_t U1,vec3_t U2);
 #define SABER_EXTRAPOLATE_DIST 16.0f
+
+// How far ahead of its move a blade is tested (plan step 14). SABER_EXTRAPOLATE_DIST was sized for the 50 ms frame of the
+// 20 Hz server the game was tuned on; at a shorter server frame it would exceed the blade's own move and make blades meet
+// and hit early, more often the more frames there are, so the lookahead covers the same time instead (16 units at 20 Hz,
+// 2.56 at 125 Hz).
+static float WP_SaberLookahead( void )
+{
+	const int frameMsec = level.time - level.previousTime;
+
+	if ( frameMsec <= 0 || frameMsec >= SABER_SWING_MSEC )
+	{
+		return SABER_EXTRAPOLATE_DIST;
+	}
+	return SABER_EXTRAPOLATE_DIST * (float)frameMsec / (float)SABER_SWING_MSEC;
+}
+
 qboolean WP_SabersIntersect( gentity_t *ent1, int ent1SaberNum, int ent1BladeNum, gentity_t *ent2, qboolean checkDir )
 {
+	const float lookahead = WP_SaberLookahead();
 	vec3_t	saberBase1, saberTip1, saberBaseNext1, saberTipNext1;
 	vec3_t	saberBase2, saberTip2, saberBaseNext2, saberTipNext2;
 	int		ent2SaberNum = 0, ent2BladeNum = 0;
@@ -2863,14 +2881,14 @@ qboolean WP_SabersIntersect( gentity_t *ent1, int ent1SaberNum, int ent1BladeNum
 
 						VectorSubtract( ent1->client->saber[ent1SaberNum].blade[ent1BladeNum].muzzlePoint, ent1->client->saber[ent1SaberNum].blade[ent1BladeNum].muzzlePointOld, dir );
 						VectorNormalize( dir );
-						VectorMA( saberBaseNext1, SABER_EXTRAPOLATE_DIST, dir, saberBaseNext1 );
+						VectorMA( saberBaseNext1, lookahead, dir, saberBaseNext1 );
 
-						VectorMA( saberBase1, ent1->client->saber[ent1SaberNum].blade[ent1BladeNum].lengthMax+SABER_EXTRAPOLATE_DIST, ent1->client->saber[ent1SaberNum].blade[ent1BladeNum].muzzleDirOld, saberTip1 );
-						VectorMA( saberBaseNext1, ent1->client->saber[ent1SaberNum].blade[ent1BladeNum].lengthMax+SABER_EXTRAPOLATE_DIST, ent1->client->saber[ent1SaberNum].blade[ent1BladeNum].muzzleDir, saberTipNext1 );
+						VectorMA( saberBase1, ent1->client->saber[ent1SaberNum].blade[ent1BladeNum].lengthMax+lookahead, ent1->client->saber[ent1SaberNum].blade[ent1BladeNum].muzzleDirOld, saberTip1 );
+						VectorMA( saberBaseNext1, ent1->client->saber[ent1SaberNum].blade[ent1BladeNum].lengthMax+lookahead, ent1->client->saber[ent1SaberNum].blade[ent1BladeNum].muzzleDir, saberTipNext1 );
 
 						VectorSubtract( saberTipNext1, saberTip1, dir );
 						VectorNormalize( dir );
-						VectorMA( saberTipNext1, SABER_EXTRAPOLATE_DIST, dir, saberTipNext1 );
+						VectorMA( saberTipNext1, lookahead, dir, saberTipNext1 );
 					}
 					/*
 					else
@@ -2889,14 +2907,14 @@ qboolean WP_SabersIntersect( gentity_t *ent1, int ent1SaberNum, int ent1BladeNum
 
 						VectorSubtract( ent2->client->saber[ent2SaberNum].blade[ent2BladeNum].muzzlePoint, ent2->client->saber[ent2SaberNum].blade[ent2BladeNum].muzzlePointOld, dir );
 						VectorNormalize( dir );
-						VectorMA( saberBaseNext2, SABER_EXTRAPOLATE_DIST, dir, saberBaseNext2 );
+						VectorMA( saberBaseNext2, lookahead, dir, saberBaseNext2 );
 
-						VectorMA( saberBase2, ent2->client->saber[ent2SaberNum].blade[ent2BladeNum].lengthMax+SABER_EXTRAPOLATE_DIST, ent2->client->saber[ent2SaberNum].blade[ent2BladeNum].muzzleDirOld, saberTip2 );
-						VectorMA( saberBaseNext2, ent2->client->saber[ent2SaberNum].blade[ent2BladeNum].lengthMax+SABER_EXTRAPOLATE_DIST, ent2->client->saber[ent2SaberNum].blade[ent2BladeNum].muzzleDir, saberTipNext2 );
+						VectorMA( saberBase2, ent2->client->saber[ent2SaberNum].blade[ent2BladeNum].lengthMax+lookahead, ent2->client->saber[ent2SaberNum].blade[ent2BladeNum].muzzleDirOld, saberTip2 );
+						VectorMA( saberBaseNext2, ent2->client->saber[ent2SaberNum].blade[ent2BladeNum].lengthMax+lookahead, ent2->client->saber[ent2SaberNum].blade[ent2BladeNum].muzzleDir, saberTipNext2 );
 
 						VectorSubtract( saberTipNext2, saberTip2, dir );
 						VectorNormalize( dir );
-						VectorMA( saberTipNext2, SABER_EXTRAPOLATE_DIST, dir, saberTipNext2 );
+						VectorMA( saberTipNext2, lookahead, dir, saberTipNext2 );
 					}
 					/*
 					else
@@ -3553,6 +3571,167 @@ void WP_SaberDamageAdd( int trVictimEntityNum, vec3_t trDmgDir, vec3_t trDmgSpot
 	}
 }
 
+// The hit effect (blood or sparks) of saber damage on a victim
+static void WP_SaberHitEffect( gentity_t *self, int victimNum, vec3_t spot, vec3_t dir, float dmg, int saberNum, int bladeNum )
+{
+	gentity_t *te = NULL;
+	gentity_t *victim = &g_entities[victimNum];
+	qboolean isDroid = qfalse;
+
+	if ( victim->client )
+	{
+		class_t npc_class = victim->client->NPC_class;
+
+		if ( npc_class == CLASS_SEEKER || npc_class == CLASS_PROBE || npc_class == CLASS_MOUSE || npc_class == CLASS_REMOTE ||
+				npc_class == CLASS_GONK || npc_class == CLASS_R2D2 || npc_class == CLASS_R5D2 ||
+				npc_class == CLASS_PROTOCOL || npc_class == CLASS_MARK1 || npc_class == CLASS_MARK2 ||
+				npc_class == CLASS_INTERROGATOR || npc_class == CLASS_ATST || npc_class == CLASS_SENTRY )
+		{ //don't make "blood" sparks for droids.
+			isDroid = qtrue;
+		}
+	}
+
+	te = G_TempEntity( spot, EV_SABER_HIT );
+	if ( te )
+	{
+		te->s.otherEntityNum = victimNum;
+		te->s.otherEntityNum2 = self->s.number;
+		te->s.weapon = saberNum;
+		te->s.legsAnim = bladeNum;
+
+		VectorCopy(spot, te->s.origin);
+		//VectorCopy(tr.plane.normal, te->s.angles);
+		VectorScale( dir, -1, te->s.angles);
+
+		if (!te->s.angles[0] && !te->s.angles[1] && !te->s.angles[2])
+		{ //don't let it play with no direction
+			te->s.angles[1] = 1;
+		}
+
+		if (!isDroid && (victim->client || victim->s.eType == ET_NPC ||
+			victim->s.eType == ET_BODY))
+		{
+			if ( dmg < 5 )
+			{
+				te->s.eventParm = 3;
+			}
+			else if (dmg < 20 )
+			{
+				te->s.eventParm = 2;
+			}
+			else
+			{
+				te->s.eventParm = 1;
+			}
+		}
+		else
+		{
+			if ( !WP_SaberBladeUseSecondBladeStyle( &self->client->saber[saberNum], bladeNum )
+				&& (self->client->saber[saberNum].saberFlags2&SFL2_NO_CLASH_FLARE) )
+			{//don't do clash flare
+			}
+			else if ( WP_SaberBladeUseSecondBladeStyle( &self->client->saber[saberNum], bladeNum )
+				&& (self->client->saber[saberNum].saberFlags2&SFL2_NO_CLASH_FLARE2) )
+			{//don't do clash flare
+			}
+			else
+			{
+				if (dmg > SABER_NONATTACK_DAMAGE)
+				{ //I suppose I could tie this into the saberblock event, but I'm tired of adding flags to that thing.
+					gentity_t *teS = G_TempEntity( te->s.origin, EV_SABER_CLASHFLARE );
+					VectorCopy(te->s.origin, teS->s.origin);
+				}
+				te->s.eventParm = 0;
+			}
+		}
+	}
+}
+
+// The hit effect of saber damage on a client (a player or an NPC) is limited per contact (plan step 14): the blade
+// traced every server frame at 125 Hz finds about 3 times more moments of contact than the 20 Hz frames did, each with a
+// smaller damage, so the effect and its sound came about 3 times as often for the same damage. The damage is applied at
+// once, every server frame; the effect plays at the first contact with a victim and then at most every
+// SABER_HIT_FEEDBACK_MSEC while the contact lasts, sized by the damage since the last one (owner, 11 November 2026: 48 ms,
+// 6 frames at 125 Hz, gives as many effects as the 20 Hz hits had, measured with bots; 56 ms 4 % fewer, 72 ms 15 % fewer,
+// 100 ms 25 % fewer, and 3 times more without the limit).
+#define SABER_HIT_GAP_MSEC		60		// a contact within this time of the last one continues it
+#define SABER_HIT_FEEDBACK_MSEC	48		// at most one hit effect per attacker and victim this often during a contact
+#define SABER_HIT_CONTACTS		4		// victims an attacker can be in contact with at once
+
+typedef struct saberContact_s {
+	int			victim;			// entity number
+	int			lastContact;	// level.time of the last contact, 0 when the slot is free
+	int			lastEffect;		// level.time of the last hit effect
+	float		damage;			// damage since the last hit effect, which sizes the next one
+} saberContact_t;
+
+static saberContact_t saberContacts[MAX_GENTITIES][SABER_HIT_CONTACTS];
+static int victimSaberNum[MAX_SABER_VICTIMS];
+static int victimBladeNum[MAX_SABER_VICTIMS];
+
+// frees the contacts of self that ended; called every server frame
+static void WP_SaberFlushContacts( gentity_t *self )
+{
+	int i;
+
+	for ( i = 0; i < SABER_HIT_CONTACTS; i++ )
+	{
+		saberContact_t *c = &saberContacts[self->s.number][i];
+		if ( c->lastContact && level.time - c->lastContact > SABER_HIT_GAP_MSEC )
+		{
+			c->lastContact = 0;
+		}
+	}
+}
+
+// this frame's damage on a client victim joins the contact with it; returns whether its hit effect plays now
+static qboolean WP_SaberContactEffect( gentity_t *self, int v )
+{
+	saberContact_t *contacts = saberContacts[self->s.number];
+	saberContact_t *c = NULL;
+	int i;
+
+	for ( i = 0; i < SABER_HIT_CONTACTS; i++ )
+	{
+		if ( contacts[i].lastContact && contacts[i].victim == victimEntityNum[v] )
+		{
+			c = &contacts[i];
+			break;
+		}
+	}
+	if ( !c )
+	{//a new contact: a free slot, or the oldest one
+		c = &contacts[0];
+		for ( i = 0; i < SABER_HIT_CONTACTS; i++ )
+		{
+			if ( !contacts[i].lastContact )
+			{
+				c = &contacts[i];
+				break;
+			}
+			if ( contacts[i].lastContact < c->lastContact )
+			{
+				c = &contacts[i];
+			}
+		}
+		memset( c, 0, sizeof( *c ) );
+		c->victim = victimEntityNum[v];
+		c->lastEffect = level.time - SABER_HIT_FEEDBACK_MSEC;
+	}
+
+	c->lastContact = level.time;
+	c->damage += totalDmg[v];
+	if ( level.time - c->lastEffect < SABER_HIT_FEEDBACK_MSEC )
+	{
+		return qfalse;
+	}
+	WP_SaberHitEffect( self, c->victim, dmgSpot[v], dmgDir[v], c->damage, victimSaberNum[v], victimBladeNum[v] );
+	g_stats.saberHitEffects++;
+	c->damage = 0.0f;
+	c->lastEffect = level.time;
+	return qtrue;
+}
+
 void WP_SaberApplyDamage( gentity_t *self )
 {
 	int i;
@@ -3579,6 +3758,15 @@ void WP_SaberApplyDamage( gentity_t *self )
 		}
 		dflags |= saberKnockbackFlags[i];
 
+		if ( victim->client ) {
+			WP_SaberContactEffect( self, i );
+			if ( totalDmg[i] > SABER_NONATTACK_DAMAGE ) {
+				g_stats.saberWounds++;
+			} else {
+				g_stats.saberTouches++;
+			}
+			g_stats.saberDamage += (int)totalDmg[i];
+		}
 		G_Damage( victim, self, self, dmgDir[i], dmgSpot[i], totalDmg[i], dflags, MOD_SABER );
 	}
 }
@@ -3593,85 +3781,18 @@ void WP_SaberDoHit( gentity_t *self, int saberNum, int bladeNum )
 	}
 	for ( i = 0; i < numVictims; i++ )
 	{
-		gentity_t *te = NULL, *victim = NULL;
-		qboolean isDroid = qfalse;
-
 		if ( victimHitEffectDone[i] )
 		{
 			continue;
 		}
-
 		victimHitEffectDone[i] = qtrue;
-
-		victim = &g_entities[victimEntityNum[i]];
-
-		if ( victim->client )
-		{
-			class_t npc_class = victim->client->NPC_class;
-
-			if ( npc_class == CLASS_SEEKER || npc_class == CLASS_PROBE || npc_class == CLASS_MOUSE || npc_class == CLASS_REMOTE ||
-					npc_class == CLASS_GONK || npc_class == CLASS_R2D2 || npc_class == CLASS_R5D2 ||
-					npc_class == CLASS_PROTOCOL || npc_class == CLASS_MARK1 || npc_class == CLASS_MARK2 ||
-					npc_class == CLASS_INTERROGATOR || npc_class == CLASS_ATST || npc_class == CLASS_SENTRY )
-			{ //don't make "blood" sparks for droids.
-				isDroid = qtrue;
-			}
+		victimSaberNum[i] = saberNum;
+		victimBladeNum[i] = bladeNum;
+		if ( g_entities[victimEntityNum[i]].client )
+		{//its effect is limited per contact (WP_SaberContactEffect)
+			continue;
 		}
-
-		te = G_TempEntity( dmgSpot[i], EV_SABER_HIT );
-		if ( te )
-		{
-			te->s.otherEntityNum = victimEntityNum[i];
-			te->s.otherEntityNum2 = self->s.number;
-			te->s.weapon = saberNum;
-			te->s.legsAnim = bladeNum;
-
-			VectorCopy(dmgSpot[i], te->s.origin);
-			//VectorCopy(tr.plane.normal, te->s.angles);
-			VectorScale( dmgDir[i], -1, te->s.angles);
-
-			if (!te->s.angles[0] && !te->s.angles[1] && !te->s.angles[2])
-			{ //don't let it play with no direction
-				te->s.angles[1] = 1;
-			}
-
-			if (!isDroid && (victim->client || victim->s.eType == ET_NPC ||
-				victim->s.eType == ET_BODY))
-			{
-				if ( totalDmg[i] < 5 )
-				{
-					te->s.eventParm = 3;
-				}
-				else if (totalDmg[i] < 20 )
-				{
-					te->s.eventParm = 2;
-				}
-				else
-				{
-					te->s.eventParm = 1;
-				}
-			}
-			else
-			{
-				if ( !WP_SaberBladeUseSecondBladeStyle( &self->client->saber[saberNum], bladeNum )
-					&& (self->client->saber[saberNum].saberFlags2&SFL2_NO_CLASH_FLARE) )
-				{//don't do clash flare
-				}
-				else if ( WP_SaberBladeUseSecondBladeStyle( &self->client->saber[saberNum], bladeNum )
-					&& (self->client->saber[saberNum].saberFlags2&SFL2_NO_CLASH_FLARE2) )
-				{//don't do clash flare
-				}
-				else
-				{
-					if (totalDmg[i] > SABER_NONATTACK_DAMAGE)
-					{ //I suppose I could tie this into the saberblock event, but I'm tired of adding flags to that thing.
-						gentity_t *teS = G_TempEntity( te->s.origin, EV_SABER_CLASHFLARE );
-						VectorCopy(te->s.origin, teS->s.origin);
-					}
-					te->s.eventParm = 0;
-				}
-			}
-		}
+		WP_SaberHitEffect( self, victimEntityNum[i], dmgSpot[i], dmgDir[i], totalDmg[i], saberNum, bladeNum );
 	}
 }
 
@@ -3831,6 +3952,20 @@ static float saberHitFraction = 1.0f;
 //version very much, but functionality is (hopefully) about the same.
 //This is a large function. I feel sort of bad inlining it. But it does get called tons of times per frame.
 qboolean BG_SuperBreakWinAnim( int anim );
+
+// One block or parry decision per attacker and 50 ms window, as one frame of the 20 Hz server allowed, while the blade is
+// traced every server frame (plan step 14); a later contact within the window stops the blade without a new decision.
+static int saberDecisionWindow[MAX_GENTITIES];
+
+static qboolean WP_SaberDecisionDue( const gentity_t *self )
+{
+	if ( saberDecisionWindow[self->s.number] >= level.time )
+	{
+		return qfalse;
+	}
+	saberDecisionWindow[self->s.number] = G_GRID20_DEADLINE( 0 );
+	return qtrue;
+}
 
 static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBladeNum, vec3_t saberStart, vec3_t saberEnd, qboolean doInterpolate, int trMask, qboolean extrapolate )
 {
@@ -4009,11 +4144,12 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 		{
 			vec3_t saberEndExtrapolated;
 			if ( extrapolate )
-			{//extrapolate 16
+			{// the whole move, then the lookahead (plan step 14: it traced only 16 units from the start, a fraction of a
+			 // 20 Hz frame's move but more than a 125 Hz frame's)
 				vec3_t diff;
 				VectorSubtract( saberEnd, saberStart, diff );
 				VectorNormalize( diff );
-				VectorMA( saberStart, SABER_EXTRAPOLATE_DIST, diff, saberEndExtrapolated );
+				VectorMA( saberEnd, WP_SaberLookahead(), diff, saberEndExtrapolated );
 			}
 			else
 			{
@@ -4146,14 +4282,18 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 			if ( fDmg )
 			{//the longer the trace, the more damage it does
 				//FIXME: in SP, we only use the part of the trace that's actually *inside* the hit ent...
+				// SABER_TRACE_DAMAGE was 0.1 * 0.33 = 0.033: plan step 14 traces the blade every server frame at 125 Hz,
+				// which finds more contacts than the 20 Hz frames did; 0.032 kept the damage of 20 Hz with 5 % more deaths, 0.030 is
+				// the owner's choice between it and 0.027 (measured with bots, 11 November 2026)
+				const float SABER_TRACE_DAMAGE = 0.030f;
 				float traceLength = Distance( saberEnd, saberStart );
 				if ( tr.fraction >= 1.0f )
 				{//allsolid?
-					dmg = ceil( fDmg*traceLength*0.1f*0.33f );
+					dmg = ceil( fDmg*traceLength*SABER_TRACE_DAMAGE );
 				}
 				else
 				{//fractional hit, the sooner you hit in the trace, the more damage you did
-					dmg = ceil( fDmg*traceLength*(1.0f-tr.fraction)*0.1f*0.33f );//(1.0f-tr.fraction) isn't really accurate, but kind of simulates what we have in SP
+					dmg = ceil( fDmg*traceLength*(1.0f-tr.fraction)*SABER_TRACE_DAMAGE );//(1.0f-tr.fraction) isn't really accurate, but kind of simulates what we have in SP
 				}
 #ifdef DEBUG_SABER_BOX
 				if ( g_saberDebugBox.integer == 3 || g_saberDebugBox.integer == 4 )
@@ -4562,7 +4702,7 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 		{//stabdowns only damage people who are actually on the ground...
 			return qfalse;
 		}
-		self->client->ps.saberIdleWound = level.time + g_saberDmgDelay_Idle.integer;
+		self->client->ps.saberIdleWound = G_GRID20_DEADLINE( g_saberDmgDelay_Idle.integer );
 
 		didHit = qtrue;
 
@@ -4571,9 +4711,14 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 			&& !unblockable
 			&& WP_SaberCanBlock(&g_entities[tr.entityNum], tr.endpos, 0, MOD_SABER, qfalse, attackStr))
 		{//hit a client who blocked the attack (fake: didn't actually hit their saber)
+			if ( !WP_SaberDecisionDue( self ) )
+			{ // parried again within the window: absorbed without a new decision
+				return qtrue;
+			}
+			g_stats.saberBlocks++;
 			if (dmg <= SABER_NONATTACK_DAMAGE)
 			{
-				self->client->ps.saberIdleWound = level.time + g_saberDmgDelay_Idle.integer;
+				self->client->ps.saberIdleWound = G_GRID20_DEADLINE( g_saberDmgDelay_Idle.integer );
 			}
 			saberDoClashEffect = qtrue;
 			VectorCopy( tr.endpos, saberClashPos );
@@ -4724,7 +4869,7 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 			}
 			else
 			{
-				self->client->ps.saberAttackWound = level.time + 100;
+				self->client->ps.saberAttackWound = G_GRID20_DEADLINE( 100 );
 			}
 		}
 	}
@@ -4749,7 +4894,9 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 		{//hit an in-hand saber, do extra collision check against it
 			if ( d_saberSPStyleDamage.integer )
 			{//use SP-style blade-collision test
-				if ( !WP_SabersIntersect( self, rSaberNum, rBladeNum, otherOwner, qfalse ) )
+				// with the direction check (plan step 14): blades moving the same way or nearly parallel do not block; the
+				// blade traced every server frame found more crossings than the 20 Hz frames did
+				if ( !WP_SabersIntersect( self, rSaberNum, rBladeNum, otherOwner, qtrue ) )
 				{//sabers did not actually intersect
 					return qfalse;
 				}
@@ -4794,12 +4941,19 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 			WP_SabersCheckLock2( self, otherOwner, LOCK_RANDOM );
 			return qtrue;
 		}
+		if ( !WP_SaberDecisionDue( self ) )
+		{ // contact absorbed without a new decision: the blade stops at the saber
+			saberHitSaber = qtrue;
+			saberHitFraction = tr.fraction;
+			return qtrue;
+		}
 		didHit = qtrue;
-		self->client->ps.saberIdleWound = level.time + g_saberDmgDelay_Idle.integer;
+		g_stats.saberClashes++;
+		self->client->ps.saberIdleWound = G_GRID20_DEADLINE( g_saberDmgDelay_Idle.integer );
 
 		if (dmg <= SABER_NONATTACK_DAMAGE)
 		{
-			self->client->ps.saberIdleWound = level.time + g_saberDmgDelay_Idle.integer;
+			self->client->ps.saberIdleWound = G_GRID20_DEADLINE( g_saberDmgDelay_Idle.integer );
 		}
 
 		saberDoClashEffect = qtrue;
@@ -5242,7 +5396,7 @@ blockStuff:
 			}
 		}
 
-		self->client->ps.saberAttackWound = level.time + g_saberDmgDelay_Wound.integer;
+		self->client->ps.saberAttackWound = G_GRID20_DEADLINE( g_saberDmgDelay_Wound.integer );
 	}
 
 	return didHit;
@@ -8088,6 +8242,46 @@ static void G_GrabSomeMofos(gentity_t *self)
 	}
 }
 
+// Stores this frame's saber base and sets olderSaberBase to the base SABER_SWING_MSEC earlier, interpolated between the
+// stored frames, so that the speed of a swing (attack power, knockdowns, severed limbs) is measured over the same time at
+// any server frame rate, as on the 20 Hz server the game was tuned on, where it was the previous frame (plan step 14).
+// Valid while the stored base before that time is less than 200 ms older than it, as the previous frame had to be.
+static void WP_SaberStoreBase( gclient_t *client, const vec3_t base )
+{
+	const int target = level.time - SABER_SWING_MSEC;
+	const float *newer = base;
+	int newerTime = level.time;
+	int i;
+
+	client->olderIsValid = qfalse;
+	for ( i = 0; i < SABER_BASE_HISTORY; i++ )
+	{ //from the newest stored frame back
+		const int n = ( client->saberBaseHistoryHead - i ) & ( SABER_BASE_HISTORY - 1 );
+		const float *older = client->saberBaseHistory[n].base;
+		const int olderTime = client->saberBaseHistory[n].time;
+
+		if ( olderTime <= 0 || olderTime >= newerTime || target - olderTime >= 200 )
+		{ //nothing stored, or stored before a restart of level.time, or too old
+			break;
+		}
+		if ( olderTime <= target )
+		{
+			const float frac = (float)( target - olderTime ) / (float)( newerTime - olderTime );
+			vec3_t delta;
+			VectorSubtract( newer, older, delta );
+			VectorMA( older, frac, delta, client->olderSaberBase );
+			client->olderIsValid = qtrue;
+			break;
+		}
+		newer = older;
+		newerTime = olderTime;
+	}
+
+	client->saberBaseHistoryHead = ( client->saberBaseHistoryHead + 1 ) & ( SABER_BASE_HISTORY - 1 );
+	VectorCopy( base, client->saberBaseHistory[client->saberBaseHistoryHead].base );
+	client->saberBaseHistory[client->saberBaseHistoryHead].time = level.time;
+}
+
 void WP_SaberPositionUpdate( gentity_t *self, usercmd_t *ucmd )
 { //rww - keep the saber position as updated as possible on the server so that we can try to do realistic-looking contact stuff
   //Note that this function also does the majority of working in maintaining the server g2 client instance (updating angles/anims/etc)
@@ -8114,6 +8308,21 @@ void WP_SaberPositionUpdate( gentity_t *self, usercmd_t *ucmd )
 		return;
 	}
 #endif
+
+	if ( self && self->inuse && self->client )
+	{
+		WP_SaberFlushContacts( self );
+	}
+
+	if ( self && self->inuse && self->client && self->s.number < MAX_CLIENTS )
+	{ // a saber swing starts when the player enters an attack move (gamestats)
+		static int lastSaberMove[MAX_CLIENTS];
+		const int move = self->client->ps.saberMove;
+		if ( move != lastSaberMove[self->s.number] && BG_SaberInAttack( move ) ) {
+			g_stats.saberSwings++;
+		}
+		lastSaberMove[self->s.number] = move;
+	}
 
 	if (self && self->inuse && self->client)
 	{
@@ -8576,15 +8785,7 @@ nextStep:
 	BG_GiveMeVectorFromMatrix(&boltMatrix, NEGATIVE_Y, boltAngles);
 
 	//immediately store these values so we don't have to recalculate this again
-	if (self->client->lastSaberStorageTime && (level.time - self->client->lastSaberStorageTime) < 200)
-	{ //alright
-		VectorCopy(self->client->lastSaberBase_Always, self->client->olderSaberBase);
-		self->client->olderIsValid = qtrue;
-	}
-	else
-	{
-		self->client->olderIsValid = qfalse;
-	}
+	WP_SaberStoreBase( self->client, boltOrigin );
 
 	VectorCopy(boltOrigin, self->client->lastSaberBase_Always);
 	VectorCopy(boltAngles, self->client->lastSaberDir_Always);
@@ -8758,7 +8959,7 @@ nextStep:
 				te->s.weapon = 0;//saberNum
 				te->s.legsAnim = 0;//bladeNum
 
-				self->client->ps.saberIdleWound = level.time + Q_irand(400, 600);
+				self->client->ps.saberIdleWound = G_GRID20_DEADLINE( Q_irand(400, 600) );
 			}
 
 			while (rSaberNum < MAX_SABERS)
@@ -9452,6 +9653,7 @@ int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolea
 	if (projectile)
 	{
 		WP_SaberBlockNonRandom(self, point, projectile);
+		g_stats.missileBlocks++;
 	}
 	return 1;
 }

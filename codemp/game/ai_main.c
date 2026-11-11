@@ -77,6 +77,7 @@ boteventtracker_t gBotEventTracker[MAX_CLIENTS];
 
 //rww - new bot cvars..
 vmCvar_t bot_forcepowers;
+vmCvar_t bot_debugClientRate;
 vmCvar_t bot_forgimmick;
 vmCvar_t bot_honorableduelacceptance;
 vmCvar_t bot_pvstype;
@@ -7533,6 +7534,7 @@ int BotAIStartFrame(int time) {
 	if (gUpdateVars < level.time)
 	{
 		trap->Cvar_Update(&bot_pvstype);
+		trap->Cvar_Update(&bot_debugClientRate);
 		trap->Cvar_Update(&bot_camp);
 		trap->Cvar_Update(&bot_attachments);
 		trap->Cvar_Update(&bot_forgimmick);
@@ -7565,7 +7567,8 @@ int BotAIStartFrame(int time) {
 	elapsed_time = time - local_time;
 	local_time = time;
 
-	if (elapsed_time > BOT_THINK_TIME) thinktime = elapsed_time;
+	if (bot_debugClientRate.integer) thinktime = 50;	// the same AI at any server frame rate (plan step 14 tests)
+	else if (elapsed_time > BOT_THINK_TIME) thinktime = elapsed_time;
 	else thinktime = BOT_THINK_TIME;
 
 	// execute scheduled bot AI
@@ -7594,6 +7597,25 @@ int BotAIStartFrame(int time) {
 			continue;
 		}
 
+		if (bot_debugClientRate.integer)
+		{ //a command every 8 ms, as a client at 125 frames per second, at any server frame rate (plan step 14 tests)
+			static int botCmdTime[MAX_CLIENTS];
+			int t = botCmdTime[i];
+
+			if (t <= 0 || t > time || time - t > 200)
+			{ //first command, a restart of the level time, or a long stall
+				t = time - 8;
+			}
+			while (t + 8 <= time)
+			{
+				t += 8;
+				BotUpdateInput(botstates[i], t, 8);
+				trap->BotUserCommand(botstates[i]->client, &botstates[i]->lastucmd);
+			}
+			botCmdTime[i] = t;
+			continue;
+		}
+
 		BotUpdateInput(botstates[i], time, elapsed_time);
 		trap->BotUserCommand(botstates[i]->client, &botstates[i]->lastucmd);
 	}
@@ -7609,6 +7631,7 @@ BotAISetup
 int BotAISetup( int restart ) {
 	//rww - new bot cvars..
 	trap->Cvar_Register(&bot_forcepowers, "bot_forcepowers", "1", CVAR_CHEAT);
+	trap->Cvar_Register(&bot_debugClientRate, "bot_debugClientRate", "0", CVAR_CHEAT);
 	trap->Cvar_Register(&bot_forgimmick, "bot_forgimmick", "0", CVAR_CHEAT);
 	trap->Cvar_Register(&bot_honorableduelacceptance, "bot_honorableduelacceptance", "0", CVAR_CHEAT);
 	trap->Cvar_Register(&bot_pvstype, "bot_pvstype", "1", CVAR_CHEAT);

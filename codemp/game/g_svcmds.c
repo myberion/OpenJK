@@ -468,6 +468,23 @@ void Svcmd_Say_f( void ) {
 	trap->SendServerCommand( -1, va("print \"server: %s\n\"", text ) );
 }
 
+// gamestats: the combat statistics since the last call (g_stats), then reset; the ratios per saber swing are what must not
+// change with the server frame rate (plan step 14)
+void Svcmd_GameStats_f( void ) {
+	const gameStats_t *s = &g_stats;
+	const float swings = s->saberSwings ? (float)s->saberSwings : 1.0f;
+
+	trap->Print( "game statistics over %.1f s, %d frames, sv_fps %d: %d saber swings; per swing: %.3f wounds, %.2f damage, "
+		"%.3f saber against saber (blocks), %.3f body hits parried without the sabers touching, %.4f saber locks, %.3f idle "
+		"touches (wounds %d, damage %d, saber against saber %d, parried %d, locks %d, touches %d); %d missiles blocked by "
+		"sabers, %d force damage, %d deaths, %d saber hit effects on clients\n",
+		( level.time - s->startTime ) / 1000.0f, s->frames, sv_fps.integer, s->saberSwings,
+		s->saberWounds / swings, s->saberDamage / swings, s->saberClashes / swings, s->saberBlocks / swings,
+		s->saberLocks / swings, s->saberTouches / swings, s->saberWounds, s->saberDamage, s->saberClashes, s->saberBlocks,
+		s->saberLocks, s->saberTouches, s->missileBlocks, s->forceDamage, s->deaths, s->saberHitEffects );
+	memset( &g_stats, 0, sizeof( g_stats ) );
+}
+
 typedef struct svcmd_s {
 	const char	*name;
 	void		(*func)(void);
@@ -485,6 +502,7 @@ svcmd_t svcmds[] = {
 	{ "entitylist",					Svcmd_EntityList_f,					qfalse },
 	{ "forceteam",					Svcmd_ForceTeam_f,					qfalse },
 	{ "game_memory",				Svcmd_GameMem_f,					qfalse },
+	{ "gamestats",					Svcmd_GameStats_f,					qfalse },
 	{ "listip",						Svcmd_ListIP_f,						qfalse },
 	{ "removeip",					Svcmd_RemoveIP_f,					qfalse },
 	{ "say",						Svcmd_Say_f,						qtrue },

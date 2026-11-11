@@ -35,6 +35,7 @@ NORETURN_PTR void (*Com_Error)( int level, const char *error, ... );
 void (*Com_Printf)( const char *msg, ... );
 
 level_locals_t	level;
+gameStats_t		g_stats;
 
 int		eventClearTime = 0;
 static int navCalcPathTime = 0;
@@ -3018,6 +3019,10 @@ void G_RunFrame( int levelTime ) {
 	level.framenum++;
 	level.previousTime = level.time;
 	level.time = levelTime;
+
+	if ( !g_stats.frames++ ) {
+		g_stats.startTime = level.time;
+	}
 
 	if (g_allowNPC.integer)
 	{

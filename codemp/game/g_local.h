@@ -52,6 +52,15 @@ extern vec3_t gPainPoint;
 #endif
 
 #define	FRAMETIME			100					// msec
+
+// The game was tuned on a 50 ms server frame (sv_fps 20). Quantities it measured over one frame are measured over this
+// time at any server frame rate (plan step 14).
+#define	SABER_SWING_MSEC	50					// the speed of a swing: the saber base's move over this time
+#define	SABER_BASE_HISTORY	16					// saber bases kept for it (a power of two; 16 frames are 128 ms at 125 Hz)
+
+// A deadline tested with "deadline < level.time": lasts as long as "level.time + d" lasted on the 20 Hz server, until its
+// first frame after level.time + d, at any server frame rate (identical at 20 Hz); with d = 0, the next 50 ms window.
+#define	G_GRID20_DEADLINE( d )	( level.time / 50 * 50 + ( d ) / 50 * 50 + 49 )
 #define	CARNAGE_REWARD_TIME	3000
 #define REWARD_SPRITE_TIME	2000
 
@@ -623,6 +632,9 @@ struct gclient_s {
 	// shotgun blasts give a single big kick
 	int			damage_armor;		// damage absorbed by armor
 	int			damage_blood;		// damage taken out of health
+	int			painDamage[8];		// damage taken in each of the last server frames with damage (P_DamageFeedback)
+	int			painDamageTime[8];	// and their level.time: the pain threshold counts the last 50 ms at any frame rate
+	int			painDamageHead;
 	int			damage_knockback;	// impact damage
 	vec3_t		damage_from;		// origin for vector calculation
 	qboolean	damage_fromWorld;	// if true, don't use the damage_from vector
@@ -693,8 +705,13 @@ struct gclient_s {
 
 	int			saberKnockedTime; //if saber gets knocked away, can't pull it back until this value is < level.time
 
-	vec3_t		olderSaberBase; //Set before lastSaberBase_Always, to whatever lastSaberBase_Always was previously
+	vec3_t		olderSaberBase; //the saber base SABER_SWING_MSEC before lastSaberBase_Always (WP_SaberStoreBase)
 	qboolean	olderIsValid;	//is it valid?
+	struct {
+		vec3_t	base;
+		int		time;		//level.time it was stored, 0 for none
+	}			saberBaseHistory[SABER_BASE_HISTORY];	//the saber bases of the last server frames, for olderSaberBase
+	int			saberBaseHistoryHead;					//index of the newest
 
 	vec3_t		lastSaberDir_Always; //every getboltmatrix, set to saber dir
 	vec3_t		lastSaberBase_Always; //every getboltmatrix, set to saber base
@@ -1496,6 +1513,25 @@ int BotAIStartFrame( int time );
 
 extern	level_locals_t	level;
 extern	gentity_t		g_entities[MAX_GENTITIES];
+
+// Combat statistics since the last "gamestats" server command (plan step 14): the game must play the same at any server
+// frame rate, so the hits, blocks and damage per saber swing are compared at 20 and 125 Hz.
+typedef struct gameStats_s {
+	int		frames;
+	int		startTime;			// level.time of the first frame counted
+	int		saberSwings;		// saber attack moves started by clients
+	int		saberWounds;		// saber wounds of more than idle damage on clients
+	int		saberTouches;		// idle saber touches (SABER_NONATTACK_DAMAGE) on clients
+	int		saberDamage;		// damage of both, before armour
+	int		saberBlocks;		// blade on a client's body parried without the sabers touching (WP_SaberCanBlock)
+	int		saberClashes;		// saber against saber: the blades touch (a block)
+	int		saberLocks;			// saber locks started
+	int		missileBlocks;		// projectiles and disruptor shots blocked by a saber
+	int		forceDamage;		// health taken by the dark force powers
+	int		deaths;
+	int		saberHitEffects;	// hit effects (blood or sparks, and their sound) of sabers on clients
+} gameStats_t;
+extern	gameStats_t		g_stats;
 
 #define	FOFS(x) offsetof(gentity_t, x)
 
