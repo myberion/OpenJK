@@ -258,7 +258,8 @@ extern	refexport_t		*re;					// interface to refresh .dll
 
 // Network settings of the server, fixed rather than set by cvars (plan step 11; the shared ones are in qcommon.h): a
 // snapshot every server frame, the rate only paces messages larger than a frame allows (a gamestate, a download block)
-#define SV_CLIENT_RATE			100000	// bytes per second to each client
+#define SV_CLIENT_RATE			200000	// bytes per second to each client: at 125 Hz no single message (counted at most 1,500
+										// bytes, SV_RateMsec) delays the next snapshot (plan step 14)
 #define SV_PACKET_RATE			( MAX_PACKET_RATE + MAX_PACKET_RATE / 10 )	// client packets per second decoded: 10 % above what
 														// the client sends, whose clock may run slightly faster than the server's
 #define SV_PACKET_BURST			125		// packets a client may send above SV_PACKET_RATE at once (one second of them)

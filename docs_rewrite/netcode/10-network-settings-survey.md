@@ -54,7 +54,7 @@ Options:
 | 1b. 1a plus a fallback: halve the snapshot rate while loss lasts (as Overwatch) | protects weak links | effort S; a rule to tune | negligible | 0 | a few bytes per client |
 | 1c. bandwidth estimation with priorities (Unreal, Tribes) | adapts to a saturated link | effort M, risk of oscillation; useless at 2 to 9 KB/s | negligible | 0 | a few hundred bytes per client |
 
-**Owner's choice (10 November 2026): 1a.** 1b can be added later if measurements show weak links.
+**Owner's choice (10 November 2026): 1a.** 1b can be added later if measurements show weak links. (Raised to 200,000 bytes per second on 11 November 2026 for the 125 Hz tick of step 14, so that no single message delays the next snapshot: 11 section 11.8.)
 
 ## 10.4 Point 2: snapshot rate and server frame rate
 
@@ -77,7 +77,7 @@ Options:
 | 2b. snapshots at 40 Hz with the game at 20 Hz | fresher player positions (movement runs per command), about 25 ms of interpolation, saber unchanged | no precedent found; needs a snapshot time of its own (point 6, 6c); missiles, movers and saber stay at 20 Hz | snapshot building doubled (to measure) | about +640 bytes/s of headers per client | `PACKET_BACKUP` 32 covers 0.8 s instead of 1.6 s; 64 doubles the server's frame memory |
 | 2c. `sv_fps` 40 with the saber adapted to it (as Quake Live; the usual answer) | everything at 40 Hz | a gameplay change, validated by playing; belongs to step 14 | game CPU doubled | about doubled (about 4 KB/s) | unchanged |
 
-**Owner's choice (10 November 2026): 2a in step 11 (nothing changes in game), then 2c in step 14** (`sv_fps` 40 with the saber adapted to it, once the saber code is read): 40 Hz is smoother and more precise (half the interpolation delay, the saber checked twice as often).
+**Owner's choice (10 November 2026): 2a in step 11 (nothing changes in game), then 2c in step 14** (`sv_fps` 40 with the saber adapted to it, once the saber code is read): 40 Hz is smoother and more precise (half the interpolation delay, the saber checked twice as often). (Revised on 11 November 2026 after measuring the server's CPU time: a fixed simulation tick of 125 Hz shared by client and server, 11 section 11.8.)
 
 ## 10.5 Point 3: client packet rate
 

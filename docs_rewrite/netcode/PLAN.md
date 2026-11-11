@@ -181,9 +181,11 @@ Depends on: steps 7 to 12.
 - Playtest servers with the recorder: bytes per client per second, snapshots per second, prediction misses, CPU per client, escape rate.
 - Retrain the tables from the new recordings; size regression check.
 
-### Step 14: beyond the codec (L, optional)
+### Step 14: beyond the codec (L)
 
-Not studied; the largest unexplored potential (05 section 5.7):
+**Started on 11 November 2026.** After a survey of recent games and measurements of the server's CPU time at 20, 40 and 125 Hz ([11-tick-and-lag-compensation-survey.md](11-tick-and-lag-compensation-survey.md)), the owner chose the modern model: the client and the server share a **fixed simulation tick of 125 Hz** (8 ms), movement runs once per tick instead of once per user command, the client sends one input per tick and runs ahead of the server with a slight time dilation to keep the server's input buffer small, the other players are interpolated, and **lag compensation rewinds by tick**; the fixed rate to each client is **200,000 bytes per second**. The design follows recent games, not the JKA mods, done cleanly and optimised even if it means starting again from zero; every defect found on the way is fixed (among them the server commands repeated without loss at short intervals, 11 section 11.7). The design and the inventory of the code to change (engine client and server, shared movement, game module, cgame) are in [progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md). The model covers several items below at once: `sv_fps`, the fixed physics step, `cg_smoothClients`, lag compensation and part of the prediction misses.
+
+The items as listed before the survey (05 section 5.7):
 
 - per-client priority and bandwidth budget, distance-based update rates, interest culling;
 - an audit of the client's prediction and interpolation code (`cg_predict.c`, `cg_ents.c`, time synchronisation in `CL_AdjustTimeDelta`), now that compatibility does not constrain it; with it, the choice of `cg_smoothClients`, moved here from step 11 (owner, 10 November 2026): whether the other players follow the trajectory the server sends, carried forward to the displayed time (1, extrapolation), or are interpolated between snapshots (0);
