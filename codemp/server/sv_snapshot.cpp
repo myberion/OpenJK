@@ -709,8 +709,10 @@ void SV_SendMessageToClient( msg_t *msg, client_t *client ) {
 
 	rateMsec = SV_RateMsec( msg->cursize );
 
-	if ( rateMsec < 1000 / sv_fps->integer ) {
-		rateMsec = 1000 / sv_fps->integer;
+	// sv_fps is corrected in SV_Frame, but a gamestate can be sent from a client packet before the next frame
+	const int frameMsec = 1000 / Q_max( sv_fps->integer, 1 );
+	if ( rateMsec < frameMsec ) {
+		rateMsec = frameMsec;
 		client->rateDelayed = qfalse;
 	} else {
 		client->rateDelayed = qtrue;

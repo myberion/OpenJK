@@ -156,12 +156,13 @@ Depends on: steps 7 and 8. The options and the decision procedure are in [07](07
 
 Depends on: step 10.
 
-- Bandwidth estimate per connection from the acknowledgement record; it sets the snapshot and packet rates. Removes `rate`, `sv_maxRate`, `sv_minRate`, `sv_ratePolicy`, `sv_clientRate`, `sv_lanForceRate`, `snaps`, `sv_snapsMin`, `sv_snapsMax`, `sv_snapsPolicy`, `cl_maxpackets`, `cl_lanForcePackets`.
-- Interpolation delay computed from the measured snapshot interval and jitter. Removes `cl_timeNudge`, `cl_timenudgeDuration` and the user choice of `cg_smoothClients`.
-- Evaluate a real send timestamp (or the server's frame-to-send delay) in each snapshot, for the client's clock synchronisation; `serverTime` stays the game clock (04 section 4.9, "Time base").
-- Timeouts derived from the keep-alive interval.
-- Debug cvars to force each value and to print the measured ones.
-- Check: on links from LAN to 400 ms RTT and from 2 % to 20 % loss, no setting is needed to reach the snapshot rate the link allows; the forced-value debug cvars reproduce the old behaviour for comparison.
+**Revised on 10 November 2026** after a survey of what recent games do ([10-network-settings-survey.md](10-network-settings-survey.md), which holds the options, their costs, the measurements and the owner's choice for each point): fixed values instead of a bandwidth estimate, which recent competitive games do not use and which this branch's 2 to 9 KB per second do not need.
+
+- Part 1 (done): `svnetstats` measures the client packets lost and their runs, the user commands per packet, and the change of the snapshot send time against the game clock; measured on the VPS: no client packet lost, a repeated command costs 1.5 to 1.9 bytes, the send time follows `serverTime` within about 0.1 ms on average, so no time stamp is added (point 6).
+- Part 2 (done): a snapshot every server frame at a fixed rate of 100,000 bytes per second; up to 125 client packets per second with the unused interval carried over, enforced by the server; the user commands of 2 packets repeated; timeouts of 60 s while loading and 30 s in game. Removes `rate`, `snaps`, `cl_maxpackets`, `cl_lanForcePackets`, `cl_packetdup`, `cl_timeout`, `sv_maxRate`, `sv_minRate`, `sv_ratePolicy`, `sv_clientRate`, `sv_lanForceRate`, `sv_snapsMin`, `sv_snapsMax`, `sv_snapsPolicy`, `sv_timeout`, `sv_zombietime`.
+- Part 3: the interpolation delay computed from the measured jitter of the snapshot arrivals and from the loss (10, point 5). Removes `cl_timeNudge` (`cl_timenudgeDuration` does not exist in this tree). The user choice of `cg_smoothClients` moves to step 14.
+- Debug cvars force only the computed value (the interpolation delay, `CVAR_CHEAT`); fixed values have no cvar.
+- Check: the measured packet rates and losses in `svnetstats`, the interpolation statistics in `netstats`, in game locally and on the VPS with `net_dropsim`; no setting is needed on any link.
 
 ### Step 12: transport security and library decision (M to L, optional)
 
@@ -183,7 +184,11 @@ Depends on: steps 7 to 12.
 Not studied; the largest unexplored potential (05 section 5.7):
 
 - per-client priority and bandwidth budget, distance-based update rates, interest culling;
-- an audit of the client's prediction and interpolation code (`cg_predict.c`, `cg_ents.c`, time synchronisation in `CL_AdjustTimeDelta`), now that compatibility does not constrain it;
+- an audit of the client's prediction and interpolation code (`cg_predict.c`, `cg_ents.c`, time synchronisation in `CL_AdjustTimeDelta`), now that compatibility does not constrain it; with it, the choice of `cg_smoothClients`, moved here from step 11 (owner, 10 November 2026): whether the other players follow the trajectory the server sends, carried forward to the displayed time (1, extrapolation), or are interpolated between snapshots (0);
+- lag compensation (the server rewinds the world to the time the shooter saw, as Valorant, Overwatch and Apex Legends do; the base game has none), which `cl_timeNudge` never replaced (10-network-settings-survey.md, point 9);
+- `sv_fps` 40 with the saber made to work at that rate (step 11, point 2: the saber runs once per server frame, `game/g_main.c:3317`);
+- the prediction misses when crouching or jumping while attacking (seen during step 8, the base game's too);
+- the freeze when the scoreboard (Tab) first shows players whose models are not loaded yet (cgame loads them then; seen during step 11): load them earlier;
 - a fixed physics step (`pmove_*`, 04 section 4.10), a gameplay decision.
 
 ## 3. Order at a glance

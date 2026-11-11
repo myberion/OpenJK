@@ -215,6 +215,7 @@ void CL_NetcodecStats_f( void ) {
 			s_stats.messages, s_stats.lost, s_stats.notDecoded, s_stats.bytes / s_stats.messages, s_stats.snapshots,
 			s_stats.noBase, s_stats.baseAge[0], s_stats.baseAge[1], s_stats.baseAge[2], s_stats.baseAge[3], s_stats.baseAge[4],
 			s_stats.baseAge[5] );
+		CL_InterpStats();
 	}
 	if ( s_stats.packets ) {
 		Com_Printf( "%d client packets, %.1f bytes per packet, %d without a base\n", s_stats.packets,

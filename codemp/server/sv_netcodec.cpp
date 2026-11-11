@@ -94,12 +94,14 @@ static struct {
 	bool		valid;
 } s_sendTime[MAX_CLIENTS];
 
-static void SV_NetcodecMeasureSend( client_t *client ) {
+// A snapshot sent without a base asked starts the measure again: the client enters the world (a map load, which
+// runs three frames of 100 ms at once, or a map_restart, which does the same) or asked for a full snapshot.
+static void SV_NetcodecMeasureSend( client_t *client, bool baseAsked ) {
 	const long long now = (long long)std::chrono::duration_cast<std::chrono::microseconds>(
 		std::chrono::steady_clock::now().time_since_epoch() ).count();
 	const long long offset = now - (long long)sv.time * 1000;
 	auto &last = s_sendTime[ClientIndex( client )];
-	if ( last.valid ) {
+	if ( last.valid && baseAsked ) {
 		netcodecStats_t &st = client->netcodecStats;
 		const long long change = offset > last.offset ? offset - last.offset : last.offset - offset;
 		st.sendChanges++;
@@ -111,9 +113,10 @@ static void SV_NetcodecMeasureSend( client_t *client ) {
 	last.valid = true;
 }
 
-// At most MAX_PACKET_RATE client packets per second are decoded, on average, with bursts of SV_PACKET_BURST (plan
-// step 11): the client sends at most that many, so only a modified client goes above, and its extra packets are dropped
-// before decoding. The budget is counted in thousandths of a packet: each millisecond adds MAX_PACKET_RATE.
+// At most SV_PACKET_RATE client packets per second are decoded, on average, with bursts of SV_PACKET_BURST (plan
+// step 11): the client sends at most MAX_PACKET_RATE, 10 % fewer, so only a modified client goes above, and its extra
+// packets are dropped before decoding. The budget is counted in thousandths of a packet: each millisecond adds
+// SV_PACKET_RATE.
 static struct {
 	int		time;		// when the budget was last updated (Sys_Milliseconds)
 	int		budget;
@@ -126,9 +129,9 @@ static bool SV_NetcodecPacketAllowed( const client_t *client ) {
 	const int full = SV_PACKET_BURST * 1000;
 	const int now = Sys_Milliseconds();
 	auto &b = s_packetBudget[ClientIndex( client )];
-	const int elapsed = std::min( std::max( now - b.time, 0 ), full / MAX_PACKET_RATE + 1 );
+	const int elapsed = std::min( std::max( now - b.time, 0 ), full / SV_PACKET_RATE + 1 );
 	b.time = now;
-	b.budget = std::min( b.budget + elapsed * MAX_PACKET_RATE, full );
+	b.budget = std::min( b.budget + elapsed * SV_PACKET_RATE, full );
 	if ( b.budget < 1000 ) {
 		return false;
 	}
@@ -386,7 +389,7 @@ static bool SV_NetcodecSend( client_t *client, eng::ServerMessage &sm, clientSna
 	msg.maxsize = sizeof( buf );
 	msg.cursize = (int)size;
 	if ( sm.snapshot && size && client->netchan.remoteAddress.type != NA_BOT ) {
-		SV_NetcodecMeasureSend( client );
+		SV_NetcodecMeasureSend( client, sm.delta != 0 );
 	}
 	SV_SendMessageToClient( &msg, client );
 	return size != 0;
@@ -396,6 +399,7 @@ void SV_NetcodecSendGameState( client_t *client ) {
 	eng::ServerMessage sm = {};
 
 	SV_NetcodecResetClient( client );	// the client clears its state with a gamestate: no earlier snapshot is a base
+	s_sendTime[ClientIndex( client )].valid = false;	// the send-time measure too: a map load moves the game clock
 	SV_NetcodecBegin( client, sm );
 	sm.gameState = true;
 	sm.relSeq = client->reliableSequence;

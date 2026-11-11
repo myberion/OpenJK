@@ -89,6 +89,8 @@ typedef struct outPacket_s {
 // it can be un-deltad from the original
 #define	MAX_PARSE_ENTITIES	( PACKET_BACKUP * MAX_SNAPSHOT_ENTITIES )
 
+#define	INTERP_WINDOW		64	// snapshots the interpolation delay is computed over (3.2 s at 20 per second)
+
 extern int g_console_field_width;
 
 typedef struct clientActive_s {
@@ -102,9 +104,24 @@ typedef struct clientActive_s {
 	int			oldFrameServerTime;	// to check tournament restarts
 	int			serverTimeDelta;	// cl.serverTime = cls.realtime + cl.serverTimeDelta
 									// this value changes as net lag varies
-	qboolean	extrapolatedSnapshot;	// set if any cgame frame has been forced to extrapolate
-									// cleared when CL_AdjustTimeDelta looks at it
+	qboolean	extrapolatedSnapshot;	// set if a cgame frame passed the newest snapshot before the next one arrived
+									// (counted for netstats), cleared when CL_AdjustTimeDelta looks at it
 	qboolean	newSnapshots;		// set on parse of any valid packet
+
+	// The interpolation delay (plan step 11, CL_AdjustTimeDelta): for the last INTERP_WINDOW frames that brought
+	// snapshots, the offset between the newest one's serverTime and its arrival (cls.realtime), the snapshots read in
+	// that frame and the server messages lost before them
+	int			interpOffset[INTERP_WINDOW];
+	int			interpRead[INTERP_WINDOW];
+	int			interpLost[INTERP_WINDOW];
+	int			interpCount;		// entries recorded, up to INTERP_WINDOW
+	int			interpNext;			// slot of the next one
+	qboolean	interpParsed;		// a snapshot was read since the gamestate: interpLastMessage is valid
+	int			interpLastMessage;	// messageNum of the last snapshot read (CL_InterpRecord)
+	int			interpReadPending;	// snapshots read since the last entry
+	int			interpLostPending;	// server messages missing since the last entry
+	qboolean	interpLossMargin;	// one more interval of delay while many messages are lost
+	qboolean	interpJumpPending;	// the newest snapshot showed a jump of the server's clock: measured on the next one
 
 	gameState_t	gameState;			// configstrings
 	char		mapname[MAX_QPATH];	// extracted from CS_SERVERINFO
@@ -397,7 +414,8 @@ extern	cvar_t	*cl_noprint;
 extern	cvar_t	*cl_timegraph;
 extern	cvar_t	*cl_shownet;
 extern	cvar_t	*cl_showSend;
-extern	cvar_t	*cl_timeNudge;
+extern	cvar_t	*cl_debugInterpForce;
+extern	cvar_t	*cl_debugInterpDelay;
 extern	cvar_t	*cl_showTimeDelta;
 extern	cvar_t	*cl_freezeDemo;
 
@@ -532,6 +550,8 @@ void CL_NetcodecReset( void );
 void CL_NetcodecParseServerMessage( msg_t *msg );
 qboolean CL_NetcodecRecordGameState( void );
 void CL_NetcodecStats_f( void );
+void CL_InterpStats( void );	// cl_cgame.cpp: the interpolation delay's line of netstats
+void CL_InterpRecord( void );	// cl_cgame.cpp: a snapshot accepted by the parser, for the interpolation delay
 qboolean CL_NetcodecWritePacket( msg_t *buf, int count, qboolean delta );
 
 //====================================================================

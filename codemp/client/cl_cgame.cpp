@@ -36,6 +36,8 @@ extern IHeapAllocator *G2VertSpaceClient;
 #include "snd_ambient.h"
 #include "qcommon/timing.h"
 
+#include <algorithm>
+
 /*
 Ghoul2 Insert End
 */
@@ -602,12 +604,10 @@ CL_AdjustTimeDelta
 
 Adjust the clients view of server time.
 
-We attempt to have cl.serverTime exactly equal the server's view
-of time plus the timeNudge, but with variable latencies over
-the internet it will often need to drift a bit to match conditions.
-
-Our ideal time would be to have the adjusted time approach, but not pass,
-the very latest snapshot.
+The client shows the world at the time at which the next snapshot has
+already arrived in INTERP_WINDOW - 1 cases out of INTERP_WINDOW (plan step 11,
+docs_rewrite/netcode/10-network-settings-survey.md, point 5): interpolated,
+at real positions, as recent as the measured jitter of the arrivals allows.
 
 Adjustments are only made when a new snapshot arrives with a rational
 latency, which keeps the adjustment process framerate independent and
@@ -618,9 +618,96 @@ or bursted delayed packets.
 
 #define	RESET_TIME	500
 
+// netstats: the interpolation delay since the last netstats
+static struct {
+	int		snapshots;		// snapshots that adjusted the client's time
+	double	delaySum;		// how far behind each one the client's time was when it arrived, in ms
+	int		extrapolated;	// intervals in which a frame passed the newest snapshot before the next one arrived
+	int		lossMargin;		// snapshots that found the loss margin on
+	int		jitter;			// the last computed: how much later than the median the second latest arrival was, in ms
+} s_interpStats;
+
+void CL_InterpStats( void ) {
+	if ( !s_interpStats.snapshots ) {
+		return;
+	}
+	Com_Printf( "interpolation: %.1f ms behind the newest snapshot when it arrives, jitter %d ms, %d of %d intervals "
+		"extrapolated, loss margin %s%s\n", s_interpStats.delaySum / s_interpStats.snapshots, s_interpStats.jitter,
+		s_interpStats.extrapolated, s_interpStats.snapshots,
+		s_interpStats.lossMargin ? va( "on for %d snapshots", s_interpStats.lossMargin ) : "off",
+		cl_debugInterpForce->integer ? " (delay forced by cl_debugInterpForce)" : "" );
+	Com_Memset( &s_interpStats, 0, sizeof( s_interpStats ) );
+}
+
+static void CL_InterpPush( int offset, int read, int lost ) {
+	cl.interpOffset[cl.interpNext] = offset;
+	cl.interpRead[cl.interpNext] = read;
+	cl.interpLost[cl.interpNext] = lost;
+	cl.interpNext = ( cl.interpNext + 1 ) % INTERP_WINDOW;
+	cl.interpCount = Q_min( cl.interpCount + 1, INTERP_WINDOW );
+}
+
+// A snapshot accepted by the parser: the server messages missing before it are counted here, for every snapshot, also
+// when several are read within one frame, so that only the messages really missing count as lost. The offset enters
+// the window in CL_AdjustTimeDelta, once per frame and for the newest snapshot only: the older ones read in the same
+// frame waited for the client (a frame that took long, the scoreboard loading models), not for the network.
+void CL_InterpRecord( void ) {
+	if ( cl.interpParsed && cl.snap.messageNum > cl.interpLastMessage + 1 ) {
+		cl.interpLostPending += cl.snap.messageNum - cl.interpLastMessage - 1;
+	}
+	cl.interpReadPending++;
+	cl.interpLastMessage = cl.snap.messageNum;
+	cl.interpParsed = qtrue;
+}
+
+// The snapshot interval: the server sends a snapshot every server frame
+static int CL_SnapshotInterval( void ) {
+	const int fps = atoi( Info_ValueForKey( cl.gameState.stringData + cl.gameState.stringOffsets[CS_SERVERINFO], "sv_fps" ) );
+	return fps > 0 ? 1000 / fps : 0;
+}
+
+// The serverTimeDelta to move towards. A snapshot is usable from its arrival A, and the client needs it once its time
+// passes the serverTime of the previous snapshot, one interval earlier: so at A the client's time must not exceed
+// serverTime - interval, that is serverTimeDelta <= offset - interval, where offset = serverTime - A. The target is
+// the second smallest offset of the window minus the interval (the second, so that one isolated spike does not raise
+// the delay), minus one more interval while more than 5 % of the server messages of the window are lost (removed
+// below 2 %): a lost snapshot is otherwise bridged by extrapolation. qfalse while the window holds fewer than two.
+static qboolean CL_InterpTarget( int *target ) {
+	int sorted[INTERP_WINDOW];
+	int read = 0, lost = 0;
+	const int interval = CL_SnapshotInterval();
+
+	if ( cl.interpCount < 2 || interval <= 0 ) {
+		return qfalse;
+	}
+	for ( int i = 0; i < cl.interpCount; i++ ) {
+		sorted[i] = cl.interpOffset[i];
+		read += cl.interpRead[i];
+		lost += cl.interpLost[i];
+	}
+	std::sort( sorted, sorted + cl.interpCount );
+	const int total = read + lost;
+	if ( lost * 20 > total ) {
+		cl.interpLossMargin = qtrue;
+	} else if ( lost * 50 < total ) {
+		cl.interpLossMargin = qfalse;
+	}
+	const int median = sorted[cl.interpCount / 2];
+	s_interpStats.jitter = median - sorted[1];
+	s_interpStats.lossMargin += cl.interpLossMargin ? 1 : 0;
+
+	if ( cl_debugInterpForce->integer ) {
+		*target = median - cl_debugInterpDelay->integer;
+	} else {
+		*target = sorted[1] - interval - ( cl.interpLossMargin ? interval : 0 );
+	}
+	return qtrue;
+}
+
 void CL_AdjustTimeDelta( void ) {
 	int		newDelta;
 	int		deltaDelta;
+	int		target;
 
 	cl.newSnapshots = qfalse;
 
@@ -632,6 +719,54 @@ void CL_AdjustTimeDelta( void ) {
 	newDelta = cl.snap.serverTime - cls.realtime;
 	deltaDelta = abs( newDelta - cl.serverTimeDelta );
 
+	// A snapshot that arrived more than 100 ms earlier against its serverTime than any snapshot of the window: jitter
+	// only makes arrivals later, so the server's clock jumped forward against the client's (map_restart runs three
+	// frames of 100 ms at once; or a much shorter path). The client's time and the window move forward by the jump,
+	// estimated against the window's median, at once: the delay stays what it was. Kept as they were, the older
+	// offsets held the client 350 ms behind after a map_restart for INTERP_WINDOW frames, past the 64 user commands
+	// it keeps ("Connection Interrupted"). The jump is measured on the second such snapshot: the first one after a
+	// map_restart leaves late, by the time the server took to restart the map (about 40 ms short, seen in game).
+	if ( deltaDelta <= RESET_TIME && cl.interpCount ) {
+		int sorted[INTERP_WINDOW];
+		for ( int i = 0; i < cl.interpCount; i++ ) {
+			sorted[i] = cl.interpOffset[i];
+		}
+		std::sort( sorted, sorted + cl.interpCount );
+		if ( newDelta > sorted[cl.interpCount - 1] + 100 ) {
+			if ( !cl.interpJumpPending ) {
+				cl.interpJumpPending = qtrue;	// this frame is left out: its snapshots count with the next one
+				return;
+			}
+			const int jump = newDelta - sorted[cl.interpCount / 2];
+			for ( int i = 0; i < cl.interpCount; i++ ) {
+				cl.interpOffset[i] += jump;
+			}
+			cl.serverTimeDelta += jump;
+			deltaDelta = abs( newDelta - cl.serverTimeDelta );
+			if ( cl_showTimeDelta->integer ) {
+				Com_Printf( "<JUMP %i> ", jump );
+			}
+		}
+	}
+	cl.interpJumpPending = qfalse;
+
+	if ( deltaDelta <= RESET_TIME ) {	// a reset of the time is not a delay
+		s_interpStats.snapshots++;
+		s_interpStats.delaySum += newDelta - cl.serverTimeDelta;
+		s_interpStats.extrapolated += cl.extrapolatedSnapshot ? 1 : 0;
+	}
+	cl.extrapolatedSnapshot = qfalse;
+
+	// the newest snapshot's offset enters the window, which restarts with a reset of the time
+	if ( deltaDelta > RESET_TIME ) {
+		cl.interpCount = 0;
+		cl.interpNext = 0;
+		cl.interpLostPending = 0;
+	}
+	CL_InterpPush( newDelta, cl.interpReadPending, cl.interpLostPending );
+	cl.interpReadPending = 0;
+	cl.interpLostPending = 0;
+
 	if ( deltaDelta > RESET_TIME ) {
 		cl.serverTimeDelta = newDelta;
 		cl.oldServerTime = cl.snap.serverTime;	// FIXME: is this a problem for cgame?
@@ -639,25 +774,29 @@ void CL_AdjustTimeDelta( void ) {
 		if ( cl_showTimeDelta->integer ) {
 			Com_Printf( "<RESET> " );
 		}
-	} else if ( deltaDelta > 100 ) {
-		// fast adjust, cut the difference in half
+	} else if ( !CL_InterpTarget( &target ) ) {
+		// fewer than two snapshots measured: fast adjust towards the newest one, as before
+		if ( deltaDelta > 100 ) {
+			if ( cl_showTimeDelta->integer ) {
+				Com_Printf( "<FAST> " );
+			}
+			cl.serverTimeDelta = ( cl.serverTimeDelta + newDelta ) >> 1;
+		}
+	} else if ( abs( target - cl.serverTimeDelta ) > 100 ) {
+		// fast adjust, cut the difference to the target in half (measured against the newest snapshot, as before, it
+		// cut in half every delay above 100 ms, so the delay with the loss margin swung between about 50 and 100 ms)
 		if ( cl_showTimeDelta->integer ) {
 			Com_Printf( "<FAST> " );
 		}
-		cl.serverTimeDelta = ( cl.serverTimeDelta + newDelta ) >> 1;
+		cl.serverTimeDelta = ( cl.serverTimeDelta + target ) >> 1;
 	} else {
-		// slow drift adjust, only move 1 or 2 msec
-
-		// if any of the frames between this and the previous snapshot
-		// had to be extrapolated, nudge our sense of time back a little
+		// slow drift towards the target, only move 1 msec forward or 2 msec back: time never jumps
 		// the granularity of +1 / -2 is too high for timescale modified frametimes
 		if ( com_timescale->value == 0 || com_timescale->value == 1 ) {
-			if ( cl.extrapolatedSnapshot ) {
-				cl.extrapolatedSnapshot = qfalse;
-				cl.serverTimeDelta -= 2;
-			} else {
-				// otherwise, move our sense of time forward to minimize total latency
+			if ( cl.serverTimeDelta < target ) {
 				cl.serverTimeDelta++;
+			} else if ( cl.serverTimeDelta > target ) {
+				cl.serverTimeDelta -= Q_min( 2, cl.serverTimeDelta - target );
 			}
 		}
 	}
@@ -751,38 +890,18 @@ void CL_SetCGameTime( void ) {
 		// cl_freezeDemo is used to lock a demo in place for single frame advances
 	} else
 	{
-		// cl_timeNudge is a user adjustable cvar that allows more
-		// or less latency to be added in the interest of better
-		// smoothness or better responsiveness.
-		int tn;
-
-		tn = cl_timeNudge->integer;
-#ifdef _DEBUG
-		if (tn<-900) {
-			tn = -900;
-		} else if (tn>900) {
-			tn = 900;
-		}
-#else
-		if (tn<-30) {
-			tn = -30;
-		} else if (tn>30) {
-			tn = 30;
-		}
-#endif
-
-		cl.serverTime = cls.realtime + cl.serverTimeDelta - tn;
+		// the delay behind the newest snapshot is computed in CL_AdjustTimeDelta (cl_timeNudge removed, plan step 11)
+		cl.serverTime = cls.realtime + cl.serverTimeDelta;
 
 		// guarantee that time will never flow backwards, even if
-		// serverTimeDelta made an adjustment or cl_timeNudge was changed
+		// serverTimeDelta made an adjustment
 		if ( cl.serverTime < cl.oldServerTime ) {
 			cl.serverTime = cl.oldServerTime;
 		}
 		cl.oldServerTime = cl.serverTime;
 
-		// note if we are almost past the latest frame (without timeNudge),
-		// so we will try and adjust back a bit when the next snapshot arrives
-		if ( cls.realtime + cl.serverTimeDelta >= cl.snap.serverTime - 5 ) {
+		// note if we passed the newest snapshot before the next one arrived (netstats)
+		if ( cl.serverTime > cl.snap.serverTime ) {
 			cl.extrapolatedSnapshot = qtrue;
 		}
 	}

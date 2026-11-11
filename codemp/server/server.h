@@ -145,7 +145,7 @@ typedef struct {
 	int			packets;		// client packets received
 	double		packetBytes;
 	int			packetsNotDecoded;	// malformed, or coded against a message whose PacketBase is no longer held
-	int			packetsLimited;	// client packets dropped unread, above MAX_PACKET_RATE and SV_PACKET_BURST
+	int			packetsLimited;	// client packets dropped unread, above SV_PACKET_RATE and SV_PACKET_BURST
 	int			packetsLost;	// client packets lost on the way (gaps in their netchan sequence)
 	int			lossRuns[4];	// runs of 1, 2, 3, 4 or more consecutive client packets lost
 	int			userCmds;		// user commands received in the decoded packets, the repeats of CL_PACKET_DUP included
@@ -259,7 +259,9 @@ extern	refexport_t		*re;					// interface to refresh .dll
 // Network settings of the server, fixed rather than set by cvars (plan step 11; the shared ones are in qcommon.h): a
 // snapshot every server frame, the rate only paces messages larger than a frame allows (a gamestate, a download block)
 #define SV_CLIENT_RATE			100000	// bytes per second to each client
-#define SV_PACKET_BURST			125		// packets a client may send above MAX_PACKET_RATE at once (one second of them)
+#define SV_PACKET_RATE			( MAX_PACKET_RATE + MAX_PACKET_RATE / 10 )	// client packets per second decoded: 10 % above what
+														// the client sends, whose clock may run slightly faster than the server's
+#define SV_PACKET_BURST			125		// packets a client may send above SV_PACKET_RATE at once (one second of them)
 #define SV_ZOMBIE_TIME			2		// seconds to sink messages after a disconnection
 
 extern	cvar_t	*sv_fps;

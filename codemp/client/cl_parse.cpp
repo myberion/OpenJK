@@ -97,6 +97,7 @@ void CL_ParseSnapshot( clSnapshot_t *newSnap ) {
 		cl.snap.deltaNum, cl.snap.ping );
 	}
 
+	CL_InterpRecord();
 	cl.newSnapshots = qtrue;
 }
 

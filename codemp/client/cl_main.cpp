@@ -50,7 +50,8 @@ cvar_t	*cl_motdServer[MAX_MASTER_SERVERS];
 cvar_t	*rcon_client_password;
 cvar_t	*rconAddress;
 
-cvar_t	*cl_timeNudge;
+cvar_t	*cl_debugInterpForce;
+cvar_t	*cl_debugInterpDelay;
 cvar_t	*cl_showTimeDelta;
 cvar_t	*cl_freezeDemo;
 
@@ -2650,7 +2651,8 @@ void CL_Init( void ) {
 	for ( int index = 2; index < MAX_MASTER_SERVERS; index++ )
 		cl_motdServer[index] = Cvar_Get( va( "cl_motdServer%d", index + 1 ), "", CVAR_ARCHIVE_ND );
 
-	cl_timeNudge = Cvar_Get ("cl_timeNudge", "0", CVAR_TEMP );
+	cl_debugInterpForce = Cvar_Get ("cl_debugInterpForce", "0", CVAR_CHEAT, "Debug: 1 shows the world cl_debugInterpDelay ms behind the newest snapshot instead of the computed delay" );
+	cl_debugInterpDelay = Cvar_Get ("cl_debugInterpDelay", "50", CVAR_CHEAT, "Debug: the interpolation delay forced by cl_debugInterpForce, in ms behind the newest snapshot when it arrives" );
 	cl_shownet = Cvar_Get ("cl_shownet", "0", CVAR_TEMP );
 	cl_showSend = Cvar_Get ("cl_showSend", "0", CVAR_TEMP );
 	cl_showTimeDelta = Cvar_Get ("cl_showTimeDelta", "0", CVAR_TEMP );
