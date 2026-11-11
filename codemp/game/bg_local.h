@@ -51,6 +51,8 @@ typedef struct
 	vec3_t		previous_origin;
 	vec3_t		previous_velocity;
 	int			previous_waterlevel;
+
+	int			randSeed;	// PM_irand_timesync's seed: the command's time at the start of the step (plan step 14)
 } pml_t;
 
 

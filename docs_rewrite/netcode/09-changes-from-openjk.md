@@ -193,9 +193,9 @@ What it implies: players used to the 125 or 333 fps jumps lose them, and a jump 
 
 The game module was tuned on the 50 ms frames of a 20 Hz server: the saber is traced once per frame and its reactions (bounces, deflections, broken parries) need a frame's worth of blade movement, the force powers, thinks, pain and the bots' AI count in frames. Run unchanged at the 100 Hz tick of plan step 14, the saber's move per frame is 5 times shorter, its damage per contact is nearly always 1, attacks are no longer bounced, periodic timers come up to 44 % more often. Tuning that code per tick failed (no coefficient restores the reactions), so the game logic keeps its 20 Hz pace on a faster tick (owner, 11 November 2026): every 20 Hz instant is a tick at 100 Hz, and the logic runs on those instants with OpenJK's code.
 
-- Two clocks (`game/g_local.h`, `g_main.c`): `level.time`, read by all game code, is the logic clock, the last multiple of 50 ms; `level.tickTime` is the tick's time, used only for the movers' positions, the bots' command times and the sanity clamp of a command's time.
-- On the 20 Hz instants: thinks, the saber, the force powers and missile blocks, space, hacking, jetpack and cloak fuel, the expiry of powerups, world damage (lava, drowning) and the pain feedback, the level's rules (votes, exit rules, tournament, siege waves and timers), the bots' AI (every 50 ms), all missiles and items, and the movers' crush damage.
-- Every tick: the players' commands (movement with each command's own time, as before), the movers' movement, the snapshots.
+- Two clocks (`game/g_local.h`, `g_main.c`): `level.time`, read by all game code, is the logic clock, the last multiple of 50 ms; `level.tickTime` is the tick's time, used only for the bots' command times and the sanity clamp of a command's time.
+- On the 20 Hz instants: thinks, the saber, the force powers and missile blocks, space, hacking, jetpack and cloak fuel, the expiry of powerups, world damage (lava, drowning) and the pain feedback, the level's rules (votes, exit rules, tournament, siege waves and timers), the bots' AI (every 50 ms), all missiles, items and movers (doors, lifts, trains: movement, pushes, crush damage).
+- Every tick: the players' commands (movement with each command's own time, as before), the snapshots.
 - The server's ghoul2 clock (`server/sv_main.cpp`) is the logic instant of the frame just run: the game starts animations at `level.time`, and bolts and model traces read this clock, so a 20 Hz instant evaluates the models 50 ms after the previous one, as every frame did at `sv_fps` 20. With `sv.time`, at 100 Hz the blades ran 40 ms ahead of their 20 Hz path (5 times less saber damage).
 - Missiles move only on the 20 Hz instants: the engine's model trace depends on the step (a step that starts inside a player's box hits the box without a model test; one that leaves it reports no model surface), so per-tick steps changed which shots hit, where, and the damage (the bryar 38 % less, the homing rocket lethal every time).
 
@@ -208,9 +208,15 @@ At `sv_fps` 20 every instant is a 20 Hz instant and the game runs OpenJK's code 
 | Mind trick broken by an attack in view | within 4 frames (40 ms) | within 200 ms (written as such: the frame-length variable is removed) |
 | Pain sound and view kick | 10 points within one frame, which a blow spread over 5 frames rarely reaches | 10 points within a 50 ms window |
 | Missiles | traced every 10 ms | traced on the 20 Hz instants, as at 20 Hz |
+| Movers (doors, lifts) | move and crush every frame | on the 20 Hz instants |
 | Bots | think and act every frame | think every 50 ms on the 20 Hz instants |
 
 Checked with scripted bot scenarios (`scenario`, below), the same module at `sv_fps` 20 and 100: the same wounds, damage, health taken by cause, deaths, blocks, bounces, attacks, shots, hits and force power events for the saber (5 styles, the defender idle or attacking, 96 swings each), the force powers (6 powers, 48 uses each) and the weapons (12 weapons, both fire modes, 48 bursts each); the only differences are presentation events and an order effect of flechette shards that also varies between two runs at the same rate. A free-for-all of 16 bots shows no difference beyond the noise (damage -2.8 % ± 1.8 %). Details: [progress/step-14-audit-100hz.md](progress/step-14-audit-100hz.md), section 9.
+
+Two defects fixed on the way (plan step 14):
+
+- The saber's random choices in the movement code (`PM_irand_timesync`, `game/bg_saber.c`: chain ends, lock breaks, flip and jump attacks) drew their numbers by overwriting the command's time, so the rest of that movement step read a random time (footstep and slope timers, weapon charge, saber lock and hand extension times, zoom). They now draw from a seed of their own, set to the command's time at each step: the same numbers, the command's time intact. Client and server agreed before and still do.
+- A dedicated server spent the last millisecond before each frame in a busy loop (`Com_Frame`, `qcommon/common.cpp`), up to a tenth of a core at 100 Hz. Outside Windows it now sleeps that millisecond in steps of 100 us (`NET_Sleep` takes microseconds, `qcommon/net_ip.cpp`); a packet that arrives still wakes it at once. Windows keeps the busy loop (`select` waits whole timer periods there); `com_busyWait 1` keeps it everywhere.
 
 ## 8. Settings
 

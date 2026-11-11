@@ -1,19 +1,22 @@
 #!/bin/bash
-# Combat statistics of the game module with bots, for plan step 14: the saber must hit, block and wound about as on the
-# 20 Hz server at the 125 Hz tick. Runs local dedicated servers (no network, sabers only, 16 bots on mp/ffa3) in
-# parallel and prints the "gamestats" and "svnetstats" lines of each after the measured time.
+# Combat statistics of the game module with bots, for plan step 14: the game must play at the 100 Hz tick as at
+# sv_fps 20. Runs local dedicated servers (no network, sabers only, 16 bots on mp/ffa3, or a scripted scenario of two
+# bots) in parallel and prints the "gamestats" and "svnetstats" lines of each after the measured time.
 #
-# Usage: [FAST=1] [PREMAP='<cvar> <value>;...'] gamestats.sh <openjkded binary> <fs_basepath> <game module> <minutes> '<tag>|<fps>[|<cvars>]' ...
+# Usage: [FAST=1] [PREMAP='<cvar> <value>;...'] [SCENARIO='saber 96 medium idle'] gamestats.sh <openjkded binary> <fs_basepath> <game module> <minutes> '<tag>|<fps>[|<cvars>]' ...
 #   <fs_basepath>  the directory holding base/assets*.pk3
 #   <game module>  the jampgame module to test (jampgamex86_64.so); each run copies it into its own fs_homepath
 #   <cvars>        cheat cvars set after devmap, separated by "; set "; pass each configuration as one
 #                  argument (quoted): split at its spaces it would lose its cvars. For example
-#                  'bot_debugClientRate 1; set g_debugSaberGrid 1'
-# Example (the four configurations of the step 14 document, each twice):
-#   gamestats.sh /srv/jka/openjkded.x86_64 /srv/jka /srv/jka/base/jampgamex86_64.so 10 \
-#     'ref20a|20|bot_debugClientRate 1' 'ref20b|20|bot_debugClientRate 1' \
-#     'grid125a|125|bot_debugClientRate 1; set g_debugSaberGrid 1' \
-#     'tick125a|125|bot_debugClientRate 1; set g_debugSaberGrid 4'
+#                  'bot_debugClientRate 1'
+#   SCENARIO       a scripted scenario (codemp/game/g_scenario.c) instead of the free-for-all, two bots: <minutes> must
+#                  cover the repetitions and an uncounted first one (2 s each); the scenario prints its own gamestats
+#                  at the end, which the watchdog takes as the end of the run
+# Example (the same module at 20 and 100 Hz, twice each; FAST=1 on a machine nobody plays on):
+#   FAST=1 gamestats.sh /srv/jka/openjkded.x86_64 /srv/jka /srv/jka/base/jampgamex86_64.so 10 \
+#     'r20a|20|bot_debugClientRate 1' 'r20b|20|bot_debugClientRate 1' \
+#     'r100a|100|bot_debugClientRate 1' 'r100b|100|bot_debugClientRate 1'
+#   FAST=1 SCENARIO='saber 96 strong attack' gamestats.sh ... 4 's20|20|bot_debugClientRate 1' 's100|100|bot_debugClientRate 1'
 #
 # The commands go in a cfg run by +exec: the engine keeps only 32 "+" commands of its command line
 # (MAX_CONSOLE_LINES), and a long "wait" never fires, so the measured time is chained in waits of 30 seconds.
@@ -21,7 +24,7 @@
 set -u
 
 if [ $# -lt 5 ]; then
-	sed -n '2,20p' "$0"
+	sed -n '2,23p' "$0"
 	exit 1
 fi
 
@@ -64,12 +67,20 @@ run() {
 		# FAST=1: each frame advances the game by one interval and the server runs them as fast as it can (about 8 times
 		# real time at 125 Hz with 16 bots; it takes a whole core per server, so not next to a server people play on)
 		if [ "${FAST:-0}" = "1" ]; then echo "set fixedtime $(( 1000 / fps ))"; echo "set timedemo 1"; fi
-		for name in Reborn Reborn Reborn Reborn Reborn Reborn Jedi Jedi Jedi Jedi Alora Desann Tavion Cultist Cultist Cultist; do
-			echo "addbot $name 4"
-		done
-		echo "wait $chunk"
-		echo "gamestats"
-		echo "svnetstats"
+		if [ -n "${SCENARIO:-}" ]; then
+			echo "addbot Jedi 4"
+			echo "addbot Reborn 4"
+			echo "wait $chunk"
+			echo "gamestats"
+			echo "scenario $SCENARIO"
+		else
+			for name in Reborn Reborn Reborn Reborn Reborn Reborn Jedi Jedi Jedi Jedi Alora Desann Tavion Cultist Cultist Cultist; do
+				echo "addbot $name 4"
+			done
+			echo "wait $chunk"
+			echo "gamestats"
+			echo "svnetstats"
+		fi
 		for (( i = 0; i < MINUTES * 2; i++ )); do
 			echo "wait $chunk"
 		done

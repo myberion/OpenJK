@@ -56,8 +56,9 @@ extern vec3_t gPainPoint;
 // Two clocks (plan step 14). The game module was tuned on the 50 ms frames of sv_fps 20; the server ticks at 100 Hz,
 // and every 20 Hz instant (a multiple of 50 ms) is a tick. level.time is the logic clock: the last 20 Hz instant, which
 // all game code reads (timers, thinks, damage, user commands), so it keeps the timing of sv_fps 20. level.tickTime is the
-// tick's time, read only to move missiles, movers and items between the 20 Hz instants. The logic tuned on 50 ms frames
-// (thinks, force powers, the saber, pain, the bots' AI) runs on the frames where G_GRID20_STEP is true.
+// tick's time, read only for the bots' command times and the sanity clamp of a command's time. The logic tuned on 50 ms
+// frames (thinks, force powers, the saber, pain, missiles, movers, items, the bots' AI) runs on the frames where
+// G_GRID20_STEP is true.
 #define	G_GRID20_STEP			( level.logicFrame )
 #define	CARNAGE_REWARD_TIME	3000
 #define REWARD_SPRITE_TIME	2000
@@ -894,8 +895,7 @@ typedef struct level_locals_s {
 	int			framenum;
 	int			time;					// in msec: the logic clock, the last 20 Hz instant (plan step 14)
 	int			previousTime;			// so movers can back up when blocked: the logic clock's previous instant
-	int			tickTime;				// the tick's time, for the movement of missiles, movers and items
-	int			previousTickTime;
+	int			tickTime;				// the tick's time: the bots' command times, the clamp of a command's time
 	qboolean	logicFrame;				// this frame is a 20 Hz instant: the logic clock moved (G_GRID20_STEP)
 
 	int			startTime;				// level.time the map was started

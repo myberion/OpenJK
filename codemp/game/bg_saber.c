@@ -39,7 +39,9 @@ int PM_irand_timesync(int val1, int val2)
 {
 	int i;
 
-	i = (val1-1) + (Q_random( &pm->cmd.serverTime )*(val2 - val1)) + 1;
+	// the same numbers as before, from a seed of its own: seeded with &pm->cmd.serverTime, each draw overwrote the
+	// command's time, so the movement code after it in the step read a random time (plan step 14)
+	i = (val1-1) + (Q_random( &pml.randSeed )*(val2 - val1)) + 1;
 	if (i < val1)
 	{
 		i = val1;

@@ -3020,7 +3020,6 @@ void G_RunFrame( int levelTime ) {
 	}
 
 	level.framenum++;
-	level.previousTickTime = level.tickTime;
 	level.tickTime = levelTime;
 	level.previousTime = level.time;
 	level.time = levelTime / 50 * 50;	// the logic clock: the last 20 Hz instant (g_local.h)

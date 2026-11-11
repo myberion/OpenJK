@@ -21,7 +21,7 @@ Working notes kept so that nothing is lost between sessions. Status of each item
 
 - `level.time` = logic clock = last 20 Hz instant, for all game code (timers, thinks, damage, user commands, impacts). `level.tickTime` = the tick, only to move missiles, movers, items, and for bots' command times. `level.logicFrame` (macro `G_GRID20_STEP`) = this frame is a 20 Hz instant.
 - On the grid (OpenJK's code unchanged): `G_RunThink`; per client in `G_RunFrame`: space suffocation, hacking, jetpack and cloak fuel, siege data, `WP_ForcePowersUpdate`, `WP_SaberPositionUpdate`, `WP_SaberStartMissileBlockCheck`; NPC branch the same; `ClientEndFrame`: powerups expiry, `P_WorldEffects`, `P_DamageFeedback`; level rules (`CheckTournament`, `CheckExitRules`, `CheckVote`, siege respawn wave and timers, queued scores); bots think every 50 ms on the grid; all missiles and items move on the grid (since 12 November: per-tick missiles changed the hits, section 9); the server's ghoul2 clock is the logic clock (section 9).
-- Per tick: snapshots, user commands (Pmove with the command's time), mover movement (blocked() on the grid), networking.
+- Per tick: snapshots, user commands (Pmove with the command's time), networking (movers moved every tick until 12 November; since then on the grid, section 10).
 - The same module at sv_fps 20 is the exact reference (all gates true at 20 Hz).
 - Consequences: the per-tick saber tuning (coefficient 0.030, contact effect limiter, decision windows, scaled lookahead, head-on check, `WP_SaberStoreBase`) and the force timer rewrites (commit `00c003c91`) are reverted to OpenJK's code (done in the working tree: `w_saber.c` and `w_force.c` are master plus counters; `w_saber.c` keeps `fVSpeed *= 1.6f/20.0f` instead of `1.6f/sv_fps.value` (G3) and `w_force.c` the mind trick window of 200 ms instead of `g_TimeSinceLastFrame*4`, with `g_TimeSinceLastFrame`/`g_LastFrameTime` removed). Saber contact is found at the 20 Hz instants, up to 40 ms later than per-tick tracing: the price of identity.
 - Known limits: timescale (`frameMsec = 1000/sv_fps*timescale`, `sv_main.cpp:1135`, verified): during the slow-motion duel end the grid runs every 50 ms of game time (OpenJK ran logic every frame); `g_slowmoDuelEnd` is 0 on the owner's servers. First frame after map load: `previousTime == time` (settle frames, `sv_init.cpp:624-632`, verified): handled by `logicFrame` forced on the first frame (open).
@@ -47,13 +47,15 @@ Feedback (agent 5): no attacker hit confirmation sound exists; non-client victim
 - W1 catch-up frames send one snapshot; W2 whole-millisecond tick timing (±1 ms = 10 % of an interval); W3 listen server ticks per client frame; W5 server command repeats (`sv_netcodec.cpp:224-226`: any new command resends all unacknowledged ones, timeout `2*ping` under 10 ms on a LAN); W6 CMD_BACKUP 64; W7 ping mean over 32 frames; X1 busy wait of up to 1 ms per frame in `Com_Frame` (`common.cpp:1553-1557`), up to 10 % of a core at 100 Hz; X3 server CPU about 30 % at 100 Hz (from the 125 Hz measure, not measured); X5 demos 5 times larger; lagometer shows 48 columns (0.48 s at 100 Hz).
 - Interpolation delay of step 11 (agent 6): only the newest snapshot of a frame is sampled, so bursts are under-measured; the delay is 8 to 10 ms more than needed (a full interval on top of an offset measured at frame time); the loss margin flaps on 64 samples (0.64 s); slew +1/-2 ms per snapshot frame is 5 times stronger; proposed redesign: sample headroom `cl.snap.serverTime - cls.realtime` every client frame, 64 slots of 32 ms (about 2 s), target = second smallest slot minimum minus 2 ms, bounds 2 to 100 ms, slew in time (+1 ms per 8 ms, -1 ms per 32 ms). Bugs at 20 Hz too: ping 999 above 256 ms (client), arrival stamped with the previous frame's time, start at zero delay, `sorted[1]` with few samples.
 
-## 6. Measurement tools (working tree, not committed)
+## 6. Measurement tools (committed in `4efd458f0`; current usage in section 9)
 
 - Central counters in `gamestats` (`g_svcmds.c` `G_PrintCentralStats`): events by type (G_AddEvent, G_TempEntity), damage and deaths by cause, shots by weapon (FireWeapon), saber attacks and bounces (moves into PM_SaberInBounce) by style (`G_StatsSaberMove` after Pmove in ClientThink). The force statistics line prints raw counts per power.
 - `codemp/game/g_scenario.c` (added to `codemp/game/CMakeLists.txt`): `scenario saber <reps> <fast|medium|strong|dual|staff> <idle|attack> [dist]`, `scenario force <reps> <power> [dist]`, `scenario weapon <reps> <weapon> <alt> [dist]`, `scenario off`; two bots reset each repetition (2 s), commands every 10 ms scripted in ms, seeds reset per repetition; needs `bot_debugClientRate 1`, `sv_cheats 1`, two bots; force needs `PREMAP="g_forcePowerDisable 0"` and the force side set (open: set `forceSide` in `G_ScenarioEquip`).
 - `gamestats_agg.py` reads the per-power force line; it must be extended to the new central lines.
 
 ## 7. Next steps (in order)
+
+As written on 11 November; steps 1 to 4 are done (sections 8 to 10), the current next steps are in [README.md](README.md), "Next actions".
 
 1. Finish the two clocks: `level.tickTime`, `previousTickTime`, `logicFrame` in `G_RunFrame` and `G_InitGame`; tickTime in `G_RunMissile` (positions, `G_MissileImpact` origin2 and velocity), `G_MoverTeam` (positions and back-up), `G_RunClient` (bots' command time), the command time clamp in ClientThink; remove the ClientThink wrapper (redundant); bouncing missiles and items move only on the grid; mover `blocked()` on the grid; G_GRID20_DEADLINE removed.
 2. Bots execute every command (`ClientThink` for bots with `bot_debugClientRate`, `G_RunClient` skips them).
@@ -95,8 +97,59 @@ Further result (same module, `saber 64 medium idle`, one server per rate): 20 Hz
 - Flechette primary, 1 of 48 repetitions (195 hits against 194): the shards' entity numbers differ (temporary entities allocated differently), so they are processed in another order in the frame and a knockback moves the target before the next shard; the two values swapped between two runs at the same rates.
 - Grip `EV_PAIN` 4 once at 20 Hz; six further servers (three per rate) all gave 5.
 
-**Still per tick, to decide.** Mover movement (positions every tick for the players' collisions; `blocked()` and the crush damage on the grid). Not covered by the scenarios (placed away from movers); per-tick positions change the players' collisions with lifts and doors slightly. Options: keep (smoother riding, small outcome differences) or move them on the grid (exact identity).
+**Still per tick, to decide** (decided on 12 November: movers on the instants, section 10). Mover movement (positions every tick for the players' collisions; `blocked()` and the crush damage on the grid). Not covered by the scenarios (placed away from movers); per-tick positions change the players' collisions with lifts and doors slightly. Options: keep (smoother riding, small outcome differences) or move them on the grid (exact identity).
 
 **Free-for-all sanity bench** (16 bots, `bot_debugClientRate 1`, FAST=1, 60 minutes of game per server, 3 batches of 12 servers per rate, same module): damage per minute 100 Hz against 20 Hz +1.0 %, -8.5 %, -0.8 % per batch (batch 2 holds a server at 14,728 against a mean of 20,500); pooled -2.8 % (standard error of the difference 1.8 %), deaths -2.2 % (1.8 %), blocks -0.9 % (2.0 %): within the noise. Free play diverges chaotically and still has per-tick movers; the scenarios are the proof of identity.
 
 **Next.** The items of section 7 step 5; the documentation of the decisions in step-14-fixed-tick.md, 09, PLAN, README and the progress table; Linux on the VPS.
+
+## 10. Owner's decisions of 12 November 2026 and the status of every audit item
+
+**Decisions (owner, 12 November 2026).**
+- The saber stays on the 20 Hz instants: what the 100 Hz tick gains is perception (the other players drawn about 11 ms behind the newest snapshot instead of about 53, 100 snapshots per second), not earlier hit decisions; the per-tick prototype decided saber contacts about 20 ms sooner on average but changed the balance. More reactivity would be a deliberate gameplay change (the saber's reactions remodelled in time and retuned), not planned.
+- Packet rate: `MAX_PACKET_RATE` 125 to 100, `SV_PACKET_RATE` 137 to 110, `SV_PACKET_BURST` 125 to 100 only with part 4 (one command per tick, sampled every 10 ms whatever `com_maxfps`; display at `com_maxfps` with the partial step of D5). Nothing changes before.
+- Movers on the 20 Hz instants (done, below).
+- CG5: a 5-bit field for `saberAttackChainCount` (no gameplay change). It changes the alphabets of its contexts (`KindAlphabet` in `netcodec/src/contexts.h`: 16 to 32 symbols, 6 to 7), so the trained tables (`jka_tables.inc`) must be retrained, and the training corpus (`data/traces/train.bin`) is no longer on this machine: done with step 13 (retraining on recordings of this build, which regenerates the schema and the tables anyway; owner, 12 November 2026). Until then a chain of 16 attacks or more (fast style; staff and dual chain without the counter) is mispredicted once.
+- `PM_irand_timesync` fixed (done, below).
+- B1 and B2 wait for the snapshot store D3 (part 5).
+- X1: the dedicated server sleeps its last millisecond (done, below; to measure on the VPS).
+- The interpolation redesign of agent 6 goes with part 4.
+- No hit confirmation sound for the attacker (agent 5's remark): not wanted.
+
+**Done on 12 November after the decisions (working tree, after commit `4efd458f0`).**
+- Movers: `G_RunMover` returns between the 20 Hz instants (`g_mover.c`), so they move, push, crush and think as at `sv_fps` 20; the per-push gates and the tick time are gone from `g_mover.c` (OpenJK's file plus that test), `level.previousTickTime` removed. Free-for-all batch (12 servers per rate): damage -1.3 %, deaths -0.9 %, blocks -2.0 %, within the noise.
+- `PM_irand_timesync` (`bg_saber.c`): seeded with `&pm->cmd.serverTime`, each draw overwrote the command's time, so the movement code after it in the step read a random time (footstep and slope timers, weapon charge times, saber lock and hand extension times, zoom...). It now draws from `pml.randSeed`, set to the command's time at the start of each step (`bg_local.h`, `PmoveSingle`): the same random numbers as before. The scenarios give the same counts before and after (the corrupted reads did not change their outcomes).
+- X1 (`qcommon/common.cpp`, `net_ip.cpp`, `qcommon.h`): `NET_Sleep` takes microseconds; outside Windows a dedicated server sleeps its last millisecond in steps of 100 us instead of the busy loop of `NET_Sleep(0)` (up to a tenth of a core at 100 Hz). `select` still returns at once when a packet arrives. On Windows the busy loop stays (`select` there waits whole timer periods). `com_busyWait 1` keeps the busy wait everywhere.
+- `gamestats.sh` (Linux) takes `SCENARIO=` as the Windows script does; its header no longer mentions the removed `g_debugSaberGrid`.
+- All scenarios again (10 saber, 6 force, 24 weapon cases): identical at 20 and 100 Hz (flechette primary: the known shard order), unchanged against the commit.
+
+**Status of every audit item (sections 4 and 5).**
+
+| item | status |
+|---|---|
+| G1 saber, force and missile blocks once per frame | done: on the 20 Hz instants |
+| G2 clash voids the rest of the sweep | moot (20 Hz instants) |
+| G3 `1.6f/sv_fps` | done: `1.6f/20.0f` |
+| G6 thrown saber radius damage, G7 one-off saber timers, G8 kicks, G9 missile block pose | moot (20 Hz instants) |
+| weapons: thermal fuse, `saberBlockTime`, E-Web yaw, seeker, prox mine, charge, detpack, flechette, DEMP2, launch `trTime` | moot (logic clock and instants); the weapon scenarios agree |
+| per-tick missiles | replaced: all missiles on the 20 Hz instants (section 9) |
+| saber lock presses once per frame, respawn `+1700`, absorb and protect sound debounce | moot (logic clock) |
+| siege respawn wave, battlesuit event in lava, bots' AI every frame | done: on the 20 Hz instants |
+| bots one movement step per server frame | done: every command run, interleaved by time (`bot_debugClientRate`) |
+| CG5 `saberAttackChainCount` 16 sent as 0 | verified; 5-bit field with step 13 (above) |
+| `Q_random(&pm->cmd.serverTime)` | verified, fixed |
+| NPC first think off the instants, mover `reached`, trigger `== level.time` tests, `g_object` hit time | moot (logic clock and instants) |
+| mover crush damage per tick | done: movers on the instants |
+| agent 5: per-tick effects on non-clients, `EV_SHIELD_HIT` per tick, proposals B and E | moot (no per-tick damage left) |
+| agent 5: no hit confirmation sound | not wanted |
+| staff and dual duplicate `EV_SABER_BLOCK` | kept (OpenJK's behaviour) |
+| B1 delta base refused above 29 messages (290 ms of round trip at 100 Hz) | part 5 (D3) |
+| B2 `svs.nextSnapshotEntities` wraps (about 2.3 h with 32 clients at 100 Hz) | part 5 (D3) |
+| B3 cgame drops snapshots after a 320 ms hitch; B4 client ping 999 above 256 ms | open, parts 4 and 9 |
+| S2 (the step document's inventory: packets drained once per frame) | wrong: the server runs each packet on arrival (`NET_Sleep` returns from `select`, `NET_Event` runs it); the step document is corrected |
+| W1 catch-up frames send one snapshot, W2 whole-millisecond frame timing, W3 listen server ticks per client frame, W5 server command repeats, W6 `CMD_BACKUP` 64, W7 ping mean over 32 frames | open, part 3 (W5 is S5, W6 part 4) |
+| X1 busy wait | done (Linux dedicated server), to measure |
+| X3 server CPU at 100 Hz, X5 demos 5 times larger, lagometer 48 columns | open: part 7, later, part 9 |
+| interpolation redesign (agent 6) and its 20 Hz bugs | part 4 |
+
+**Found on the way, not fixed:** the Linux `Sys_Milliseconds` (`shared/sys/sys_unix.cpp`) uses `gettimeofday`, the wall clock: an NTP step moves the server's clock (frames run in a burst or stop). A monotonic clock (`clock_gettime(CLOCK_MONOTONIC)`) would fix it; to place in part 3 (tick loop).

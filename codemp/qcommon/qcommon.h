@@ -153,7 +153,7 @@ qboolean	NET_IsLocalAddress (const netadr_t *adr);
 const char	*NET_AdrToString (const netadr_t *a);
 qboolean	NET_StringToAdr ( const char *s, netadr_t *a);
 qboolean	NET_GetLoopPacket (netsrc_t sock, netadr_t *net_from, msg_t *net_message);
-void		NET_Sleep(int msec);
+void		NET_Sleep(int usec);
 
 void		Sys_SendPacket( int length, const void *data, const netadr_t *to );
 //Does NOT parse port numbers, only base addresses.

@@ -1553,8 +1553,14 @@ void Com_Frame( void ) {
 			// Busy sleep the last millisecond for better timeout precision
 			if(com_busyWait->integer || timeVal < 1)
 				NET_Sleep(0);
+#ifndef _WIN32
+			// a dedicated server sleeps its last millisecond in steps of 100 us rather than in a busy loop, which took
+			// up to a tenth of a core at 100 Hz (plan step 14, X1); select() keeps such timeouts here, not on Windows
+			else if(timeVal == 1 && com_dedicated->integer)
+				NET_Sleep(100);
+#endif
 			else
-				NET_Sleep(timeVal - 1);
+				NET_Sleep((timeVal - 1) * 1000);
 		} while( (timeVal = Com_TimeVal(minMsec)) != 0 );
 		IN_Frame();
 
