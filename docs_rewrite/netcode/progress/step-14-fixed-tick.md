@@ -82,7 +82,7 @@ Each line: what is there, why it matters at 125 Hz or with the model, and what i
 | G2 | `game/w_saber.c` (`G_SPSaberDamageTraceLerped`, `CheckSaberDamage`, `WP_SaberPositionUpdate`); `game/g_xcvar.h:60`, `:140-141` | the default damage is the single-player style (`d_saberSPStyleDamage` 1): every server frame the blade is swept from its position of the previous frame in steps of 8 units and arcs of 33 degrees, each step's damage proportional to its length and rounded up, and an attacking saber may wound again on the next frame (`g_saberDmgDelay_Wound` 0; an idle one every 350 ms, `g_saberDmgDelay_Idle`); saber against saber contacts, parries and locks are decided at each contact, locks with random chances (`g_saberLockFactor`). More frames mean more decisions and more rounded-up steps per swing. Measured with bots (section 7): 6.2 times the wounds, 1.7 times the damage and 2 times the saber against saber contacts per swing at 125 Hz | decision D1 (part 2) |
 | G14 | `game/w_saber.c` (`G_SaberAttackPower`, `saberCheckKnockdown_*`), `game/g_combat.c` (severed limbs) | the speed of a swing is the saber base's move over one server frame (`lastSaberBase_Always - olderSaberBase`): 50 ms at 20 Hz, 8 ms at 125 Hz, so attacks about 6 times weaker against defence (more parries, fewer knockdowns and disarms) | measured over 50 ms from a history of the blade (`WP_SaberStoreBase`, part 2) |
 | G3 | `game/w_saber.c:8503` | `fVSpeed *= 1.6f/sv_fps.value` (the saber box ahead of a moving player) | in time units (part 2) |
-| G4 | `game/w_force.c:4133` | `FORCE_DEBOUNCE_TIME 50` ("sv_fps 20 = 50msec frametime, basejka balance/timing"): OpenJK's partial fix for the force powers | checked, generalised (part 2) |
+| G4 | `game/w_force.c:4133` | `FORCE_DEBOUNCE_TIME 50` ("sv_fps 20 = 50msec frametime, basejka balance/timing"): OpenJK's partial fix for the force powers | done: the periodic timers at their 20 Hz lengths (section 8) |
 | G5 | `game/g_combat.c:3331-3334` | dismembered limbs: physics stepped every 50 ms "to compensate in case sv_fps is not 20" | kept (already rate-independent) |
 | G6 | `level.time + 50` / `- 50` in `game/w_saber.c` (163, 648, 6287, 6290, 6539, 6542, 7011, 7067, 8872-8873), `game/g_weapon.c` (395, 1383, 1413, 2553, 2607, 4917, 4943, 5031), `game/g_items.c` (1329, 1340), `game/g_misc.c` (1036, 1147, 2167, 2939: 25), `game/g_client.c` (403, 538), `game/g_mover.c` (755, 2516) | thinks scheduled one 20 Hz frame ahead; some are "every frame" in disguise, some real delays | each read and classified (part 2) |
 | G7 | `FRAMETIME` (100 ms, `game/g_local.h:54`) in 24 files, mostly NPC and ICARUS thinks every 100 ms | delays in milliseconds: independent of the rate, quantised to the tick | none needed; checked (part 2) |
@@ -183,4 +183,48 @@ The saber is traced every server frame on its whole move, with a lookahead of 16
 
 On Linux (the owner's VPS, GCC 12, fast mode, 4 servers at a time on its single core), the reference against the final saber in the same series, 80 server-minutes each: damage +2.2 %, deaths +1.9 %, saber against saber blocks −12.5 % (the first series alone +6.2 %, +3.5 %, −8.4 %; the second, with the wider seeds, −1.4 %, +0.5 %, −16.2 %). Within the noise of the Windows results: no sign of a difference between GCC and clang. The Linux reference module is built from a detached worktree of the commit of part 2 with the saber changes undone (`E:\Git\jka\OpenJK_Netcode_saberref`, six lines of `w_saber.c`, not committed); on Windows it gives the same counts as the reference module used for the tuning (−0.4 % damage, −0.1 % deaths, −1.8 % blocks over 180 server-minutes).
 
-Left in part 2: G3 (`fVSpeed *= 1.6f/sv_fps.value`, the saber box ahead of a moving player: the frame time is right, read from the frame instead of `sv_fps` when it is removed in part 3), G4 to G8 (force powers, the 50 ms constants, thinks run every frame), CG5 (the prediction misses when crouching or jumping while attacking).
+The force powers were disabled in these measurements (the owner's server settings, section 8).
+## 8. Part 2: the force powers (11 November 2026)
+
+### What was found (inventory item G4)
+
+- The held powers run once per server frame (`WP_ForcePowersUpdate`, `WP_ForcePowerRun`). OpenJK had already put the lightning and drain shots on a 50 ms accumulator (`FORCE_DEBOUNCE_TIME`), and the force regeneration accumulates its interval too: both are independent of the rate.
+- The other periodic timers are re-armed with `level.time + n` and tested with `<`. On the 20 Hz server the event came in the first frame after the deadline, every n + 50 ms; at 125 Hz every n + 8 ms. So at 125 Hz grip drained a force point every 104 ms instead of 150 (44 % faster), rage took 2 health points every 152, 304 or 456 ms instead of 200, 350 or 500 (by level), protect drained every 304 ms instead of 350, absorb every 608 instead of 650, the grip's damage came every 1,008 ms instead of 1,050, the lift of a gripped player every 304 instead of 350, a step of the force jump charge every 504 instead of 550, the seeker drone fired about 8 % more often and beeped every 104 ms instead of 150, and the grip sound played every 1,008 ms instead of 1,050.
+- Mind trick ends when the trickster attacks in view within 4 server frames (`g_TimeSinceLastFrame * 4`): 200 ms at 20 Hz, 32 ms at 125 Hz.
+- The power durations (8 to 30 s; lightning and drain 500 ms) end up to 42 ms sooner at 125 Hz: under 0.5 % for the long ones, and lightning and drain still fire the same shots per use (their last shot, at 500 ms, comes in both cases). The one-off delays (cooldowns of 1.5 to 10 s, knockdowns, the hand's extension) also end up to 42 ms sooner, once: left as written (at most 4 % of their length, and several are read by the shared movement code with the command's time, not the frame's).
+
+### What the code does
+
+Each periodic timer is written as its 20 Hz length and tested with `<=` (the table is in 09, section 7): the value in the code is the real interval at any rate, rounded up to the tick at 125 Hz (at most 6 ms: 150 ms becomes 152). The seeker drone's random interval is 425 to 725 ms (the 20 Hz intervals, 450 to 700 ms in steps of 50, spread over their 50 ms). The mind trick window is 200 ms, and `g_TimeSinceLastFrame` and `g_LastFrameTime`, used only there, are removed. `G_GRID20_DEADLINE`, used for the saber's wound delays, was not used here: those delays are cvars, whose values keep their 20 Hz meaning through it, whereas the force timers are constants that can state their real length (the owner prefers values set directly to hidden adjustments).
+
+### How it is measured
+
+- The bench of section 7 with the force powers enabled (`PREMAP="g_forcePowerDisable 0"` in the scripts). The saber measurements of section 7 ran with the owner's server settings, which the dedicated server read from the `openjk_server.cfg` of its base path: every force power disabled except jump and the saber skills (`g_forcePowerDisable 163837`), no saber locks (`g_saberLocking 0`), no private duels. The scripts now set these themselves, so that a run is the same on every machine (on the VPS it was not known which file was read).
+- `gamestats` prints, for grip, rage, protect, absorb, lightning and drain, the starts, the periodic events (drains, rage health losses, shots) and the time held, counted from the frame a power starts to the frame it stops; `gamestats_agg.py` gives the events per use and per second held.
+- The bots use lightning, drain, rage, protect and absorb, but never grip: lightning comes first in their choice while they have more than 50 force points, absorb prevents grip, and they use no force power at all when any power is disabled (`ai_main.c`: `bot_forcepowers` and `!g_forcePowerDisable.integer`). Grip's timers follow the same rule as the others but are not measured.
+
+### Results
+
+Timing, 80 server-minutes per configuration in one batch (the rates per second held are above 1 / interval because each use starts with an event):
+
+| | rage health losses per second held | protect drains per second held | absorb drains per second held | lightning shots per use | drain shots per use |
+|---|---|---|---|---|---|
+| 20 Hz (the same as OpenJK for the force powers) | 2.28 | 3.17 | 1.66 | 8.56 | 4.34 |
+| 125 Hz, before | 2.49 | 3.67 | 1.79 | 8.47 | 4.37 |
+| **125 Hz, after** | 2.25 | 3.21 | 1.67 | 8.33 | 4.58 |
+
+Lightning and drain shots per second held are 21.0 and 21.9 at 125 Hz against 20.0 at 20 Hz, before and after: the same shots per use over a use 42 ms shorter (the end of the 500 ms duration).
+
+Game, 16 bots with the force powers, against OpenJK at 20 Hz in the same batches, per minute over 300 server-minutes per configuration (5 batches; with the force powers one batch moves by up to 13 %):
+
+| per minute | saber damage | deaths | saber against saber blocks | force damage |
+|---|---|---|---|---|
+| this branch at 20 Hz (its saber is tuned for 125 Hz) | +8.2 % | +6.0 % | −18.4 % | −1.6 % |
+| 125 Hz, force powers before | +1.1 % | +2.3 % | −11.3 % | −7.4 % |
+| **125 Hz, force powers after** | +5.2 % | +4.5 % | −8.9 % | −9.3 % |
+
+- The change itself adds about 4 % of saber damage and takes about 2 % of force damage: rage lasts longer again (its health drain is back to its 20 Hz pace), and a raged player swings 1.7 times faster and takes half the damage.
+- With the force powers, the saber at 125 Hz deals about 5 % more damage than OpenJK's at 20 Hz, where without them it deals about 4 % less (section 7); this branch's saber at 20 Hz deals 8 % more with them. The saber was tuned with the owner's settings (no force powers); to decide with the owner.
+- The force damage (lightning and drain only) is about 9 % lower at 125 Hz, before and after the change: the bots start lightning and drain about 8 % less often (35.2 against 38.2 lightning starts per minute), while each use fires the same shots. Nothing in the force code explains it (the cooldowns are tested with `>`, which keeps their length; the hand and weapon checks are per frame); it is left as a difference of the bots' fights at 125 Hz, to look at again with players.
+
+Left in part 2: G3 (`fVSpeed *= 1.6f/sv_fps.value`, the saber box ahead of a moving player: the frame time is right, read from the frame instead of `sv_fps` when it is removed in part 3), G5 to G8 (the 50 ms constants, thinks run every frame), CG5 (the prediction misses when crouching or jumping while attacking).

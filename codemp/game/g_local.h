@@ -61,6 +61,9 @@ extern vec3_t gPainPoint;
 // A deadline tested with "deadline < level.time": lasts as long as "level.time + d" lasted on the 20 Hz server, until its
 // first frame after level.time + d, at any server frame rate (identical at 20 Hz); with d = 0, the next 50 ms window.
 #define	G_GRID20_DEADLINE( d )	( level.time / 50 * 50 + ( d ) / 50 * 50 + 49 )
+// A periodic timer re-armed with "level.time + n" and tested with '<' took n + 50 ms on the 20 Hz server (its first frame
+// after the deadline) but n + 8 at 125 Hz, so its event came up to 44 % more often. The force powers' periodic timers are
+// written as their 20 Hz lengths (n + 50) and tested with '<=', which means the same at any rate (rounded up to the frame).
 #define	CARNAGE_REWARD_TIME	3000
 #define REWARD_SPRITE_TIME	2000
 
@@ -1530,6 +1533,9 @@ typedef struct gameStats_s {
 	int		forceDamage;		// health taken by the dark force powers
 	int		deaths;
 	int		saberHitEffects;	// hit effects (blood or sparks, and their sound) of sabers on clients
+	int		forceStarts[NUM_FORCE_POWERS];		// times each force power was started (WP_ForcePowerStart)
+	int		forceTimerEvents[NUM_FORCE_POWERS];	// periodic events of the held powers: grip, protect and absorb drains, rage health losses, lightning and drain shots
+	int		forceActiveMsec[NUM_FORCE_POWERS];	// time each power was held, from the frame it starts to the frame it stops
 } gameStats_t;
 extern	gameStats_t		g_stats;
 

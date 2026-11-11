@@ -482,6 +482,20 @@ void Svcmd_GameStats_f( void ) {
 		s->saberWounds / swings, s->saberDamage / swings, s->saberClashes / swings, s->saberBlocks / swings,
 		s->saberLocks / swings, s->saberTouches / swings, s->saberWounds, s->saberDamage, s->saberClashes, s->saberBlocks,
 		s->saberLocks, s->saberTouches, s->missileBlocks, s->forceDamage, s->deaths, s->saberHitEffects );
+	{ // raw counts of the powers whose timing depends on the frame rate: gamestats_agg.py computes the rates
+		static const struct { forcePowers_t power; const char *name; } shown[] = {
+			{ FP_GRIP, "grip" }, { FP_RAGE, "rage" }, { FP_PROTECT, "protect" }, { FP_ABSORB, "absorb" },
+			{ FP_LIGHTNING, "lightning" }, { FP_DRAIN, "drain" },
+		};
+		char line[MAX_STRING_CHARS] = "force statistics: starts, periodic events (drains, rage health losses, shots) and milliseconds held per power:";
+		size_t i;
+		for ( i = 0; i < ARRAY_LEN( shown ); i++ ) {
+			const forcePowers_t f = shown[i].power;
+			Q_strcat( line, sizeof( line ), va( "%s %s %d %d %d", i ? "," : "", shown[i].name, s->forceStarts[f],
+				s->forceTimerEvents[f], s->forceActiveMsec[f] ) );
+		}
+		trap->Print( "%s\n", line );
+	}
 	memset( &g_stats, 0, sizeof( g_stats ) );
 }
 

@@ -206,6 +206,25 @@ The server traces the saber once per server frame. The game was tuned on 20 fram
 
 Measured with 16 bots playing as clients at 125 frames per second (`bot_debugClientRate 1`), sabers only, against OpenJK's saber at 20 Hz run in the same batches, per minute over 540 server-minutes: damage about −4 %, deaths about the same, saber against saber blocks about −8 %, hit effects the same (with 48 ms). At `sv_fps` 20 the new saber is not identical to OpenJK's: it is tuned for the 125 Hz tick. The other parts of the game code that depend on the server frame rate are reviewed in plan step 14, part 2 ([progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md)).
 
+### The force powers at a higher server frame rate (plan step 14)
+
+The held force powers run once per server frame. Their periodic timers were re-armed with "now + n" and tested with "<", so on the 20 Hz server the event came every n + 50 ms (the first frame after the deadline) and at 125 Hz every n + 8 ms. They are now written as their 20 Hz lengths and tested with "<=", which means the same at any rate (rounded up to the 8 ms tick at 125 Hz). Lightning, drain and the force regeneration were already independent of the rate in OpenJK.
+
+| timer | OpenJK at 20 Hz | OpenJK at 125 Hz | this branch |
+|---|---|---|---|
+| grip drains a force point | every 150 ms | every 104 ms (44 % faster) | every 150 ms |
+| grip's damage (2 points) | every 1,050 ms | every 1,008 ms | every 1,050 ms |
+| lift of a gripped player (velocity set) | every 350 ms | every 304 ms | every 350 ms |
+| rage takes 2 health points (levels 1, 2, 3) | every 200, 350, 500 ms | every 152, 304, 456 ms | every 200, 350, 500 ms |
+| protect drains a force point | every 350 ms | every 304 ms | every 350 ms |
+| absorb drains a force point | every 650 ms | every 608 ms | every 650 ms |
+| force jump charge step | every 550 ms | every 504 ms | every 550 ms |
+| seeker drone shot | every 450 to 700 ms | every 404 to 704 ms | every 425 to 725 ms |
+| seeker drone warning beep, grip sound | every 150 ms, 1,050 ms | every 104 ms, 1,008 ms | every 150 ms, 1,050 ms |
+| mind trick broken by an attack in view | within 200 ms (4 frames) | within 32 ms (4 frames) | within 200 ms |
+
+Measured with 16 bots using the force powers, against OpenJK at 20 Hz in the same batches: rage, protect and absorb drain at the 20 Hz pace (within 1 to 2 %), lightning and drain fire the same shots per use. The bots never use grip, so its timers are not measured. With the force powers, the saber at 125 Hz deals about 5 % more damage than OpenJK's at 20 Hz (rage, back to its length, makes swings faster), and the force damage is about 9 % lower because the bots start lightning and drain less often at 125 Hz, a difference not found in the force code ([progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md), section 8).
+
 ## 8. Settings
 
 | cvar | OpenJK | this branch | why |
@@ -227,7 +246,7 @@ Two console commands are added for statistics, each printing its counters since 
 | command | side | what it prints |
 |---|---|---|
 | `svnetstats` | server | first the server's CPU time (plan step 14, to size the tick rate): the server frames, and within them the game frames, the bot frames and the snapshots sent, then the client packets decoded and run as they arrive, each with its count, mean and largest time in microseconds, the server frames longer than the interval between frames, and the share of one core; then, for each client: messages, bytes per message, messages sent raw (escapes), snapshots without a base, snapshots whose base was refused, snapshots cut to fit, base age; server commands sent and how many were repeats; client packets, bytes per packet, packets not decoded, packets dropped above the packet rate, user commands per packet, client packets lost on the way and the length of each run of losses; how much the time a snapshot leaves changes against the game clock it carries (mean and largest change between consecutive snapshots, measured in microseconds), which the client would otherwise take for network jitter (plan step 11) |
-| `gamestats` | server (game module) | combat statistics since the last call, then reset: saber swings, wounds, damage, saber against saber contacts (blocks), body hits parried without the sabers touching, saber locks and idle touches, in total and per swing; projectiles blocked by sabers, force damage, deaths (plan step 14: the game must play the same at any server frame rate; `docs_rewrite/netcode/tools/gamestats/` runs bot servers and tables the results) |
+| `gamestats` | server (game module) | combat statistics since the last call, then reset: saber swings, wounds, damage, saber against saber contacts (blocks), body hits parried without the sabers touching, saber locks and idle touches, in total and per swing; projectiles blocked by sabers, force damage, deaths; for grip, rage, protect, absorb, lightning and drain, the starts, the periodic events (drains, rage health losses, shots) and the time held (plan step 14: the game must play the same at any server frame rate; `docs_rewrite/netcode/tools/gamestats/` runs bot servers and tables the results) |
 | `bot_debugClientRate` | server (game module), cheat | 1: the bots think every 50 ms and send a command every 8 ms, as a client at 125 frames per second, at any server frame rate, so that bot measurements compare rates fairly (otherwise they think and move once per server frame) |
 | `netstats` | client | messages lost on the way, messages not decoded, bytes per message, snapshots without a base, base age; the interpolation delay (how far behind each snapshot the client's time was when it arrived), the jitter of the arrivals, the intervals in which the client passed the newest snapshot (extrapolated), whether the loss margin was on; client packets sent, bytes per packet, packets coded without a base |
 

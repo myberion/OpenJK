@@ -2,7 +2,7 @@
 # Windows version of gamestats.sh for the owner's machine (llvm-mingw clang build, run under lldb: the clang dedicated
 # server crashes without a console). Runs local dedicated servers (no network) with 16 saber bots and prints
 # gamestats after a measured time. The runs go in $GAMESTATS_DIR/gs_<tag>; BUILD and GAME are set below.
-# Usage: [FAST=0|1] run_gamestats.sh <minutes> '<tag>|<fps>|<game dll>[|<cvar value>]' ...   (all run in parallel)
+# Usage: [FAST=0|1] [PREMAP='<cvar> <value>;...'] gamestats_windows.sh <minutes> '<tag>|<fps>|<game dll>[|<cvar value>]' ...   (all run in parallel)
 # The commands go in a cfg run by +exec: the engine keeps only 32 "+" commands of its command line
 # (MAX_CONSOLE_LINES); the measured time is chained in waits of 30 seconds. FAST=1 (default) sets fixedtime and
 # timedemo: the server runs its frames as fast as it can, each advancing the game by one interval.
@@ -35,6 +35,14 @@ run() {
 		echo "set fraglimit 0"
 		echo "set timelimit 0"
 		echo "set g_weaponDisable 524279"
+		# the owner's server settings, set here because the dedicated server also reads the openjk_server.cfg of
+		# fs_basepath, which differs between machines: sabers and force jump only, no saber locks, no private duels
+		echo "set g_forcePowerDisable 163837"
+		echo "set g_saberLocking 0"
+		echo "set g_privateDuel 0"
+		# PREMAP: cvars set before the map loads (latched ones), separated by ";", for example PREMAP="g_forcePowerDisable 0"
+		IFS=';' read -ra pre <<< "${PREMAP:-}"
+		for c in "${pre[@]}"; do echo "set $c"; done
 		# the game seeds its random numbers with the milliseconds since the process started: a random wait before
 		# the map loads, in frames of 8 ms whatever the rate tested (400 values, at most 3.2 s), gives each server
 		# its own seed (40 values of the frame of the rate tested gave the same seed, so the same game, twice)

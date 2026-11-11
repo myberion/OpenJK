@@ -2852,8 +2852,6 @@ runicarus:
 	}
 }
 
-int g_LastFrameTime = 0;
-int g_TimeSinceLastFrame = 0;
 
 qboolean gDoSlowMoDuel = qfalse;
 int gSlowMoDuelTime = 0;
@@ -3062,8 +3060,6 @@ void G_RunFrame( int levelTime ) {
 		//Look to clear out old events
 		ClearPlayerAlertEvents();
 	}
-
-	g_TimeSinceLastFrame = (level.time - g_LastFrameTime);
 
 	// get any cvar changes
 	G_UpdateCvars();
@@ -3447,8 +3443,6 @@ void G_RunFrame( int levelTime ) {
 		iTimer_GameChecks,
 		iTimer_Queues);
 #endif
-
-	g_LastFrameTime = level.time;
 }
 
 const char *G_GetStringEdString(char *refSection, char *refName)
