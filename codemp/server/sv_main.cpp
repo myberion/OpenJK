@@ -27,6 +27,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "ghoul2/ghoul2_shared.h"
 #include "sv_gameapi.h"
 
+#include <chrono>
+
 serverStatic_t	svs;				// persistant server info
 server_t		sv;					// local server
 
@@ -769,6 +771,68 @@ void SV_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
 
 //============================================================================
 
+// The server's CPU time since the last svnetstats, in microseconds (plan step 14: what a higher tick rate costs). A
+// server frame is the work of SV_Frame from the pings to the snapshots sent; the game frames, the bots and the
+// snapshots are parts of it. Client packets are decoded and run (with the movement of human players) when they
+// arrive, outside the frames. Meant for a dedicated server: a listen server runs its bots before the frame, uncounted.
+enum svCost_t { SV_COST_FRAME, SV_COST_GAME, SV_COST_BOTS, SV_COST_SNAPSHOTS, SV_COST_PACKETS, SV_COST_COUNT };
+
+static struct {
+	int			calls[SV_COST_COUNT];
+	long long	sum[SV_COST_COUNT];
+	long long	max[SV_COST_COUNT];
+	int			framesOverInterval;	// server frames that took longer than the interval between frames
+	long long	since;				// when the statistics started (SV_Microseconds), 0 before the first measure
+} s_cost;
+
+long long SV_Microseconds( void ) {
+	return (long long)std::chrono::duration_cast<std::chrono::microseconds>(
+		std::chrono::steady_clock::now().time_since_epoch() ).count();
+}
+
+// Adds the time since start to a part and returns it.
+static long long SV_CostAdd( svCost_t part, long long start ) {
+	const long long now = SV_Microseconds();
+	const long long t = now - start;
+	if ( !s_cost.since ) {
+		s_cost.since = start;
+	}
+	s_cost.calls[part]++;
+	s_cost.sum[part] += t;
+	s_cost.max[part] = Q_max( s_cost.max[part], t );
+	return t;
+}
+
+void SV_CostStats( void ) {
+	static const char *const names[SV_COST_COUNT] = { "server frames", "game frames", "bot frames", "snapshots sent",
+		"client packets" };
+	const long long now = SV_Microseconds();
+	const double seconds = s_cost.since ? ( now - s_cost.since ) / 1e6 : 0.0;
+	int humans = 0, bots = 0;
+
+	for ( int i = 0; i < sv_maxclients->integer; i++ ) {
+		const client_t *cl = &svs.clients[i];
+		if ( cl->state < CS_CONNECTED ) {
+			continue;
+		}
+		if ( cl->netchan.remoteAddress.type == NA_BOT ) {
+			bots++;
+		} else {
+			humans++;
+		}
+	}
+	Com_Printf( "server CPU over %.1f s, sv_fps %d, %d humans, %d bots:", seconds, sv_fps->integer, humans, bots );
+	for ( int i = 0; i < SV_COST_COUNT; i++ ) {
+		Com_Printf( " %s %d, %.1f us each, max %lld us;", names[i], s_cost.calls[i],
+			s_cost.calls[i] ? (double)s_cost.sum[i] / s_cost.calls[i] : 0.0, s_cost.max[i] );
+	}
+	const long long busy = s_cost.sum[SV_COST_FRAME] + s_cost.sum[SV_COST_PACKETS];
+	Com_Printf( " %d server frames longer than the interval; %.2f %% of one core\n", s_cost.framesOverInterval,
+		seconds > 0.0 ? busy / ( seconds * 1e4 ) : 0.0 );
+	Com_Memset( &s_cost, 0, sizeof( s_cost ) );
+	s_cost.since = now;
+}
+
 /*
 =================
 SV_ReadPackets
@@ -820,7 +884,9 @@ void SV_PacketEvent( const netadr_t *from, msg_t *msg ) {
 			// reliable message, but they don't do any other processing
 			if (cl->state != CS_ZOMBIE) {
 				cl->lastPacketTime = svs.time;	// don't timeout
+				const long long start = SV_Microseconds();
 				SV_ExecuteClientMessage( cl, msg );
+				SV_CostAdd( SV_COST_PACKETS, start );
 			}
 		}
 		return;
@@ -1116,10 +1182,16 @@ void SV_Frame( int msec ) {
 		startTime = 0;	// quite a compiler warning
 	}
 
+	const long long frameStart = SV_Microseconds();
+
 	// update ping based on the all received frames
 	SV_CalcPings();
 
-	if (com_dedicated->integer) SV_BotFrame( sv.time );
+	if (com_dedicated->integer) {
+		const long long start = SV_Microseconds();
+		SV_BotFrame( sv.time );
+		SV_CostAdd( SV_COST_BOTS, start );
+	}
 
 	// run the game simulation in chunks
 	while ( sv.timeResidual >= frameMsec ) {
@@ -1128,7 +1200,9 @@ void SV_Frame( int msec ) {
 		sv.time += frameMsec;
 
 		// let everything in the world think and move
+		const long long start = SV_Microseconds();
 		GVM_RunFrame( sv.time );
+		SV_CostAdd( SV_COST_GAME, start );
 	}
 
 	//rww - RAGDOLL_BEGIN
@@ -1143,7 +1217,12 @@ void SV_Frame( int msec ) {
 	SV_CheckTimeouts();
 
 	// send messages back to the clients
+	const long long sendStart = SV_Microseconds();
 	SV_SendClientMessages();
+	SV_CostAdd( SV_COST_SNAPSHOTS, sendStart );
+	if ( SV_CostAdd( SV_COST_FRAME, frameStart ) > frameMsec * 1000LL ) {
+		s_cost.framesOverInterval++;
+	}
 
 	SV_CheckCvars();
 

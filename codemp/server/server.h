@@ -423,6 +423,12 @@ void SV_NetcodecStats_f( void );
 const netcodec::engine::ClientPacket *SV_NetcodecDecodeClientPacket( client_t *client, const msg_t *msg );
 
 //
+// sv_main.cpp: the server's CPU time, printed by svnetstats (plan step 14: what a higher tick rate costs)
+//
+long long SV_Microseconds( void );	// steady clock, for durations
+void SV_CostStats( void );			// prints the CPU time since the last call, then resets it
+
+//
 // sv_game.c
 //
 int	SV_NumForGentity( sharedEntity_t *ent );

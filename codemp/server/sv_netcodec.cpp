@@ -30,7 +30,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "netcodec/engine.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cstddef>
 
 namespace eng = netcodec::engine;
@@ -97,9 +96,7 @@ static struct {
 // A snapshot sent without a base asked starts the measure again: the client enters the world (a map load, which
 // runs three frames of 100 ms at once, or a map_restart, which does the same) or asked for a full snapshot.
 static void SV_NetcodecMeasureSend( client_t *client, bool baseAsked ) {
-	const long long now = (long long)std::chrono::duration_cast<std::chrono::microseconds>(
-		std::chrono::steady_clock::now().time_since_epoch() ).count();
-	const long long offset = now - (long long)sv.time * 1000;
+	const long long offset = SV_Microseconds() - (long long)sv.time * 1000;
 	auto &last = s_sendTime[ClientIndex( client )];
 	if ( last.valid && baseAsked ) {
 		netcodecStats_t &st = client->netcodecStats;
@@ -488,12 +485,14 @@ void SV_NetcodecSendSnapshot( client_t *client, const char *setGame ) {
 	SV_NetcodecSend( client, sm, oldframe, lastframe );
 }
 
-// svnetstats: the message codec's statistics of each client since its connection or the last svnetstats, then reset
+// svnetstats: the server's CPU time, then the message codec's statistics of each client, since its connection or the
+// last svnetstats, then reset
 void SV_NetcodecStats_f( void ) {
 	if ( !com_sv_running->integer ) {
 		Com_Printf( "Server is not running.\n" );
 		return;
 	}
+	SV_CostStats();
 	for ( int i = 0; i < sv_maxclients->integer; i++ ) {
 		client_t *cl = &svs.clients[i];
 		netcodecStats_t &st = cl->netcodecStats;
