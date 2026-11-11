@@ -50,28 +50,11 @@ damage values to that client for pain blends and kicks, and
 global pain sound events for all clients.
 ===============
 */
-// Records this server frame's damage and returns the damage taken over the last 50 ms (plan step 14): the pain threshold
-// of P_DamageFeedback was tuned on one 50 ms frame of the 20 Hz server; at 125 Hz the same blow is spread over several
-// frames, each below it (identical at 20 Hz, where the window holds this frame only).
-static int P_RecentDamage( gclient_t *client, int damage ) {
-	int total = 0;
-	int i;
-
-	client->painDamageHead = ( client->painDamageHead + 1 ) % ARRAY_LEN( client->painDamage );
-	client->painDamage[client->painDamageHead] = damage;
-	client->painDamageTime[client->painDamageHead] = level.time;
-	for ( i = 0; i < (int)ARRAY_LEN( client->painDamage ); i++ ) {
-		if ( client->painDamageTime[i] > level.time - 50 && client->painDamageTime[i] <= level.time ) {
-			total += client->painDamage[i];
-		}
-	}
-	return total;
-}
+extern vmCvar_t bot_debugClientRate;
 
 void P_DamageFeedback( gentity_t *player ) {
 	gclient_t	*client;
 	float	count;
-	int		recentDamage;
 	vec3_t	angles;
 
 	client = player->client;
@@ -84,7 +67,6 @@ void P_DamageFeedback( gentity_t *player ) {
 	if ( count == 0 ) {
 		return;		// didn't take any damage
 	}
-	recentDamage = P_RecentDamage( client, (int)count );
 
 	if ( count > 255 ) {
 		count = 255;
@@ -120,7 +102,7 @@ void P_DamageFeedback( gentity_t *player ) {
 
 		// don't do more than two pain sounds a second
 		// nmckenzie: also don't make him loud and whiny if he's only getting nicked.
-		if ( level.time - client->ps.painTime < 500 || recentDamage < 10) {
+		if ( level.time - client->ps.painTime < 500 || count < 10) {
 			return;
 		}
 		P_SetTwitchInfo(client);
@@ -1112,6 +1094,9 @@ void SendPendingPredictableEvents( playerState_t *ps ) {
 		ps->externalEvent = 0;
 		// create temporary entity for event
 		t = G_TempEntity( ps->origin, event );
+		if ( event > 0 && event < EV_NUM_ENTITY_EVENTS ) {
+			g_stats.events[event]--;	// a copy of a Pmove event, whose number depends on the commands per frame: not counted
+		}
 		number = t->s.number;
 		BG_PlayerStateToEntityState( ps, &t->s, qtrue );
 		t->s.number = number;
@@ -2023,12 +2008,12 @@ void ClientThink_real( gentity_t *ent ) {
 	}
 
 	// sanity check the command time to prevent speedup cheating
-	if ( ucmd->serverTime > level.time + 200 ) {
-		ucmd->serverTime = level.time + 200;
+	if ( ucmd->serverTime > level.tickTime + 200 ) {
+		ucmd->serverTime = level.tickTime + 200;
 //		trap->Print("serverTime <<<<<\n" );
 	}
-	if ( ucmd->serverTime < level.time - 1000 ) {
-		ucmd->serverTime = level.time - 1000;
+	if ( ucmd->serverTime < level.tickTime - 1000 ) {
+		ucmd->serverTime = level.tickTime - 1000;
 //		trap->Print("serverTime >>>>>\n" );
 	}
 
@@ -3052,7 +3037,12 @@ void ClientThink_real( gentity_t *ent ) {
 #endif
 	}
 
-	Pmove (&pmove);
+	{
+		const int oldSaberMove = ent->client->ps.saberMove;
+
+		Pmove (&pmove);
+		G_StatsSaberMove( ent, oldSaberMove );
+	}
 
 	if (ent->client->solidHack)
 	{
@@ -3594,8 +3584,8 @@ void ClientThink( int clientNum, usercmd_t *ucmd ) {
 		}
 	}
 */
-	if ( !(ent->r.svFlags & SVF_BOT) && !g_synchronousClients.integer ) {
-		ClientThink_real( ent );
+	if ( ( !(ent->r.svFlags & SVF_BOT) || bot_debugClientRate.integer ) && !g_synchronousClients.integer ) {
+		ClientThink_real( ent );	// bot_debugClientRate: the bots run every command, as players do (plan step 14 measurements)
 	}
 	// vehicles are clients and when running synchronous they still need to think here
 	// so special case them.
@@ -3632,7 +3622,7 @@ void G_RunClient( gentity_t *ent ) {
 		ent->client->lastCmdTime = level.time;
 
 		// fill with seemingly valid data
-		ent->client->pers.cmd.serverTime = level.time;
+		ent->client->pers.cmd.serverTime = level.tickTime;
 		ent->client->pers.cmd.buttons = 0;
 		ent->client->pers.cmd.forwardmove = ent->client->pers.cmd.rightmove = ent->client->pers.cmd.upmove = 0;
 
@@ -3640,10 +3630,10 @@ void G_RunClient( gentity_t *ent ) {
 		return;
 	}
 
-	if ( !(ent->r.svFlags & SVF_BOT) && !g_synchronousClients.integer ) {
+	if ( ( !(ent->r.svFlags & SVF_BOT) || bot_debugClientRate.integer ) && !g_synchronousClients.integer ) {
 		return;
 	}
-	ent->client->pers.cmd.serverTime = level.time;
+	ent->client->pers.cmd.serverTime = level.tickTime;
 	ClientThink_real( ent );
 }
 
@@ -3724,8 +3714,8 @@ void ClientEndFrame( gentity_t *ent ) {
 		return;
 	}
 
-	// turn off any expired powerups
-	for ( i = 0 ; i < MAX_POWERUPS ; i++ ) {
+	// turn off any expired powerups (on the 20 Hz instants of the tick, as at sv_fps 20: plan step 14)
+	for ( i = 0 ; G_GRID20_STEP && i < MAX_POWERUPS ; i++ ) {
 		if ( ent->client->ps.powerups[ i ] < level.time ) {
 			ent->client->ps.powerups[ i ] = 0;
 		}
@@ -3751,11 +3741,14 @@ void ClientEndFrame( gentity_t *ent ) {
 		}
 	}
 
-	// burn from lava, etc
-	P_WorldEffects (ent);
+	if ( G_GRID20_STEP )
+	{ // on the 20 Hz instants of the tick: the damage of the ticks between adds up, as in one frame of sv_fps 20 (plan step 14)
+		// burn from lava, etc
+		P_WorldEffects (ent);
 
-	// apply all the damage taken this frame
-	P_DamageFeedback (ent);
+		// apply all the damage taken this frame
+		P_DamageFeedback (ent);
+	}
 
 	// add the EF_CONNECTION flag if we haven't gotten commands recently
 	if ( level.time - ent->client->lastCmdTime > 1000 )

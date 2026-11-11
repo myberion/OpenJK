@@ -193,7 +193,9 @@ qboolean	G_TryPushingEntity( gentity_t *check, gentity_t *pusher, vec3_t move, v
 		&& (pusher->spawnflags&16) //IMPACT
 		&& Q_stricmp( "func_rotating", pusher->classname ) == 0 )
 	{//just blow the fuck out of them
-		G_Damage( check, pusher, pusher, NULL, NULL, pusher->damage, DAMAGE_NO_KNOCKBACK, MOD_CRUSH );
+		if ( G_GRID20_STEP ) { // on the 20 Hz instants: movers push every tick (plan step 14)
+			G_Damage( check, pusher, pusher, NULL, NULL, pusher->damage, DAMAGE_NO_KNOCKBACK, MOD_CRUSH );
+		}
 		return qtrue;
 	}
 
@@ -376,14 +378,18 @@ qboolean G_MoverPush( gentity_t *pusher, vec3_t move, vec3_t amove, gentity_t **
 
 		if (pusher->damage && check->client && (pusher->spawnflags & 32))
 		{
-			G_Damage( check, pusher, pusher, NULL, NULL, pusher->damage, 0, MOD_CRUSH );
+			if ( G_GRID20_STEP ) { // on the 20 Hz instants: movers push every tick (plan step 14)
+				G_Damage( check, pusher, pusher, NULL, NULL, pusher->damage, 0, MOD_CRUSH );
+			}
 			continue;
 		}
 
 		if (check->s.eType == ET_BODY ||
 			(check->s.eType == ET_PLAYER && check->health < 1))
 		{ //whatever, just crush it
-			G_Damage( check, pusher, pusher, NULL, NULL, 999, 0, MOD_CRUSH );
+			if ( G_GRID20_STEP ) { // on the 20 Hz instants: movers push every tick (plan step 14)
+				G_Damage( check, pusher, pusher, NULL, NULL, 999, 0, MOD_CRUSH );
+			}
 			continue;
 		}
 
@@ -411,7 +417,9 @@ qboolean G_MoverPush( gentity_t *pusher, vec3_t move, vec3_t amove, gentity_t **
 
 		// bobbing entities are instant-kill and never get blocked
 		if ( pusher->s.pos.trType == TR_SINE || pusher->s.apos.trType == TR_SINE ) {
-			G_Damage( check, pusher, pusher, NULL, NULL, 99999, 0, MOD_CRUSH );
+			if ( G_GRID20_STEP ) { // on the 20 Hz instants: movers push every tick (plan step 14)
+				G_Damage( check, pusher, pusher, NULL, NULL, 99999, 0, MOD_CRUSH );
+			}
 			continue;
 		}
 
@@ -455,9 +463,9 @@ void G_MoverTeam( gentity_t *ent ) {
 	// if the move is blocked, all moved objects will be backed out
 	pushed_p = pushed;
 	for (part = ent ; part ; part=part->teamchain) {
-		// get current position
-		BG_EvaluateTrajectory( &part->s.pos, level.time, origin );
-		BG_EvaluateTrajectory( &part->s.apos, level.time, angles );
+		// get current position (movers move every tick, plan step 14: g_local.h)
+		BG_EvaluateTrajectory( &part->s.pos, level.tickTime, origin );
+		BG_EvaluateTrajectory( &part->s.apos, level.tickTime, angles );
 		VectorSubtract( origin, part->r.currentOrigin, move );
 		VectorSubtract( angles, part->r.currentAngles, amove );
 		if ( !VectorCompare( move, vec3_origin )
@@ -472,15 +480,15 @@ void G_MoverTeam( gentity_t *ent ) {
 	if (part) {
 		// go back to the previous position
 		for ( part = ent ; part ; part = part->teamchain ) {
-			part->s.pos.trTime += level.time - level.previousTime;
-			part->s.apos.trTime += level.time - level.previousTime;
-			BG_EvaluateTrajectory( &part->s.pos, level.time, part->r.currentOrigin );
-			BG_EvaluateTrajectory( &part->s.apos, level.time, part->r.currentAngles );
+			part->s.pos.trTime += level.tickTime - level.previousTickTime;
+			part->s.apos.trTime += level.tickTime - level.previousTickTime;
+			BG_EvaluateTrajectory( &part->s.pos, level.tickTime, part->r.currentOrigin );
+			BG_EvaluateTrajectory( &part->s.apos, level.tickTime, part->r.currentAngles );
 			trap->LinkEntity( (sharedEntity_t *)part );
 		}
 
-		// if the pusher has a "blocked" function, call it
-		if (ent->blocked) {
+		// if the pusher has a "blocked" function, call it (on the 20 Hz instants: crushers hurt as at sv_fps 20)
+		if (ent->blocked && G_GRID20_STEP) {
 			ent->blocked( ent, obstacle );
 		}
 		return;

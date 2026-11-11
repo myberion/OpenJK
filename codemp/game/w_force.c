@@ -2194,7 +2194,7 @@ void ForceJumpCharge( gentity_t *self, usercmd_t *ucmd )
 		self->client->ps.fd.forceJumpAddTime = 0;
 	}
 
-	if (self->client->ps.fd.forceJumpAddTime > level.time)
+	if (self->client->ps.fd.forceJumpAddTime >= level.time)
 	{
 		return;
 	}
@@ -2206,10 +2206,10 @@ void ForceJumpCharge( gentity_t *self, usercmd_t *ucmd )
 	}
 
 	//Increment
-	if (self->client->ps.fd.forceJumpAddTime <= level.time)
+	if (self->client->ps.fd.forceJumpAddTime < level.time)
 	{
 		self->client->ps.fd.forceJumpCharge += forceJumpChargeInterval*50;
-		self->client->ps.fd.forceJumpAddTime = level.time + 550; // 20 Hz length (g_local.h, G_GRID20_DEADLINE)
+		self->client->ps.fd.forceJumpAddTime = level.time + 500;
 	}
 
 	//clamp to max strength for current level
@@ -3867,9 +3867,9 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 		return;
 	}
 
-	if (self->client->ps.fd.forcePowerDebounce[FP_GRIP] <= level.time)
+	if (self->client->ps.fd.forcePowerDebounce[FP_GRIP] < level.time)
 	{ //2 damage per second while choking, resulting in 10 damage total (not including The Squeeze<tm>)
-		self->client->ps.fd.forcePowerDebounce[FP_GRIP] = level.time + 1050; // 20 Hz length (g_local.h, G_GRID20_DEADLINE)
+		self->client->ps.fd.forcePowerDebounce[FP_GRIP] = level.time + 1000;
 		G_Damage(gripEnt, self, self, NULL, NULL, 2, DAMAGE_NO_ARMOR, MOD_FORCE_DARK);
 	}
 
@@ -3890,11 +3890,11 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 	{
 		gripEnt->client->ps.fd.forceGripBeingGripped = level.time + 1000;
 
-		if (gripEnt->client->ps.forceGripMoveInterval <= level.time)
+		if (gripEnt->client->ps.forceGripMoveInterval < level.time)
 		{
 			gripEnt->client->ps.velocity[2] = 30;
 
-			gripEnt->client->ps.forceGripMoveInterval = level.time + 350; //only update velocity every 300ms, so as to avoid heavy bandwidth usage (350: the 20 Hz length, g_local.h, G_GRID20_DEADLINE)
+			gripEnt->client->ps.forceGripMoveInterval = level.time + 300; //only update velocity every 300ms, so as to avoid heavy bandwidth usage
 		}
 
 		gripEnt->client->ps.otherKiller = self->s.number;
@@ -3936,7 +3936,7 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 
 		gripEnt->client->ps.forceGripChangeMovetype = PM_FLOAT;
 
-		if (gripEnt->client->ps.forceGripMoveInterval <= level.time)
+		if (gripEnt->client->ps.forceGripMoveInterval < level.time)
 		{
 			float nvLen = 0;
 
@@ -3986,7 +3986,7 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 				gripEnt->client->ps.velocity[2] = nvel[2]*700;
 			}
 
-			gripEnt->client->ps.forceGripMoveInterval = level.time + 350; //only update velocity every 300ms, so as to avoid heavy bandwidth usage (350: the 20 Hz length, g_local.h, G_GRID20_DEADLINE)
+			gripEnt->client->ps.forceGripMoveInterval = level.time + 300; //only update velocity every 300ms, so as to avoid heavy bandwidth usage
 		}
 
 		if ((level.time - gripEnt->client->ps.fd.forceGripStarted) > 3000 && !self->client->ps.fd.forceGripDamageDebounceTime)
@@ -4082,6 +4082,7 @@ static void RemoveTrickedEnt(forcedata_t *fd, int client)
 	}
 }
 
+
 static void WP_UpdateMindtrickEnts(gentity_t *self)
 {
 	int i = 0;
@@ -4097,7 +4098,7 @@ static void WP_UpdateMindtrickEnts(gentity_t *self)
 			{
 				RemoveTrickedEnt(&self->client->ps.fd, i);
 			}
-			else if ((level.time - self->client->dangerTime) < 200) // four 20 Hz frames (was four server frames: 32 ms at 125 Hz)
+			else if ((level.time - self->client->dangerTime) < 200) // four 20 Hz frames (was four server frames: 40 ms at 100 Hz)
 			{ //Untrick this entity if the tricker (self) fires while in his fov
 				if (trap->InPVS(ent->client->ps.origin, self->client->ps.origin) &&
 					OrgVisible(ent->client->ps.origin, self->client->ps.origin, ent->s.number))
@@ -4203,11 +4204,11 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 			break;
 		}
 
-		if (self->client->ps.fd.forcePowerDebounce[FP_PULL] <= level.time)
+		if (self->client->ps.fd.forcePowerDebounce[FP_PULL] < level.time)
 		{ //This is sort of not ideal. Using the debounce value reserved for pull for this because pull doesn't need it.
 			BG_ForcePowerDrain( &self->client->ps, forcePower, 1 );
 			g_stats.forceTimerEvents[FP_GRIP]++;
-			self->client->ps.fd.forcePowerDebounce[FP_PULL] = level.time + 150; // 20 Hz length (g_local.h, G_GRID20_DEADLINE)
+			self->client->ps.fd.forcePowerDebounce[FP_PULL] = level.time + 100;
 		}
 
 		if (self->client->ps.fd.forcePower < 1)
@@ -4230,24 +4231,24 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 			WP_ForcePowerStop(self, forcePower);
 			break;
 		}
-		if (self->client->ps.forceRageDrainTime <= level.time)
-		{ // the 20 Hz lengths (g_local.h, G_GRID20_DEADLINE)
-			int addTime = 450;
+		if (self->client->ps.forceRageDrainTime < level.time)
+		{
+			int addTime = 400;
 
 			self->health -= 2;
 			g_stats.forceTimerEvents[FP_RAGE]++;
 
 			if (self->client->ps.fd.forcePowerLevel[FP_RAGE] == FORCE_LEVEL_1)
 			{
-				addTime = 200;
+				addTime = 150;
 			}
 			else if (self->client->ps.fd.forcePowerLevel[FP_RAGE] == FORCE_LEVEL_2)
 			{
-				addTime = 350;
+				addTime = 300;
 			}
 			else if (self->client->ps.fd.forcePowerLevel[FP_RAGE] == FORCE_LEVEL_3)
 			{
-				addTime = 500;
+				addTime = 450;
 			}
 			self->client->ps.forceRageDrainTime = level.time + addTime;
 		}
@@ -4340,7 +4341,7 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 	case FP_SABERTHROW:
 		break;
 	case FP_PROTECT:
-		if (self->client->ps.fd.forcePowerDebounce[forcePower] <= level.time)
+		if (self->client->ps.fd.forcePowerDebounce[forcePower] < level.time)
 		{
 			BG_ForcePowerDrain( &self->client->ps, forcePower, 1 );
 			g_stats.forceTimerEvents[FP_PROTECT]++;
@@ -4349,11 +4350,11 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 				WP_ForcePowerStop(self, forcePower);
 			}
 
-			self->client->ps.fd.forcePowerDebounce[forcePower] = level.time + 350; // 20 Hz length (g_local.h, G_GRID20_DEADLINE)
+			self->client->ps.fd.forcePowerDebounce[forcePower] = level.time + 300;
 		}
 		break;
 	case FP_ABSORB:
-		if (self->client->ps.fd.forcePowerDebounce[forcePower] <= level.time)
+		if (self->client->ps.fd.forcePowerDebounce[forcePower] < level.time)
 		{
 			BG_ForcePowerDrain( &self->client->ps, forcePower, 1 );
 			g_stats.forceTimerEvents[FP_ABSORB]++;
@@ -4362,7 +4363,7 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 				WP_ForcePowerStop(self, forcePower);
 			}
 
-			self->client->ps.fd.forcePowerDebounce[forcePower] = level.time + 650; // 20 Hz length (g_local.h, G_GRID20_DEADLINE)
+			self->client->ps.fd.forcePowerDebounce[forcePower] = level.time + 600;
 		}
 		break;
 	default:
@@ -4614,10 +4615,10 @@ void SeekerDroneUpdate(gentity_t *self)
 		self->client->ps.droneExistTime < (level.time+5000))
 	{
 		self->client->ps.genericEnemyIndex = 1024+self->client->ps.droneExistTime;
-		if (self->client->ps.droneFireTime <= level.time)
+		if (self->client->ps.droneFireTime < level.time)
 		{
 			G_Sound( self, CHAN_BODY, G_SoundIndex("sound/weapons/laser_trap/warning.wav") );
-			self->client->ps.droneFireTime = level.time + 150; // 20 Hz length (g_local.h, G_GRID20_DEADLINE)
+			self->client->ps.droneFireTime = level.time + 100;
 		}
 		return;
 	}
@@ -4714,7 +4715,7 @@ void SeekerDroneUpdate(gentity_t *self)
 		VectorAdd(elevated, dir, org);
 
 		//org is now where the thing should be client-side because it uses the same time-based offset
-		if (self->client->ps.droneFireTime <= level.time)
+		if (self->client->ps.droneFireTime < level.time)
 		{
 			trap->Trace(&tr, org, NULL, NULL, en->client->ps.origin, -1, MASK_SOLID, qfalse, 0, 0);
 
@@ -4726,8 +4727,7 @@ void SeekerDroneUpdate(gentity_t *self)
 				WP_FireGenericBlasterMissile(self, org, endir, 0, 15, 2000, MOD_BLASTER);
 				G_SoundAtLoc( org, CHAN_WEAPON, G_SoundIndex("sound/weapons/bryar/fire.wav") );
 
-				// the 20 Hz lengths, 450 to 700 ms in steps of 50, spread over their 50 ms (g_local.h, G_GRID20_DEADLINE)
-				self->client->ps.droneFireTime = level.time + Q_irand(425, 725);
+				self->client->ps.droneFireTime = level.time + Q_irand(400, 700);
 			}
 		}
 	}
@@ -4996,10 +4996,10 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 	}
 
 	for ( i = 0; i < NUM_FORCE_POWERS; i++ )
-	{ // gamestats: the time each power is held, from the frame it starts to the frame it stops, at any frame rate
+	{ // gamestats: the time each power is held; this runs on the 20 Hz instants of the tick, once per 50 ms (plan step 14)
 		if ( self->client->ps.fd.forcePowersActive & ( 1 << i ) )
 		{
-			g_stats.forceActiveMsec[i] += level.time - level.previousTime;
+			g_stats.forceActiveMsec[i] += 50;
 		}
 	}
 
@@ -5284,10 +5284,10 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 
 	if (self->client->ps.fd.forceGripCripple)
 	{
-		if (self->client->ps.fd.forceGripSoundTime <= level.time)
+		if (self->client->ps.fd.forceGripSoundTime < level.time)
 		{
 			G_PreDefSound(self->client->ps.origin, PDSOUND_FORCEGRIP);
-			self->client->ps.fd.forceGripSoundTime = level.time + 1050; // 20 Hz length (g_local.h, G_GRID20_DEADLINE)
+			self->client->ps.fd.forceGripSoundTime = level.time + 1000;
 		}
 	}
 

@@ -1,8 +1,8 @@
 # Step 14: fixed simulation tick, lag compensation, and the rest of "beyond the codec"
 
-Status: **analysis and design, nothing implemented yet** (11 November 2026), apart from part 1 (the server's CPU time in `svnetstats`, commit `aded85287`) and the fixed rate of 200,000 bytes per second. The survey, the measurements and the owner's choices that lead here are in [../11-tick-and-lag-compensation-survey.md](../11-tick-and-lag-compensation-survey.md). Paths are relative to `codemp/`.
+Status (12 November 2026): part 1 done (the server's CPU time in `svnetstats`, commit `aded85287`; the fixed rate of 200,000 bytes per second); part 2 (game timing) done in the working tree with a new design, the game's logic at its 20 Hz pace on a 100 Hz tick, proven identical to `sv_fps` 20 with scripted scenarios (section 9; the working notes, audits and traces are in [step-14-audit-100hz.md](step-14-audit-100hz.md)); parts 3 to 9 to do. The survey, the measurements and the owner's choices that lead here are in [../11-tick-and-lag-compensation-survey.md](../11-tick-and-lag-compensation-survey.md). Paths are relative to `codemp/`.
 
-Owner's choices (11 November 2026): a fixed simulation tick of 125 Hz shared by client and server, lag compensation by tick, rate 200,000 bytes per second; designed from recent games rather than from the JKA mods, cleanly and optimised, even if it means starting again from zero; every defect found on the way fixed; the analysis covers the engine (client and dedicated server), the shared movement (`bg_*`), the game module, cgame, qcommon and the codec.
+Owner's choices (11 November 2026): a fixed simulation tick of 125 Hz (revised the same evening: **100 Hz**, so that every 20 Hz instant is a tick, and the game's logic runs at its 20 Hz pace, identical to `sv_fps` 20: section 9) shared by client and server, lag compensation by tick, rate 200,000 bytes per second; designed from recent games rather than from the JKA mods, cleanly and optimised, even if it means starting again from zero; every defect found on the way fixed; the analysis covers the engine (client and dedicated server), the shared movement (`bg_*`), the game module, cgame, qcommon and the codec.
 
 Target of the gameplay: the game plays as the 1.01 server did at its default 20 Hz (the balance the game was tuned on: saber damage per swing, force power timings, weapon timings), at any tick rate, except where the owner decides a change (section 4). What changes is precision and latency: movement in identical 8 ms steps for everyone, the world drawn about 11 ms behind the newest snapshot instead of about 53 ms, hits judged against what the shooter saw.
 
@@ -132,7 +132,7 @@ Owner's answers (11 November 2026): **the move to 125 Hz must not make saber com
 Each part builds, is checked in game (loopback, VPS, `net_dropsim`) and is documented in 09 before the next. The game timing comes first (11 November 2026): while `sv_fps` still exists, the game module can be checked at 20 and 125 Hz on the same build, and the game stays playable at every step (with the tick loop first, the saber would deal up to 6 times its damage until the game timing is fixed).
 
 1. **Done**: `svnetstats` prints the server's CPU time; `SV_CLIENT_RATE` 200,000.
-2. **Game timing**: every item of 3.4 G1 to G8, the saber per D1, so that the game plays the same at any server frame rate. Check, at `sv_fps` 20 and 125 on the same build with bots: the same damage per swing, the same share of blocked contacts, the same force power and weapon timings (counted by debug statistics); then the prediction misses when crouching or jumping while attacking (CG5).
+2. **Game timing** (done in the working tree, section 9: the logic on the 20 Hz instants rather than D1's per-tick saber): every item of 3.4 G1 to G8, the saber per D1, so that the game plays the same at any server frame rate. Check, at `sv_fps` 20 and 125 on the same build with bots: the same damage per swing, the same share of blocked contacts, the same force power and weapon timings (counted by debug statistics); then the prediction misses when crouching or jumping while attacking (CG5).
 3. **Tick loop**: `TICK_MSEC`, `sv_fps` removed (engine, game, client), packets read on arrival with their time, bots per tick, `map_restart` and map load in ticks, repeats of server commands counted by cause and fixed (D4). Check: 125 snapshots per second, ping exact, no repeat without loss.
 4. **Commands per tick**: the input buffer on the server, one command per tick on the client, the client ahead with time dilation steered by the input margin, `CMD_BACKUP` 256, prediction per tick with the cached states, the partial step for display (D5), the client packet fields (tick, view time). Check: identical movement at 60, 125, 144 and 333 fps (jump heights, strafe speed), no prediction miss on the loopback, input margin stable on the VPS with `net_dropsim`, the local player as responsive as before.
 5. **Snapshot store** (D3): shared world state per tick, `PACKET_BACKUP` from the window, the codec's frames. Library change: full validations. Check: bases kept up to the chosen round trip, memory measured.
@@ -150,6 +150,8 @@ Each part builds, is checked in game (loopback, VPS, `net_dropsim`) and is docum
 - The 125 Hz server frame with 31 bots after part 2 (part 7).
 
 ## 7. Part 2, first result: the saber (11 November 2026)
+
+**Superseded (section 9):** the per-tick saber described here was abandoned on the evening of 11 November and its code reverted to OpenJK's; kept as the record of what was tried.
 
 ### How it is measured
 
@@ -185,6 +187,8 @@ On Linux (the owner's VPS, GCC 12, fast mode, 4 servers at a time on its single 
 
 The force powers were disabled in these measurements (the owner's server settings, section 8).
 ## 8. Part 2: the force powers (11 November 2026)
+
+**Superseded (section 9):** the timers rewritten here (commit `00c003c91`) are back to OpenJK's code, which runs on the 20 Hz instants; kept as the record of what was tried.
 
 ### What was found (inventory item G4)
 
@@ -228,3 +232,41 @@ Game, 16 bots with the force powers, against OpenJK at 20 Hz in the same batches
 - The force damage (lightning and drain only) is about 9 % lower at 125 Hz, before and after the change: the bots start lightning and drain about 8 % less often (35.2 against 38.2 lightning starts per minute), while each use fires the same shots. Nothing in the force code explains it (the cooldowns are tested with `>`, which keeps their length; the hand and weapon checks are per frame); it is left as a difference of the bots' fights at 125 Hz, to look at again with players.
 
 Left in part 2: G3 (`fVSpeed *= 1.6f/sv_fps.value`, the saber box ahead of a moving player: the frame time is right, read from the frame instead of `sv_fps` when it is removed in part 3), G5 to G8 (the 50 ms constants, thinks run every frame), CG5 (the prediction misses when crouching or jumping while attacking).
+
+## 9. Part 2, final design: the game's logic at its 20 Hz pace on a 100 Hz tick (11 and 12 November 2026)
+
+### Why the per-tick tuning was abandoned
+
+Every saber against saber reaction (bounce, deflection, knockaway, broken parry, lock) needs `dmg > SABER_NONATTACK_DAMAGE`, where `dmg` is proportional to the blade's move in one server frame (`game/w_saber.c`). At a fast tick the move is a fraction of a 20 Hz frame's, `dmg` is nearly always 1 and attacks are no longer bounced: no coefficient restores it. The pain threshold rewrite (`P_RecentDamage`) was wrong (OpenJK already accumulates damage across frames until it reaches 10) and halved lava damage with its 750 ms debounce. And every bot measurement until then mixed the movement step with the server rate: the bots ran one movement step per server frame (`ClientThink` skipped `SVF_BOT`).
+
+Owner's decisions (11 November 2026, evening): a tick of **100 Hz** (at 125 Hz, 50 ms is 6.25 ticks: thinks every 50 ms ran every 56 ms, the NPCs' 100 ms alternated 100 and 150 ms); the game plays identically to `sv_fps` 20 (damage, blocks, attack bounces, timings, AI), as precise as possible only where outcomes do not change; deterministic scenarios rather than free-for-all games as the proof; every audit claim checked in the code.
+
+### What the code does
+
+- Two clocks (`game/g_local.h`, `game/g_main.c`): `level.time`, read by all game code, is the logic clock, the last multiple of 50 ms; `level.tickTime` is the tick's time (movers' positions, bots' command times, the clamp of a command's time); `level.logicFrame` (`G_GRID20_STEP`) is true on the 20 Hz instants and on the first frame.
+- On the 20 Hz instants, OpenJK's code unchanged: `G_RunThink`; per client and NPC in `G_RunFrame`: space, hacking, jetpack and cloak fuel, siege data, `WP_ForcePowersUpdate`, `WP_SaberPositionUpdate`, `WP_SaberStartMissileBlockCheck`; `ClientEndFrame`: powerups, `P_WorldEffects`, `P_DamageFeedback`; the level's rules; the bots' AI (`ai_main.c`, every 50 ms); all missiles (`G_RunMissile`) and items (`G_RunItem`); the movers' `blocked()` and crush damage (`g_mover.c`).
+- Every tick: the players' commands (movement with the command's time), the movers' movement, the snapshots.
+- The server's ghoul2 clock (`server/sv_main.cpp`) is the logic instant of the frame just run (`sv.time / 50 * 50`). The engine set it to `sv.time` after each game frame, so a frame evaluated the models at the previous tick's time while the game starts their animations at `level.time`: at 100 Hz the blades ran 40 ms ahead of their 20 Hz path, with identical player states; that made 5 times less saber damage in the first scenario runs.
+- Missiles move only on the 20 Hz instants: with per-tick steps the engine's model trace (`server/sv_world.cpp`) gave other results (a step starting inside a player's box hits the box without a model test; one that leaves the box reports no model surface, so the hit location comes from the box), which changed hits, hit locations and damage (bryar 768 against 1,248 for the same 96 hits, homing rocket 48 kills against 0).
+- Kept from the per-tick work: `fVSpeed *= 1.6f/20.0f` (G3, the value of `sv_fps` 20) and the mind trick window of 200 ms (`g_TimeSinceLastFrame` removed); both are OpenJK's values at 20 Hz.
+- At `sv_fps` 20 every instant is a 20 Hz instant: the module runs OpenJK's code paths, and the same module at `sv_fps` 20 is the reference.
+
+Price of identity: a saber contact or a missile impact is found at the 20 Hz instant after it, up to 40 ms later than a per-tick trace; the players' movement and commands are per command as before. Known limits: during the slow-motion end of a duel (`timescale`, `g_slowmoDuelEnd`, 0 on the owner's servers) the logic runs every 50 ms of game time; the movers still move every tick (not covered by the scenarios; open for the owner: keep, or move them on the instants for exact identity).
+
+### How it is proven
+
+`scenario` (`game/g_scenario.c`, 09 section 8): two bots, an attacker and a defender, reset every 2 s, play a script of commands every 10 ms with the random seeds reset at each repetition; `bot_debugClientRate 1` makes every bot command run as a player's, in the order of the commands' times across the bots; a first repetition is not counted. `scenario_trace` prints the two bots' state at every 20 Hz instant and every health loss, which found both causes above by diffing a 20 Hz and a 100 Hz run line by line.
+
+Results, same module at `sv_fps` 20 and 100 (Windows, clang, fast mode), equal counts of wounds, damage, health taken by cause, deaths, blocks, idle touches, attacks started, bounces, shots, hits, misses, force starts, periodic events and time held:
+
+| scenario | repetitions | 20 Hz against 100 Hz |
+|---|---|---|
+| saber: fast, medium, strong, dual, staff; defender idle or attacking (10 cases) | 96 each | identical |
+| force: lightning, grip, drain, rage, protect, absorb | 48 each | identical |
+| weapons 4 to 15, primary and alternate (24 cases) | 48 each | identical, except flechette primary: 1 shard of 195 in 1 repetition |
+
+The differences left are not rate effects: bodies, items and doors left by the free play before the scenario (`EV_BODYFADE`, `EV_ITEM_RESPAWN`, `EV_PLAYDOORSOUND`), the death animation cycled by a static counter in `player_die`, the flechette shards processed in another entity order (the two values swapped between two runs at the same rates). A free-for-all of 16 bots, 3 batches of 12 servers per rate, 60 minutes of game each: damage -2.8 % (standard error 1.8 %), deaths -2.2 % (1.8 %), blocks -0.9 % (2.0 %), within the noise.
+
+### Left in part 2
+
+CG5 (verified): `saberAttackChainCount` is capped at 16 (`game/bg_saber.c`) but coded on 4 bits, so 16 reaches the client as 0 and its prediction of a long chain misses; owner's choice between a cap of 15 and a 5-bit field. The movers (above). Linux (GCC, the VPS) not measured yet.

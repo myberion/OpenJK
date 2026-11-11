@@ -7567,9 +7567,8 @@ int BotAIStartFrame(int time) {
 	elapsed_time = time - local_time;
 	local_time = time;
 
-	if (bot_debugClientRate.integer) thinktime = 50;	// the same AI at any server frame rate (plan step 14 tests)
-	else if (elapsed_time > BOT_THINK_TIME) thinktime = elapsed_time;
-	else thinktime = BOT_THINK_TIME;
+	// the bots think on the 20 Hz instants of the tick, every 50 ms as at sv_fps 20, where the AI was tuned (plan step 14)
+	thinktime = 50;
 
 	// execute scheduled bot AI
 	for( i = 0; i < MAX_CLIENTS; i++ ) {
@@ -7577,42 +7576,62 @@ int BotAIStartFrame(int time) {
 			continue;
 		}
 		//
-		botstates[i]->botthink_residual += elapsed_time;
-		//
-		if ( botstates[i]->botthink_residual >= thinktime ) {
-			botstates[i]->botthink_residual -= thinktime;
+		if ( time / 50 != ( time - elapsed_time ) / 50 ) {
 
-			if (g_entities[i].client->pers.connected == CON_CONNECTED) {
+			if (g_entities[i].client->pers.connected == CON_CONNECTED && !G_ScenarioControls(i)) {
 				BotAI(i, (float) thinktime / 1000);
+			}
+			else if (G_ScenarioControls(i)) {
+				char buf[1024];
+
+				while (trap->BotGetServerCommand(i, buf, sizeof(buf))) {
+					;	// a scripted bot reads its server commands as BotAI does, which keeps it from timing out
+				}
 			}
 		}
 	}
 
 	// execute bot user commands every frame
+	if (bot_debugClientRate.integer)
+	{ //a command every 10 ms, one per tick of plan step 14 (100 Hz), at any server frame rate (plan step 14 tests); the
+	  //commands of all the bots run in the order of their times, interleaved as players' packets arrive, also when a
+	  //20 Hz frame runs five commands per bot
+		static int botCmdTime[MAX_CLIENTS];
+		const int until = time + 1000 / Q_max( sv_fps.integer, 1 );	// up to the coming frame's time, as a player's commands arrive before it
+		int t, first = until + 1;
+
+		for( i = 0; i < MAX_CLIENTS; i++ ) {
+			if( !botstates[i] || !botstates[i]->inuse || g_entities[i].client->pers.connected != CON_CONNECTED ) {
+				continue;
+			}
+			if (botCmdTime[i] <= 0 || botCmdTime[i] > time || time - botCmdTime[i] > 200)
+			{ //first command, a restart of the level time, or a long stall
+				botCmdTime[i] = time - 10;
+			}
+			first = Q_min( first, botCmdTime[i] + 10 );
+		}
+		for( t = first; t <= until; t++ ) {
+			for( i = 0; i < MAX_CLIENTS; i++ ) {
+				if( !botstates[i] || !botstates[i]->inuse || g_entities[i].client->pers.connected != CON_CONNECTED
+					|| botCmdTime[i] + 10 != t ) {
+					continue;
+				}
+				botCmdTime[i] = t;
+				if (!G_ScenarioCommand(botstates[i]->client, t, &botstates[i]->lastucmd))
+				{ //a scripted scenario plays this bot (g_scenario.c)
+					BotUpdateInput(botstates[i], t, 10);
+				}
+				trap->BotUserCommand(botstates[i]->client, &botstates[i]->lastucmd);
+			}
+		}
+		return qtrue;
+	}
+
 	for( i = 0; i < MAX_CLIENTS; i++ ) {
 		if( !botstates[i] || !botstates[i]->inuse ) {
 			continue;
 		}
 		if( g_entities[i].client->pers.connected != CON_CONNECTED ) {
-			continue;
-		}
-
-		if (bot_debugClientRate.integer)
-		{ //a command every 8 ms, as a client at 125 frames per second, at any server frame rate (plan step 14 tests)
-			static int botCmdTime[MAX_CLIENTS];
-			int t = botCmdTime[i];
-
-			if (t <= 0 || t > time || time - t > 200)
-			{ //first command, a restart of the level time, or a long stall
-				t = time - 8;
-			}
-			while (t + 8 <= time)
-			{
-				t += 8;
-				BotUpdateInput(botstates[i], t, 8);
-				trap->BotUserCommand(botstates[i]->client, &botstates[i]->lastucmd);
-			}
-			botCmdTime[i] = t;
 			continue;
 		}
 

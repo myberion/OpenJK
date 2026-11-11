@@ -3221,6 +3221,10 @@ void G_RunItem( gentity_t *ent ) {
 	int			contents;
 	int			mask;
 
+	if ( !G_GRID20_STEP ) {
+		return;	// items move and think on the 20 Hz instants, as at sv_fps 20 (plan step 14, g_local.h)
+	}
+
 	// if groundentity has been set to ENTITYNUM_NONE, it may have been pushed off an edge
 	if ( ent->s.groundEntityNum == ENTITYNUM_NONE ) {
 		if ( ent->s.pos.trType != TR_GRAVITY ) {

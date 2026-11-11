@@ -1206,7 +1206,11 @@ void SV_Frame( int msec ) {
 	}
 
 	//rww - RAGDOLL_BEGIN
-	re->G2API_SetTime(sv.time,0);
+	// The game starts its ghoul2 animations at its logic clock, the last 20 Hz instant (game/g_local.h), and its bolts and
+	// model traces are evaluated at the time set here: the logic instant of the frame just run, so a 20 Hz instant
+	// evaluates the animations at the previous instant, 50 ms earlier, as every frame did at sv_fps 20 (plan step 14).
+	// With sv.time it was one tick earlier, and at 100 Hz the blades ran 40 ms ahead of their sv_fps 20 path.
+	re->G2API_SetTime( sv.time / 50 * 50, 0 );
 	//rww - RAGDOLL_END
 
 	if ( com_speeds->integer ) {

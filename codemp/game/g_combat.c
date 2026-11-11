@@ -2111,6 +2111,9 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		return;
 
 	g_stats.deaths++;
+	if ( meansOfDeath >= 0 && meansOfDeath < MOD_MAX ) {
+		g_stats.modKills[meansOfDeath]++;
+	}
 
 	//check player stuff
 	g_dontFrickinCheck = qfalse;
@@ -5388,6 +5391,10 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			}
 		}
 		targ->health = targ->health - take;
+		if ( targ->client && mod >= 0 && mod < MOD_MAX ) {
+			g_stats.modDamage[mod] += take;
+			G_ScenarioDamageTrace( targ, inflictor, point, take, mod );
+		}
 		if ( mod == MOD_FORCE_DARK && targ->client ) {
 			g_stats.forceDamage += take;
 		}

@@ -4457,6 +4457,9 @@ FireWeapon
 int BG_EmplacedView(vec3_t baseAngles, vec3_t angles, float *newYaw, float constraint);
 
 void FireWeapon( gentity_t *ent, qboolean altFire ) {
+	if ( ent->s.weapon >= 0 && ent->s.weapon < WP_NUM_WEAPONS ) {
+		g_stats.shots[ent->s.weapon][altFire ? 1 : 0]++;
+	}
 	// track shots taken for accuracy tracking. melee weapons are not tracked.
 	if( ent->s.weapon != WP_SABER && ent->s.weapon != WP_STUN_BATON && ent->s.weapon != WP_MELEE )
 	{

@@ -51,12 +51,23 @@ run() {
 		echo "devmap mp/ffa3"
 		if [ -n "$extra" ]; then echo "set $extra"; fi
 		if [ "${FAST:-1}" = "1" ]; then echo "set fixedtime $(( 1000 / fps ))"; echo "set timedemo 1"; fi
-		for name in Reborn Reborn Reborn Reborn Reborn Reborn Jedi Jedi Jedi Jedi Alora Desann Tavion Cultist Cultist Cultist; do
-			echo "addbot $name 4"
-		done
-		echo "wait $chunk"
-		echo "gamestats"
-		echo "svnetstats"
+		if [ -n "${SCENARIO:-}" ]; then
+			# a scripted scenario (codemp/game/g_scenario.c): two bots, SCENARIO="saber 200 medium idle" and the like;
+			# MINUTES must cover the repetitions and the uncounted first one (2 s each); the scenario prints its own
+			# gamestats at the end, which the watchdog takes as the end of the run
+			echo "addbot Jedi 4"
+			echo "addbot Reborn 4"
+			echo "wait $chunk"
+			echo "gamestats"
+			echo "scenario $SCENARIO"
+		else
+			for name in Reborn Reborn Reborn Reborn Reborn Reborn Jedi Jedi Jedi Jedi Alora Desann Tavion Cultist Cultist Cultist; do
+				echo "addbot $name 4"
+			done
+			echo "wait $chunk"
+			echo "gamestats"
+			echo "svnetstats"
+		fi
 		for (( i = 0; i < MINUTES * 2; i++ )); do
 			echo "wait $chunk"
 		done

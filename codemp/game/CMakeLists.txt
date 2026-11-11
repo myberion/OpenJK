@@ -68,6 +68,7 @@ set(MPGameGameFiles
 	"${MPDir}/game/g_saga.c"
 	"${MPDir}/game/g_session.c"
 	"${MPDir}/game/g_spawn.c"
+	"${MPDir}/game/g_scenario.c"
 	"${MPDir}/game/g_svcmds.c"
 	"${MPDir}/game/g_syscalls.c"
 	"${MPDir}/game/g_target.c"

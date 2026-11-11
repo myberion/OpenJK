@@ -470,6 +470,64 @@ void Svcmd_Say_f( void ) {
 
 // gamestats: the combat statistics since the last call (g_stats), then reset; the ratios per saber swing are what must not
 // change with the server frame rate (plan step 14)
+extern char *modNames[];
+extern const char *eventnames[EV_NUM_ENTITY_EVENTS];
+extern qboolean PM_SaberInBounce( int move );
+
+// gamestats: a client's saber move after its Pmove: attacks started, and moves sent into a bounce or a deflection (an
+// attack cancelled by a block), by the client's saber style
+void G_StatsSaberMove( gentity_t *ent, int oldSaberMove ) {
+	const int move = ent->client->ps.saberMove;
+	const int style = ent->client->ps.fd.saberAnimLevel;
+
+	if ( ent->s.number >= MAX_CLIENTS || move == oldSaberMove || style < 0 || style >= SS_NUM_SABER_STYLES ) {
+		return;
+	}
+	if ( BG_SaberInAttack( move ) && !BG_SaberInAttack( oldSaberMove ) ) {
+		g_stats.styleAttacks[style]++;
+	}
+	if ( PM_SaberInBounce( move ) && !PM_SaberInBounce( oldSaberMove ) ) {
+		g_stats.styleBounces[style]++;
+	}
+}
+
+// the central counters: events by type, health taken and deaths by cause, shots by weapon, saber attacks and bounces by style
+static void G_PrintCentralStats( void ) {
+	static const char *styles[SS_NUM_SABER_STYLES] = { "none", "fast", "medium", "strong", "desann", "tavion", "dual", "staff" };
+	const gameStats_t *s = &g_stats;
+	char line[4096];
+	int i;
+
+	Q_strncpyz( line, "event statistics:", sizeof( line ) );
+	for ( i = 1; i < EV_NUM_ENTITY_EVENTS; i++ ) {
+		if ( s->events[i] ) {
+			Q_strcat( line, sizeof( line ), va( " %s %d", eventnames[i], s->events[i] ) );
+		}
+	}
+	trap->Print( "%s\n", line );
+	Q_strncpyz( line, "damage statistics (health taken from clients and deaths, by cause):", sizeof( line ) );
+	for ( i = 0; i < MOD_MAX; i++ ) {
+		if ( s->modDamage[i] || s->modKills[i] ) {
+			Q_strcat( line, sizeof( line ), va( " %s %d %d", modNames[i], s->modDamage[i], s->modKills[i] ) );
+		}
+	}
+	trap->Print( "%s\n", line );
+	Q_strncpyz( line, "shot statistics (primary and alternate fire, by weapon number):", sizeof( line ) );
+	for ( i = 0; i < WP_NUM_WEAPONS; i++ ) {
+		if ( s->shots[i][0] || s->shots[i][1] ) {
+			Q_strcat( line, sizeof( line ), va( " w%d %d %d", i, s->shots[i][0], s->shots[i][1] ) );
+		}
+	}
+	trap->Print( "%s\n", line );
+	Q_strncpyz( line, "saber style statistics (attacks started, moves bounced or deflected):", sizeof( line ) );
+	for ( i = 1; i < SS_NUM_SABER_STYLES; i++ ) {
+		if ( s->styleAttacks[i] || s->styleBounces[i] ) {
+			Q_strcat( line, sizeof( line ), va( " %s %d %d", styles[i], s->styleAttacks[i], s->styleBounces[i] ) );
+		}
+	}
+	trap->Print( "%s\n", line );
+}
+
 void Svcmd_GameStats_f( void ) {
 	const gameStats_t *s = &g_stats;
 	const float swings = s->saberSwings ? (float)s->saberSwings : 1.0f;
@@ -496,6 +554,7 @@ void Svcmd_GameStats_f( void ) {
 		}
 		trap->Print( "%s\n", line );
 	}
+	G_PrintCentralStats();
 	memset( &g_stats, 0, sizeof( g_stats ) );
 }
 
@@ -520,6 +579,7 @@ svcmd_t svcmds[] = {
 	{ "listip",						Svcmd_ListIP_f,						qfalse },
 	{ "removeip",					Svcmd_RemoveIP_f,					qfalse },
 	{ "say",						Svcmd_Say_f,						qtrue },
+	{ "scenario",					Svcmd_Scenario_f,					qfalse },
 	{ "toggleallowvote",			Svcmd_ToggleAllowVote_f,			qfalse },
 	{ "toggleuserinfovalidation",	Svcmd_ToggleUserinfoValidation_f,	qfalse },
 };

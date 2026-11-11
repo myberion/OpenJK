@@ -53,17 +53,12 @@ extern vec3_t gPainPoint;
 
 #define	FRAMETIME			100					// msec
 
-// The game was tuned on a 50 ms server frame (sv_fps 20). Quantities it measured over one frame are measured over this
-// time at any server frame rate (plan step 14).
-#define	SABER_SWING_MSEC	50					// the speed of a swing: the saber base's move over this time
-#define	SABER_BASE_HISTORY	16					// saber bases kept for it (a power of two; 16 frames are 128 ms at 125 Hz)
-
-// A deadline tested with "deadline < level.time": lasts as long as "level.time + d" lasted on the 20 Hz server, until its
-// first frame after level.time + d, at any server frame rate (identical at 20 Hz); with d = 0, the next 50 ms window.
-#define	G_GRID20_DEADLINE( d )	( level.time / 50 * 50 + ( d ) / 50 * 50 + 49 )
-// A periodic timer re-armed with "level.time + n" and tested with '<' took n + 50 ms on the 20 Hz server (its first frame
-// after the deadline) but n + 8 at 125 Hz, so its event came up to 44 % more often. The force powers' periodic timers are
-// written as their 20 Hz lengths (n + 50) and tested with '<=', which means the same at any rate (rounded up to the frame).
+// Two clocks (plan step 14). The game module was tuned on the 50 ms frames of sv_fps 20; the server ticks at 100 Hz,
+// and every 20 Hz instant (a multiple of 50 ms) is a tick. level.time is the logic clock: the last 20 Hz instant, which
+// all game code reads (timers, thinks, damage, user commands), so it keeps the timing of sv_fps 20. level.tickTime is the
+// tick's time, read only to move missiles, movers and items between the 20 Hz instants. The logic tuned on 50 ms frames
+// (thinks, force powers, the saber, pain, the bots' AI) runs on the frames where G_GRID20_STEP is true.
+#define	G_GRID20_STEP			( level.logicFrame )
 #define	CARNAGE_REWARD_TIME	3000
 #define REWARD_SPRITE_TIME	2000
 
@@ -635,9 +630,6 @@ struct gclient_s {
 	// shotgun blasts give a single big kick
 	int			damage_armor;		// damage absorbed by armor
 	int			damage_blood;		// damage taken out of health
-	int			painDamage[8];		// damage taken in each of the last server frames with damage (P_DamageFeedback)
-	int			painDamageTime[8];	// and their level.time: the pain threshold counts the last 50 ms at any frame rate
-	int			painDamageHead;
 	int			damage_knockback;	// impact damage
 	vec3_t		damage_from;		// origin for vector calculation
 	qboolean	damage_fromWorld;	// if true, don't use the damage_from vector
@@ -708,13 +700,8 @@ struct gclient_s {
 
 	int			saberKnockedTime; //if saber gets knocked away, can't pull it back until this value is < level.time
 
-	vec3_t		olderSaberBase; //the saber base SABER_SWING_MSEC before lastSaberBase_Always (WP_SaberStoreBase)
+	vec3_t		olderSaberBase; //Set before lastSaberBase_Always, to whatever lastSaberBase_Always was previously
 	qboolean	olderIsValid;	//is it valid?
-	struct {
-		vec3_t	base;
-		int		time;		//level.time it was stored, 0 for none
-	}			saberBaseHistory[SABER_BASE_HISTORY];	//the saber bases of the last server frames, for olderSaberBase
-	int			saberBaseHistoryHead;					//index of the newest
 
 	vec3_t		lastSaberDir_Always; //every getboltmatrix, set to saber dir
 	vec3_t		lastSaberBase_Always; //every getboltmatrix, set to saber base
@@ -905,8 +892,11 @@ typedef struct level_locals_s {
 	int			maxclients;
 
 	int			framenum;
-	int			time;					// in msec
-	int			previousTime;			// so movers can back up when blocked
+	int			time;					// in msec: the logic clock, the last 20 Hz instant (plan step 14)
+	int			previousTime;			// so movers can back up when blocked: the logic clock's previous instant
+	int			tickTime;				// the tick's time, for the movement of missiles, movers and items
+	int			previousTickTime;
+	qboolean	logicFrame;				// this frame is a 20 Hz instant: the logic clock moved (G_GRID20_STEP)
 
 	int			startTime;				// level.time the map was started
 
@@ -1518,7 +1508,7 @@ extern	level_locals_t	level;
 extern	gentity_t		g_entities[MAX_GENTITIES];
 
 // Combat statistics since the last "gamestats" server command (plan step 14): the game must play the same at any server
-// frame rate, so the hits, blocks and damage per saber swing are compared at 20 and 125 Hz.
+// frame rate, so the hits, blocks and damage per saber swing are compared at 20 Hz and at the tick's rate.
 typedef struct gameStats_s {
 	int		frames;
 	int		startTime;			// level.time of the first frame counted
@@ -1535,9 +1525,24 @@ typedef struct gameStats_s {
 	int		saberHitEffects;	// hit effects (blood or sparks, and their sound) of sabers on clients
 	int		forceStarts[NUM_FORCE_POWERS];		// times each force power was started (WP_ForcePowerStart)
 	int		forceTimerEvents[NUM_FORCE_POWERS];	// periodic events of the held powers: grip, protect and absorb drains, rage health losses, lightning and drain shots
-	int		forceActiveMsec[NUM_FORCE_POWERS];	// time each power was held, from the frame it starts to the frame it stops
+	int		forceActiveMsec[NUM_FORCE_POWERS];	// time each power was held, 50 ms per 20 Hz instant it was active
+	int		events[EV_NUM_ENTITY_EVENTS];	// events and temporary entities added by the game (G_AddEvent, G_TempEntity)
+	int		modDamage[MOD_MAX];	// health taken from clients, by cause
+	int		modKills[MOD_MAX];	// client deaths, by cause
+	int		shots[WP_NUM_WEAPONS][2];	// FireWeapon by weapon, primary and alternate
+	int		styleAttacks[SS_NUM_SABER_STYLES];	// saber attack moves started by clients, by style
+	int		styleBounces[SS_NUM_SABER_STYLES];	// saber moves of clients sent into a bounce or deflection, by style
 } gameStats_t;
 extern	gameStats_t		g_stats;
+void G_StatsSaberMove( gentity_t *ent, int oldSaberMove );
+
+// g_scenario.c: scripted bot scenarios for the measurements of plan step 14
+qboolean G_ScenarioControls( int clientNum );
+qboolean G_ScenarioCommand( int clientNum, int t, usercmd_t *ucmd );
+void G_ScenarioFrame( void );
+void G_ScenarioTrace( void );
+void G_ScenarioDamageTrace( gentity_t *targ, gentity_t *inflictor, const vec3_t point, int take, int mod );
+void Svcmd_Scenario_f( void );
 
 #define	FOFS(x) offsetof(gentity_t, x)
 
