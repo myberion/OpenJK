@@ -108,6 +108,8 @@ typedef struct clientSnapshot_s {
 	int				messageSize;		// used to rate drop packets
 } clientSnapshot_t;
 
+#define SV_INPUT_BUFFER	256		// user commands a client may have received and not yet run (plan step 14: they run in the
+								// tick of their time); a power of two
 #define SV_PING_WINDOW	256		// messages the ping is measured over: the window of the client's 8-bit acknowledge
 								// (eng::kAckWindow), 2.56 s at the tick, valid up to that round trip (plan step 14; the
 								// 32 frames were 320 ms at 100 Hz, 1.6 s at 20 Hz)
@@ -174,7 +176,10 @@ typedef struct client_s {
 	int				gamestateMessageNum;	// netchan->outgoingSequence of gamestate
 	int				challenge;
 
-	usercmd_t		lastUsercmd;
+	usercmd_t		lastUsercmd;		// the last command run, which the game reads (GetUsercmd)
+	usercmd_t		inputCmds[SV_INPUT_BUFFER];	// commands received and not yet run, oldest first: slots inputFirst to
+	int				inputFirst;					// inputLast - 1, & ( SV_INPUT_BUFFER - 1 ); they run in the tick their
+	int				inputLast;					// time reaches (SV_RunClientCommands)
 	int				lastMessageNum;		// for delta compression
 	int				lastClientCommand;	// reliable client message sequence
 	char			lastClientCommandString[MAX_STRING_CHARS];
@@ -381,6 +386,7 @@ void SV_DropClient( client_t *drop, const char *reason );
 
 void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK );
 void SV_ClientThink (client_t *cl, usercmd_t *cmd);
+void SV_RunClientCommands( int time );
 
 // the download block of the next message, if any (one per message): block 0 holds the file size, or -1 with the
 // error text as data (valid until the next call)

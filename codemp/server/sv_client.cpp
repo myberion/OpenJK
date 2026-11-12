@@ -551,6 +551,7 @@ void SV_ClientEnterWorld( client_t *client, usercmd_t *cmd ) {
 	client->deltaMessage = -1;
 	client->nextSnapshotTime = svs.time;	// generate a snapshot immediately
 
+	client->inputFirst = client->inputLast = 0;	// commands of before (a map_restart) are not run
 	if(cmd)
 		memcpy(&client->lastUsercmd, cmd, sizeof(client->lastUsercmd));
 	else
@@ -1219,6 +1220,28 @@ void SV_ClientThink (client_t *cl, usercmd_t *cmd) {
 
 /*
 ==================
+SV_RunClientCommands
+
+Runs, for every client in the game, the commands received whose time is up to `time`, the coming tick's, in their order
+(plan step 14): a player's commands run in the ticks, after the bots' and before the game frame, as the bots' do, rather
+than when their packet arrives. A client whose commands are behind the server's clock (stamped with the time it draws
+the world at) has all of them run at the next tick.
+==================
+*/
+void SV_RunClientCommands( int time ) {
+	for ( int i = 0; i < sv_maxclients->integer; i++ ) {
+		client_t *cl = &svs.clients[i];
+		while ( cl->state == CS_ACTIVE && cl->inputFirst != cl->inputLast
+			&& cl->inputCmds[cl->inputFirst & ( SV_INPUT_BUFFER - 1 )].serverTime <= time ) {
+			usercmd_t cmd = cl->inputCmds[cl->inputFirst & ( SV_INPUT_BUFFER - 1 )];
+			cl->inputFirst++;
+			SV_ClientThink( cl, &cmd );
+		}
+	}
+}
+
+/*
+==================
 SV_UserMove
 
 The message usually contains all the movement commands
@@ -1319,12 +1342,18 @@ static void SV_UserMove( client_t *cl, const eng::ClientPacket &packet, qboolean
 		//if ( cmds[i].serverTime > svs.time + 3000 ) {
 		//	continue;
 		//}
-		// don't execute if this is an old cmd which is already executed
+		// don't keep a cmd already received, run or waiting for its tick
 		// these old cmds are included by CL_PACKET_DUP
-		if ( cmds[i].serverTime <= cl->lastUsercmd.serverTime ) {
+		const int newest = cl->inputLast != cl->inputFirst
+			? cl->inputCmds[( cl->inputLast - 1 ) & ( SV_INPUT_BUFFER - 1 )].serverTime : cl->lastUsercmd.serverTime;
+		if ( cmds[i].serverTime <= newest ) {
 			continue;
 		}
-		SV_ClientThink (cl, &cmds[ i ]);
+		if ( cl->inputLast - cl->inputFirst == SV_INPUT_BUFFER ) {
+			break;	// a client SV_INPUT_BUFFER commands ahead of the ticks: the rest waits for its next packets
+		}
+		cl->inputCmds[cl->inputLast & ( SV_INPUT_BUFFER - 1 )] = cmds[i];
+		cl->inputLast++;
 	}
 }
 

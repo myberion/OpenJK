@@ -772,9 +772,9 @@ void SV_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
 
 // The server's CPU time since the last svnetstats, in microseconds (plan step 14: what a higher tick rate costs). A
 // server frame is the work of SV_Frame from the pings to the snapshots sent; the game frames, the bots and the
-// snapshots are parts of it. Client packets are decoded and run (with the movement of human players) when they
-// arrive, outside the frames. Meant for a dedicated server: a listen server runs its bots before the frame, uncounted.
-enum svCost_t { SV_COST_FRAME, SV_COST_GAME, SV_COST_BOTS, SV_COST_SNAPSHOTS, SV_COST_PACKETS, SV_COST_COUNT };
+// snapshots are parts of it, and so are the players' commands (with their movement), which run in the ticks. Client
+// packets are decoded when they arrive, outside the frames.
+enum svCost_t { SV_COST_FRAME, SV_COST_GAME, SV_COST_BOTS, SV_COST_COMMANDS, SV_COST_SNAPSHOTS, SV_COST_PACKETS, SV_COST_COUNT };
 
 static struct {
 	int			calls[SV_COST_COUNT];
@@ -803,8 +803,8 @@ static long long SV_CostAdd( svCost_t part, long long start ) {
 }
 
 void SV_CostStats( void ) {
-	static const char *const names[SV_COST_COUNT] = { "server frames", "game frames", "bot frames", "snapshots sent",
-		"client packets" };
+	static const char *const names[SV_COST_COUNT] = { "server frames", "game frames", "bot frames", "player commands",
+		"snapshots sent", "client packets" };
 	const long long now = SV_Microseconds();
 	const double seconds = s_cost.since ? ( now - s_cost.since ) / 1e6 : 0.0;
 	int humans = 0, bots = 0;
@@ -1168,10 +1168,13 @@ void SV_Frame( int msec ) {
 
 	// run the game simulation in chunks
 	while ( sv.timeResidual >= frameMsec ) {
-		// the bots' AI and their commands up to the coming tick, before it, as players' packets arrive (plan step 14)
+		// the bots' AI and their commands up to the coming tick, then the players' commands up to it (plan step 14)
 		const long long botStart = SV_Microseconds();
 		SV_BotFrame( sv.time );
 		SV_CostAdd( SV_COST_BOTS, botStart );
+		const long long commandsStart = SV_Microseconds();
+		SV_RunClientCommands( sv.time + frameMsec );
+		SV_CostAdd( SV_COST_COMMANDS, commandsStart );
 
 		sv.timeResidual -= frameMsec;
 		svs.time += frameMsec;
