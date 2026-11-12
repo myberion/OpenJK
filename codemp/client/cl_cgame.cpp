@@ -660,12 +660,6 @@ void CL_InterpRecord( void ) {
 	cl.interpParsed = qtrue;
 }
 
-// The snapshot interval: the server sends a snapshot every server frame
-static int CL_SnapshotInterval( void ) {
-	const int fps = atoi( Info_ValueForKey( cl.gameState.stringData + cl.gameState.stringOffsets[CS_SERVERINFO], "sv_fps" ) );
-	return fps > 0 ? 1000 / fps : 0;
-}
-
 // The serverTimeDelta to move towards. A snapshot is usable from its arrival A, and the client needs it once its time
 // passes the serverTime of the previous snapshot, one interval earlier: so at A the client's time must not exceed
 // serverTime - interval, that is serverTimeDelta <= offset - interval, where offset = serverTime - A. The target is
@@ -675,9 +669,9 @@ static int CL_SnapshotInterval( void ) {
 static qboolean CL_InterpTarget( int *target ) {
 	int sorted[INTERP_WINDOW];
 	int read = 0, lost = 0;
-	const int interval = CL_SnapshotInterval();
+	const int interval = TICK_MSEC;	// the server sends a snapshot every tick
 
-	if ( cl.interpCount < 2 || interval <= 0 ) {
+	if ( cl.interpCount < 2 ) {
 		return qfalse;
 	}
 	for ( int i = 0; i < cl.interpCount; i++ ) {
@@ -930,7 +924,7 @@ void CL_SetCGameTime( void ) {
 			clc.timeDemoStart = Sys_Milliseconds();
 		}
 		clc.timeDemoFrames++;
-		cl.serverTime = clc.timeDemoBaseTime + clc.timeDemoFrames * 50;
+		cl.serverTime = clc.timeDemoBaseTime + clc.timeDemoFrames * TICK_MSEC;
 	}
 
 	while ( cl.serverTime >= cl.snap.serverTime ) {

@@ -32,7 +32,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 serverStatic_t	svs;				// persistant server info
 server_t		sv;					// local server
 
-cvar_t	*sv_fps = NULL;				// time rate for running non-clients
 cvar_t	*sv_rconPassword;		// password for remote server commands
 cvar_t	*sv_privatePassword;	// password for the privateClient slots
 cvar_t	*sv_maxclients;
@@ -821,7 +820,7 @@ void SV_CostStats( void ) {
 			humans++;
 		}
 	}
-	Com_Printf( "server CPU over %.1f s, sv_fps %d, %d humans, %d bots:", seconds, sv_fps->integer, humans, bots );
+	Com_Printf( "server CPU over %.1f s, %d humans, %d bots:", seconds, humans, bots );
 	for ( int i = 0; i < SV_COST_COUNT; i++ ) {
 		Com_Printf( " %s %d, %.1f us each, max %lld us;", names[i], s_cost.calls[i],
 			s_cost.calls[i] ? (double)s_cost.sum[i] / s_cost.calls[i] : 0.0, s_cost.max[i] );
@@ -1041,7 +1040,7 @@ SV_CheckCvars
 ==================
 */
 void SV_CheckCvars( void ) {
-	static int lastModHostname = -1, lastModFramerate = -1;
+	static int lastModHostname = -1;
 	qboolean changed = qfalse;
 
 	if ( sv_hostname->modificationCount != lastModHostname ) {
@@ -1064,17 +1063,6 @@ void SV_CheckCvars( void ) {
 			Cvar_Set("sv_hostname", hostname );
 		}
 	}
-
-	// a snapshot every server frame: when sv_fps changes, send the next one at once rather than at the old interval
-	if ( sv_fps->modificationCount != lastModFramerate ) {
-		client_t *cl = NULL;
-		int i = 0;
-
-		lastModFramerate = sv_fps->modificationCount;
-		for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++) {
-			cl->nextSnapshotTime = -1;
-		}
-	}
 }
 
 /*
@@ -1085,19 +1073,10 @@ Return time in millseconds until processing of the next server frame.
 */
 int SV_FrameMsec()
 {
-	if(sv_fps)
-	{
-		int frameMsec;
-
-		frameMsec = 1000.0f / sv_fps->value;
-
-		if(frameMsec < sv.timeResidual)
-			return 0;
-		else
-			return frameMsec - sv.timeResidual;
-	}
+	if(TICK_MSEC < sv.timeResidual)
+		return 0;
 	else
-		return 1;
+		return TICK_MSEC - sv.timeResidual;
 }
 
 /*
@@ -1129,18 +1108,20 @@ void SV_Frame( int msec ) {
 	}
 
 	// if it isn't time for the next frame, do nothing
-	if ( sv_fps->integer < 1 ) {
-		Cvar_Set( "sv_fps", "10" );
-	}
-	frameMsec = 1000 / sv_fps->integer * com_timescale->value;
+	frameMsec = TICK_MSEC * com_timescale->value;
 	// don't let it scale below 1ms
 	if(frameMsec < 1)
 	{
-		Cvar_Set("timescale", va("%f", sv_fps->integer / 1000.0f));
+		Cvar_Set("timescale", va("%f", 1.0f / TICK_MSEC));
 		frameMsec = 1;
 	}
 
 	sv.timeResidual += msec;
+	if ( sv.timeResidual > SV_MAX_CATCHUP_TICKS * frameMsec ) {
+		Com_Printf( "Hitch: %d msec of game time dropped, at most %d ticks run at once\n",
+			sv.timeResidual - SV_MAX_CATCHUP_TICKS * frameMsec, SV_MAX_CATCHUP_TICKS );
+		sv.timeResidual = SV_MAX_CATCHUP_TICKS * frameMsec;
+	}
 
 	if (!com_dedicated->integer) SV_BotFrame( sv.time + sv.timeResidual );
 

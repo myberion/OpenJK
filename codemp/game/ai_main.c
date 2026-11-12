@@ -7597,7 +7597,7 @@ int BotAIStartFrame(int time) {
 	  //commands of all the bots run in the order of their times, interleaved as players' packets arrive, also when a
 	  //20 Hz frame runs five commands per bot
 		static int botCmdTime[MAX_CLIENTS];
-		const int until = time + 1000 / Q_max( sv_fps.integer, 1 );	// up to the coming frame's time, as a player's commands arrive before it
+		const int until = time + TICK_MSEC;	// up to the coming tick's time, as a player's commands arrive before it
 		int t, first = until + 1;
 
 		for( i = 0; i < MAX_CLIENTS; i++ ) {

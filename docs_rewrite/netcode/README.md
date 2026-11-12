@@ -29,7 +29,7 @@ These constrain every recommendation in this folder:
 9. The codec round-trips exactly on 8,842 real messages and on 27,225 synthetic messages (vehicles, pilot player states, downloads, extreme values, any base age). A worst-case input (every field of every entity random) costs 1.34 times the engine's size, so a raw-format escape path is required.
 10. Nothing here is measured with several human players, on other maps or other game modes. That is the largest open point.
 11. Prediction adds a further 23 %, still lossless: time fields against `serverTime`, positions predicted from the velocity in integer arithmetic, angles to second order. In the real codec, with a rANS initial-state trick, a snapshot drops from 139.1 to 107.3 bytes (337.6 for the engine, -68 %), with 0 round-trip failures on real, synthetic and simulated-loss messages (03, section 3.13).
-12. OpenJK sends the same bitstream as 1.01 (same tables, same Huffman table; the captures and demos decode with OpenJK's tables), except the pilot player state (all 140 fields instead of 58). Its defaults differ (`sv_fps` 40, `snaps` 40, client rate forced to 50000), which changes the base age for a given RTT; this branch sets `sv_fps` 20 and the 1.01 conditions are restored with cvars ([08](08-openjk.md)).
+12. OpenJK sends the same bitstream as 1.01 (same tables, same Huffman table; the captures and demos decode with OpenJK's tables), except the pilot player state (all 140 fields instead of 58). Its defaults differ (`sv_fps` 40, `snaps` 40, client rate forced to 50000), which changes the base age for a given RTT; this branch set `sv_fps` 20 until plan step 14 replaced it with a fixed 10 ms tick, and the 1.01 conditions are restored with cvars ([08](08-openjk.md)).
 
 ## Documents
 

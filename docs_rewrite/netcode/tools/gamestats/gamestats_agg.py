@@ -9,7 +9,7 @@ import sys
 # power whose timing depended on the frame rate, its starts per minute and its periodic events (drains, rage health
 # losses, shots) per start and per second held.
 S = pathlib.Path(sys.argv[1])
-rx = re.compile(r"over ([\d.]+) s, \d+ frames, sv_fps (\d+): (\d+) saber swings.*\(wounds (\d+), damage (\d+), "
+rx = re.compile(r"over ([\d.]+) s, \d+ frames(?:, sv_fps \d+)?: (\d+) saber swings.*\(wounds (\d+), damage (\d+), "
                 r"saber against saber (\d+), parried (\d+), locks (\d+), touches (\d+)\).* (\d+) force damage, (\d+) deaths")
 fx = re.compile(r"(\d+) saber hit effects")
 fp = re.compile(r"(grip|rage|protect|absorb|lightning|drain) (\d+) (\d+) (\d+)")
@@ -19,7 +19,7 @@ force_rows = []
 print("group        min  damage/min deaths/min blocks/min wounds/min effects/min force/min | vs first group: damage deaths blocks force")
 for arg in sys.argv[2:]:
     name, tags = arg.split("=")
-    tot = [0.0] * 11
+    tot = [0.0] * 10
     effects = 0
     have_fx = True
     force = {p: [0, 0, 0] for p in POWERS}  # starts, events, milliseconds held
@@ -42,7 +42,7 @@ for arg in sys.argv[2:]:
         else:
             have_force = False
     minutes = tot[0] / 60.0
-    rates = (tot[4] / minutes, tot[10] / minutes, tot[5] / minutes, tot[9] / minutes, tot[3] / minutes)
+    rates = (tot[3] / minutes, tot[9] / minutes, tot[4] / minutes, tot[8] / minutes, tot[2] / minutes)
     if ref is None:
         ref = rates
     rel = [f"{(r / b - 1) * 100:+5.1f}%" if b else "    -" for r, b in zip(rates[:4], ref[:4])]

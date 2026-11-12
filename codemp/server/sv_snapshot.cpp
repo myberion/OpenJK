@@ -703,16 +703,14 @@ void SV_SendMessageToClient( msg_t *msg, client_t *client ) {
 
 	// local clients get snapshots every server frame
 	if ( client->netchan.remoteAddress.type == NA_LOOPBACK ) {
-		client->nextSnapshotTime = svs.time + ((int) (1000.0 / sv_fps->integer * com_timescale->value));
+		client->nextSnapshotTime = svs.time + ((int) (TICK_MSEC * com_timescale->value));
 		return;
 	}
 
 	rateMsec = SV_RateMsec( msg->cursize );
 
-	// sv_fps is corrected in SV_Frame, but a gamestate can be sent from a client packet before the next frame
-	const int frameMsec = 1000 / Q_max( sv_fps->integer, 1 );
-	if ( rateMsec < frameMsec ) {
-		rateMsec = frameMsec;
+	if ( rateMsec < TICK_MSEC ) {
+		rateMsec = TICK_MSEC;
 		client->rateDelayed = qfalse;
 	} else {
 		client->rateDelayed = qtrue;

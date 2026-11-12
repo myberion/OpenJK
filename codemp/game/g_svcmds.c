@@ -532,11 +532,11 @@ void Svcmd_GameStats_f( void ) {
 	const gameStats_t *s = &g_stats;
 	const float swings = s->saberSwings ? (float)s->saberSwings : 1.0f;
 
-	trap->Print( "game statistics over %.1f s, %d frames, sv_fps %d: %d saber swings; per swing: %.3f wounds, %.2f damage, "
+	trap->Print( "game statistics over %.1f s, %d frames: %d saber swings; per swing: %.3f wounds, %.2f damage, "
 		"%.3f saber against saber (blocks), %.3f body hits parried without the sabers touching, %.4f saber locks, %.3f idle "
 		"touches (wounds %d, damage %d, saber against saber %d, parried %d, locks %d, touches %d); %d missiles blocked by "
 		"sabers, %d force damage, %d deaths, %d saber hit effects on clients\n",
-		( level.time - s->startTime ) / 1000.0f, s->frames, sv_fps.integer, s->saberSwings,
+		( level.time - s->startTime ) / 1000.0f, s->frames, s->saberSwings,
 		s->saberWounds / swings, s->saberDamage / swings, s->saberClashes / swings, s->saberBlocks / swings,
 		s->saberLocks / swings, s->saberTouches / swings, s->saberWounds, s->saberDamage, s->saberClashes, s->saberBlocks,
 		s->saberLocks, s->saberTouches, s->missileBlocks, s->forceDamage, s->deaths, s->saberHitEffects );

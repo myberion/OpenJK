@@ -264,8 +264,9 @@ extern	refexport_t		*re;					// interface to refresh .dll
 														// the client sends, whose clock may run slightly faster than the server's
 #define SV_PACKET_BURST			125		// packets a client may send above SV_PACKET_RATE at once (one second of them)
 #define SV_ZOMBIE_TIME			2		// seconds to sink messages after a disconnection
+#define SV_MAX_CATCHUP_TICKS	25		// ticks run at once after a stall (250 ms); the rest of the stall is dropped and the
+										// clients follow the server's clock (plan step 14; Bevy and "Fix Your Timestep!" 250 ms)
 
-extern	cvar_t	*sv_fps;
 extern	cvar_t	*sv_rconPassword;
 extern	cvar_t	*sv_privatePassword;
 extern	cvar_t	*sv_allowDownload;

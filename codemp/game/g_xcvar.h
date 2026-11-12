@@ -174,7 +174,6 @@ XCVAR_DEF( gamedate,					SOURCE_DATE,	NULL,						CVAR_ROM,										qfalse )
 XCVAR_DEF( gamename,					JK_VERSION,		NULL,						CVAR_SERVERINFO|CVAR_ROM,						qfalse )
 XCVAR_DEF( RMG,							"0",			NULL,						CVAR_NONE,										qtrue )
 XCVAR_DEF( sv_cheats,					"1",			NULL,						CVAR_NONE,										qfalse )
-XCVAR_DEF( sv_fps,						"40",			NULL,						CVAR_ARCHIVE|CVAR_SERVERINFO,					qtrue )
 XCVAR_DEF( sv_maxclients,				"8",			NULL,						CVAR_SERVERINFO|CVAR_LATCH|CVAR_ARCHIVE,		qfalse )
 XCVAR_DEF( timelimit,					"0",			NULL,						CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
 

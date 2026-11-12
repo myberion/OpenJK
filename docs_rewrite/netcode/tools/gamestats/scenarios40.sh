@@ -1,20 +1,19 @@
 #!/bin/bash
-# The 40 scripted scenario cases (10 saber, 6 force, 24 weapon) at sv_fps 20 and 100, SEED=1 and FAST=1, several cases
-# at a time; then the comparison of 20 against 100 Hz for each case, and every case's statistics in one file
-# (<runs>/scenarios40_<prefix>.txt) to compare two platforms or two builds with diff, and against the recorded counts
-# (scenarios40_golden.txt).
+# The 40 scripted scenario cases (10 saber, 6 force, 24 weapon), SEED=1 and FAST=1, several cases at a time; every
+# case's statistics in one file (<runs>/scenarios40_<prefix>.txt) to compare two platforms or two builds with diff, and
+# against the recorded counts (scenarios40_golden.txt).
 # Usage (Windows, Git Bash; gamestats_windows.sh's build and game folders):
-#   scenarios40.sh <prefix> <jampgame dll> [cases at a time, 15]
+#   scenarios40.sh <prefix> <jampgame dll> [cases at a time, 30]
 # Usage (Linux; gamestats.sh's arguments in the environment):
-#   DED=<openjkded> BASE=<fs_basepath> scenarios40.sh <prefix> <jampgame .so> [cases at a time, 2]
-# About 10 minutes with 15 cases at a time on the owner's machine; on the VPS (1 vCPU, 2 GB) 2 cases (4 servers).
+#   DED=<openjkded> BASE=<fs_basepath> scenarios40.sh <prefix> <jampgame .so> [cases at a time, 4]
+# One server per case: 30 at a time on the owner's machine, 4 on the VPS (1 vCPU, 2 GB).
 set -u
 PREFIX=$1
 MODULE=$2
 HERE=$(cd "$(dirname "$0")" && pwd)
 case "$(uname -s)" in
-	MINGW*|MSYS*) WINDOWS=1; PAR=${3:-15}; RUNS="${GAMESTATS_DIR:-C:/Users/$USERNAME/AppData/Local/Temp/gamestats}" ;;
-	*) WINDOWS=0; PAR=${3:-2}; RUNS="${GAMESTATS_DIR:-/tmp/gamestats}" ;;
+	MINGW*|MSYS*) WINDOWS=1; PAR=${3:-30}; RUNS="${GAMESTATS_DIR:-C:/Users/$USERNAME/AppData/Local/Temp/gamestats}" ;;
+	*) WINDOWS=0; PAR=${3:-4}; RUNS="${GAMESTATS_DIR:-/tmp/gamestats}" ;;
 esac
 PYTHON=$(command -v python3 || command -v python)
 
@@ -29,11 +28,10 @@ one() {
 	IFS='|' read -r min scn pre name <<< "$1"
 	if [ "$WINDOWS" = 1 ]; then
 		SEED=1 FAST=1 PREMAP="$pre" SCENARIO="$scn" bash "$HERE/gamestats_windows.sh" "$min" \
-			"${PREFIX}_${name}_20|20|$MODULE|bot_debugClientRate 1" "${PREFIX}_${name}_100|100|$MODULE|bot_debugClientRate 1" \
-			> /dev/null 2>&1
+			"${PREFIX}_${name}|$MODULE|bot_debugClientRate 1" > /dev/null 2>&1
 	else
 		SEED=1 FAST=1 PREMAP="$pre" SCENARIO="$scn" bash "$HERE/gamestats.sh" "$DED" "$BASE" "$MODULE" "$min" \
-			"${PREFIX}_${name}_20|20|bot_debugClientRate 1" "${PREFIX}_${name}_100|100|bot_debugClientRate 1" > /dev/null 2>&1
+			"${PREFIX}_${name}|bot_debugClientRate 1" > /dev/null 2>&1
 	fi
 	echo "done $name"
 }
@@ -43,12 +41,12 @@ export PREFIX MODULE HERE WINDOWS DED="${DED:-}" BASE="${BASE:-}"
 cases | xargs -P "$PAR" -I{} bash -c 'one "$@"' _ {}
 tags=()
 for c in $(cases | cut -d'|' -f4); do
-	"$PYTHON" -I "$HERE/gamestats_scn.py" "$RUNS" "${PREFIX}_${c}_20" "${PREFIX}_${c}_100" | head -1
-	tags+=("${PREFIX}_${c}_20" "${PREFIX}_${c}_100")
+	tags+=("${PREFIX}_${c}")
 done
 "$PYTHON" -I "$HERE/gamestats_scn.py" --dump "$RUNS" "${PREFIX}_" "${tags[@]}" > "$RUNS/scenarios40_${PREFIX}.txt"
 echo "statistics: $RUNS/scenarios40_${PREFIX}.txt"
-# the recorded counts (scenarios40_golden.txt: the same on Windows and Linux, clang, GCC and MSVC, 12 November 2026)
+# the recorded counts (scenarios40_golden.txt: the same on Windows and Linux, clang, GCC and MSVC, and at sv_fps 20 and
+# 100 before the fixed tick, 12 November 2026)
 if diff <(tr -d '\r' < "$HERE/scenarios40_golden.txt") <(tr -d '\r' < "$RUNS/scenarios40_${PREFIX}.txt") > /dev/null; then
 	echo "golden: SAME"
 else

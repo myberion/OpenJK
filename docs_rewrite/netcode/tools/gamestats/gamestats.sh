@@ -1,9 +1,9 @@
 #!/bin/bash
-# Combat statistics of the game module with bots, for plan step 14: the game must play at the 100 Hz tick as at
+# Combat statistics of the game module with bots, for plan step 14: the game plays at the 100 Hz tick as it did at
 # sv_fps 20. Runs local dedicated servers (no network, sabers only, 16 bots on mp/ffa3, or a scripted scenario of two
 # bots) in parallel and prints the "gamestats" and "svnetstats" lines of each after the measured time.
 #
-# Usage: [FAST=1] [SEED=<n>] [PREMAP='<cvar> <value>;...'] [SCENARIO='saber 96 medium idle'] gamestats.sh <openjkded binary> <fs_basepath> <game module> <minutes> '<tag>|<fps>[|<cvars>]' ...
+# Usage: [FAST=1] [SEED=<n>] [PREMAP='<cvar> <value>;...'] [SCENARIO='saber 96 medium idle'] gamestats.sh <openjkded binary> <fs_basepath> <game module> <minutes> '<tag>[|<cvars>]' ...
 #   <fs_basepath>  the directory holding base/assets*.pk3
 #   <game module>  the jampgame module to test (jampgamex86_64.so); each run copies it into its own fs_homepath
 #   <cvars>        cheat cvars set after devmap, separated by "; set "; pass each configuration as one
@@ -15,11 +15,10 @@
 #   SEED           a first game seed: server n of the command line (from 0) gets SEED+n and, with FAST=1, the fixed frame
 #                  from before the map loads, so that every run replays the same game; without it the seed comes from
 #                  the clock and the free play from the machine's load
-# Example (the same module at 20 and 100 Hz, twice each; FAST=1 on a machine nobody plays on):
+# Example (four servers; FAST=1 on a machine nobody plays on):
 #   FAST=1 gamestats.sh /srv/jka/openjkded.x86_64 /srv/jka /srv/jka/base/jampgamex86_64.so 10 \
-#     'r20a|20|bot_debugClientRate 1' 'r20b|20|bot_debugClientRate 1' \
-#     'r100a|100|bot_debugClientRate 1' 'r100b|100|bot_debugClientRate 1'
-#   FAST=1 SCENARIO='saber 96 strong attack' gamestats.sh ... 4 's20|20|bot_debugClientRate 1' 's100|100|bot_debugClientRate 1'
+#     'ra|bot_debugClientRate 1' 'rb|bot_debugClientRate 1' 'rc|bot_debugClientRate 1' 'rd|bot_debugClientRate 1'
+#   FAST=1 SCENARIO='saber 96 strong attack' gamestats.sh ... 4 's|bot_debugClientRate 1'
 #
 # The commands go in a cfg run by +exec: the engine keeps only 32 "+" commands of its command line
 # (MAX_CONSOLE_LINES), and a long "wait" never fires, so the measured time is chained in waits of 30 seconds.
@@ -27,7 +26,7 @@
 set -u
 
 if [ $# -lt 5 ]; then
-	sed -n '2,23p' "$0"
+	sed -n '2,22p' "$0"
 	exit 1
 fi
 
@@ -39,15 +38,14 @@ shift 4
 OUT="${GAMESTATS_DIR:-/tmp/gamestats}"
 
 run() {
-	local tag="$1" fps="$2" cvars="$3" idx="$4"
+	local tag="$1" cvars="$2" idx="$3"
 	local home="$OUT/$tag"
 	rm -rf "$home"
 	mkdir -p "$home/base"
 	cp "$MODULE" "$home/base/"
-	local chunk=$(( 30 * fps ))
+	local chunk=3000	# ticks in 30 s (TICK_MSEC, 10 ms)
 	{
 		echo "set sv_maxclients 20"
-		echo "set sv_fps 125"
 		echo "set g_gametype 0"
 		echo "set fraglimit 0"
 		echo "set timelimit 0"
@@ -61,22 +59,21 @@ run() {
 		IFS=';' read -ra pre <<< "${PREMAP:-}"
 		for c in "${pre[@]}"; do echo "set $c"; done
 		# the game seeds its random numbers with the milliseconds since the process started: a random wait before
-		# the map loads, in frames of 8 ms whatever the rate tested (400 values, at most 3.2 s), gives each server
-		# its own seed (40 values of the frame of the rate tested gave the same seed, so the same game, twice)
+		# the map loads, in ticks of 10 ms (400 values, at most 4 s), gives each server its own seed (40 values of a
+		# 50 ms frame gave the same seed, so the same game, twice)
 		echo "wait $(( RANDOM % 400 + 1 ))"
 		# SEED: server n of the command line (from 0) gets the game seed SEED+n (g_debugSeed) and, in fast mode, the fixed
 		# frame from before the map loads (the frames of the map's first seconds otherwise follow the real time, so the free
 		# play depended on the machine's load): every run then replays the same game, its free play included
 		if [ -n "${SEED:-}" ]; then
 			echo "set g_debugSeed $(( SEED + idx ))"
-			if [ "${FAST:-0}" = "1" ]; then echo "set fixedtime $(( 1000 / fps ))"; echo "set timedemo 1"; fi
+			if [ "${FAST:-0}" = "1" ]; then echo "set fixedtime 10"; echo "set timedemo 1"; fi
 		fi
-		echo "set sv_fps $fps"
 		echo "devmap mp/ffa3"
 		if [ -n "$cvars" ]; then echo "set $cvars"; fi
-		# FAST=1: each frame advances the game by one interval and the server runs them as fast as it can (about 8 times
-		# real time at 125 Hz with 16 bots; it takes a whole core per server, so not next to a server people play on)
-		if [ "${FAST:-0}" = "1" ]; then echo "set fixedtime $(( 1000 / fps ))"; echo "set timedemo 1"; fi
+		# FAST=1: each tick advances the game by 10 ms and the server runs them as fast as it can (about 8 times real
+		# time at 125 Hz with 16 bots; it takes a whole core per server, so not next to a server people play on)
+		if [ "${FAST:-0}" = "1" ]; then echo "set fixedtime 10"; echo "set timedemo 1"; fi
 		if [ -n "${SCENARIO:-}" ]; then
 			echo "addbot Jedi 4"
 			echo "addbot Reborn 4"
@@ -118,8 +115,8 @@ run() {
 
 idx=0
 for spec in "$@"; do
-	IFS='|' read -r tag fps cvars <<< "$spec"
-	run "$tag" "$fps" "${cvars:-}" "$idx" &
+	IFS='|' read -r tag cvars <<< "$spec"
+	run "$tag" "${cvars:-}" "$idx" &
 	idx=$(( idx + 1 ))
 done
 wait

@@ -1,5 +1,5 @@
 """Compares the statistics of scripted scenarios (plan step 14) between two runs of gamestats_windows.sh or gamestats.sh,
-for example the same module at sv_fps 20 and 100: prints SAME, or the lines that differ.
+for example two builds of the module: prints SAME, or the lines that differ.
 Usage: python -I gamestats_scn.py <directory of the runs> <tagA> <tagB> [<tagA> <tagB> ...]
    or: python -I gamestats_scn.py --dump <directory of the runs> <prefix> <tag>... (the lines, for a diff)
 (runs in <directory>/gs_<tag> for the Windows script, <directory>/<tag> for the Linux one). The statistics are the

@@ -2,10 +2,10 @@
 # Windows version of gamestats.sh for the owner's machine (llvm-mingw clang build, run under lldb: the clang dedicated
 # server crashes without a console). Runs local dedicated servers (no network) with 16 saber bots and prints
 # gamestats after a measured time. The runs go in $GAMESTATS_DIR/gs_<tag>; BUILD and GAME are set below.
-# Usage: [FAST=0|1] [SEED=<n>] [PREMAP='<cvar> <value>;...'] gamestats_windows.sh <minutes> '<tag>|<fps>|<game dll>[|<cvar value>]' ...   (all run in parallel)
+# Usage: [FAST=0|1] [SEED=<n>] [PREMAP='<cvar> <value>;...'] gamestats_windows.sh <minutes> '<tag>|<game dll>[|<cvar value>]' ...   (all run in parallel)
 # The commands go in a cfg run by +exec: the engine keeps only 32 "+" commands of its command line
 # (MAX_CONSOLE_LINES); the measured time is chained in waits of 30 seconds. FAST=1 (default) sets fixedtime and
-# timedemo: the server runs its frames as fast as it can, each advancing the game by one interval. SEED=<n>: server n of
+# timedemo: the server runs its ticks as fast as it can, each advancing the game by 10 ms. SEED=<n>: server n of
 # the command line (from 0) gets the game seed SEED+n and, in fast mode, the fixed frame from before the map loads, so
 # that every run replays the same game (see gamestats.sh).
 # A server that does not exit after its quit (seen in fast mode under lldb) is killed once its statistics are written.
@@ -24,15 +24,14 @@ kill_server() {
 }
 
 run() {
-	local tag="$1" fps="$2" dll="$3" extra="$4" idx="$5"
+	local tag="$1" dll="$2" extra="$3" idx="$4"
 	local home="$SCRATCH/gs_${tag}"
 	rm -rf "$home"
 	mkdir -p "$home/base"
 	cp "$dll" "$home/base/jampgamex86_64.dll"
-	local chunk=$(( 30 * fps ))
+	local chunk=3000	# ticks in 30 s (TICK_MSEC, 10 ms)
 	{
 		echo "set sv_maxclients 20"
-		echo "set sv_fps 125"
 		echo "set g_gametype 0"
 		echo "set fraglimit 0"
 		echo "set timelimit 0"
@@ -46,20 +45,19 @@ run() {
 		IFS=';' read -ra pre <<< "${PREMAP:-}"
 		for c in "${pre[@]}"; do echo "set $c"; done
 		# the game seeds its random numbers with the milliseconds since the process started: a random wait before
-		# the map loads, in frames of 8 ms whatever the rate tested (400 values, at most 3.2 s), gives each server
-		# its own seed (40 values of the frame of the rate tested gave the same seed, so the same game, twice)
+		# the map loads, in ticks of 10 ms (400 values, at most 4 s), gives each server its own seed (40 values of a
+		# 50 ms frame gave the same seed, so the same game, twice)
 		echo "wait $(( RANDOM % 400 + 1 ))"
 		# SEED: server n of the command line (from 0) gets the game seed SEED+n (g_debugSeed) and, in fast mode, the fixed
 		# frame from before the map loads (the frames of the map's first seconds otherwise follow the real time, so the free
 		# play depended on the machine's load): every run then replays the same game, its free play included
 		if [ -n "${SEED:-}" ]; then
 			echo "set g_debugSeed $(( SEED + idx ))"
-			if [ "${FAST:-1}" = "1" ]; then echo "set fixedtime $(( 1000 / fps ))"; echo "set timedemo 1"; fi
+			if [ "${FAST:-1}" = "1" ]; then echo "set fixedtime 10"; echo "set timedemo 1"; fi
 		fi
-		echo "set sv_fps $fps"
 		echo "devmap mp/ffa3"
 		if [ -n "$extra" ]; then echo "set $extra"; fi
-		if [ "${FAST:-1}" = "1" ]; then echo "set fixedtime $(( 1000 / fps ))"; echo "set timedemo 1"; fi
+		if [ "${FAST:-1}" = "1" ]; then echo "set fixedtime 10"; echo "set timedemo 1"; fi
 		if [ -n "${SCENARIO:-}" ]; then
 			# a scripted scenario (codemp/game/g_scenario.c): two bots, SCENARIO="saber 200 medium idle" and the like;
 			# MINUTES must cover the repetitions and the uncounted first one (2 s each); the scenario prints its own
@@ -104,12 +102,12 @@ run() {
 
 idx=0
 for spec in "$@"; do
-	IFS='|' read -r tag fps dll extra <<< "$spec"
-	if [ -z "$tag" ] || ! [[ "$fps" =~ ^[0-9]+$ ]] || [ ! -f "$dll" ]; then
-		echo "invalid configuration '$spec': expected '<tag>|<fps>|<game dll>[|<cvars>]'" >&2
+	IFS='|' read -r tag dll extra <<< "$spec"
+	if [ -z "$tag" ] || [ ! -f "$dll" ]; then
+		echo "invalid configuration '$spec': expected '<tag>|<game dll>[|<cvars>]'" >&2
 		continue
 	fi
-	run "$tag" "$fps" "$dll" "${extra:-}" "$idx" &
+	run "$tag" "$dll" "${extra:-}" "$idx" &
 	idx=$(( idx + 1 ))
 done
 wait
