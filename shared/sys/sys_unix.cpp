@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include <stdarg.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include <time.h>
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -90,44 +91,30 @@ void Sys_PlatformExit( void )
 /*
 ================
 Sys_Milliseconds
+
+Milliseconds since the first call, on the monotonic clock (plan step 14): the wall clock (gettimeofday) moved with
+every step of the system time (NTP, a date set by hand), which froze the server for as long as the clock went back or
+ran up to 5 s of frames at once when it went forward.
 ================
 */
-/* base time in seconds, that's our origin
-   timeval:tv_sec is an int:
-   assuming this wraps every 0x7fffffff - ~68 years since the Epoch (1970) - we're safe till 2038 */
-unsigned long sys_timeBase = 0;
-/* current time in ms, using sys_timeBase as origin
-   NOTE: sys_timeBase*1000 + curtime -> ms since the Epoch
-     0x7fffffff ms - ~24 days
-   although timeval:tv_usec is an int, I'm not sure wether it is actually used as an unsigned int
-     (which would affect the wrap period) */
-int curtime;
-int Sys_Milliseconds (bool baseTime)
+static int64_t Sys_MonotonicMilliseconds( void )
 {
-	struct timeval tp;
+	struct timespec now;
 
-	gettimeofday(&tp, NULL);
+	clock_gettime( CLOCK_MONOTONIC, &now );
+	return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
 
-	if (!sys_timeBase)
-	{
-		sys_timeBase = tp.tv_sec;
-		return tp.tv_usec/1000;
-	}
+int Sys_Milliseconds( void )
+{
+	static const int64_t base = Sys_MonotonicMilliseconds();
 
-	curtime = (tp.tv_sec - sys_timeBase)*1000 + tp.tv_usec/1000;
-
-    static int sys_timeBase = curtime;
-	if (!baseTime)
-	{
-		curtime -= sys_timeBase;
-	}
-
-	return curtime;
+	return (int)( Sys_MonotonicMilliseconds() - base );
 }
 
 int Sys_Milliseconds2( void )
 {
-    return Sys_Milliseconds(false);
+    return Sys_Milliseconds();
 }
 
 /*

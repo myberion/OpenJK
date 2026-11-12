@@ -89,23 +89,20 @@ const char *Sys_Dirname( const char *path )
 Sys_Milliseconds
 ================
 */
-int Sys_Milliseconds (bool baseTime)
+int Sys_Milliseconds (void)
 {
 	static int sys_timeBase = timeGetTime();
 	int			sys_curtime;
 
 	sys_curtime = timeGetTime();
-	if(!baseTime)
-	{
-		sys_curtime -= sys_timeBase;
-	}
+	sys_curtime -= sys_timeBase;
 
 	return sys_curtime;
 }
 
 int Sys_Milliseconds2( void )
 {
-	return Sys_Milliseconds(false);
+	return Sys_Milliseconds();
 }
 
 /*
