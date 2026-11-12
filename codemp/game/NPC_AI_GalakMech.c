@@ -1061,11 +1061,11 @@ void NPC_BSGM_Attack( void )
 		VectorCopy( NPCS.NPC->enemy->r.currentOrigin, target );
 
 		// flrand drawn first on every compiler (the operands of + are unsequenced)
-		spread = flrand( -5, 5 );
+		spread = Q_flrand( -5, 5 );
 		target[0] += spread+(Q_flrand(-1.0f, 1.0f)*(6-NPCS.NPCInfo->currentAim)*2);
-		spread = flrand( -5, 5 );
+		spread = Q_flrand( -5, 5 );
 		target[1] += spread+(Q_flrand(-1.0f, 1.0f)*(6-NPCS.NPCInfo->currentAim)*2);
-		spread = flrand( -5, 5 );
+		spread = Q_flrand( -5, 5 );
 		target[2] += spread+(Q_flrand(-1.0f, 1.0f)*(6-NPCS.NPCInfo->currentAim)*2);
 
 		//Find the desired angles

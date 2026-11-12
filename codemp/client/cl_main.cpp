@@ -839,11 +839,12 @@ void CL_RequestMotd( void ) {
 
 	info[0] = 0;
   // NOTE TTimo xoring against Com_Milliseconds, otherwise we may not have a true randomization
-  // only srand I could catch before here is tr_noise.c l:26 srand(1001)
-  // https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=382
-  // NOTE: the Com_Milliseconds xoring only affects the lower 16-bit word,
-  //   but I decided it was enough randomization
-	Com_sprintf( cls.updateChallenge, sizeof( cls.updateChallenge ), "%i", ((rand() << 16) ^ rand()) ^ Com_Milliseconds());
+	// the challenge from the system's random bytes, which an attacker cannot guess (rand() and the clock could be)
+	{
+		int challenge;
+		Com_RandomBytes( (byte *)&challenge, sizeof( challenge ) );
+		Com_sprintf( cls.updateChallenge, sizeof( cls.updateChallenge ), "%i", challenge );
+	}
 
 	Info_SetValueForKey( info, "challenge", cls.updateChallenge );
 	Info_SetValueForKey( info, "renderer", cls.glconfig.renderer_string );
@@ -983,8 +984,9 @@ void CL_Connect_f( void ) {
 	} else {
 		cls.state = CA_CONNECTING;
 
-		// Set a client challenge number that ideally is mirrored back by the server.
-		clc.challenge = ((rand() << 16) ^ rand()) ^ Com_Milliseconds();
+		// Set a client challenge number that ideally is mirrored back by the server: the system's random bytes, which
+		// an attacker cannot guess
+		Com_RandomBytes( (byte *)&clc.challenge, sizeof( clc.challenge ) );
 	}
 
 	Key_SetCatcher( 0 );

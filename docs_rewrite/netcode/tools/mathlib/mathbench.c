@@ -11,9 +11,12 @@
 #define _USE_MATH_DEFINES /* M_PI with MSVC */
 #include <math.h>
 #include <stdint.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "../../../../shared/qcommon/q_rand.h"
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -359,6 +362,35 @@ static void scanCheck( void ) {
 	printf( "scan check %s\n", failures ? "FAIL" : "ok" );
 }
 
+/* q_rand.c against values computed independently (SplitMix64 seeding, xoshiro128++, Lemire, the 24-bit float), its
+   bounds, and the uniformity of a small range */
+static void randCheck( void ) {
+	static const uint32_t u32[4] = { 0x7ff78de4u, 0x9a170265u, 0xdac127b8u, 0x9859e914u };
+	static const int ints[8] = { 4, 6, 8, 5, 3, 7, 9, 5 };
+	qrand_t rng;
+	int k, failures = 0, counts[3] = { 0, 0, 0 };
+	uint32_t bits;
+	float f;
+	Q_RandSeed( &rng, 1 );
+	for ( k = 0; k < 4; k++ ) failures += Q_RandU32( &rng ) != u32[k];
+	Q_RandSeed( &rng, 1 );
+	for ( k = 0; k < 8; k++ ) failures += Q_RandInt( &rng, 0, 9 ) != ints[k];
+	Q_RandSeed( &rng, 1 );
+	f = Q_RandFloat( &rng, -1.0f, 1.0f );
+	memcpy( &bits, &f, 4 );
+	failures += bits != 0xb9873000u;
+	Q_RandSeed( &rng, 2 );
+	for ( k = 0; k < 100000; k++ ) {
+		const int r = Q_RandInt( &rng, 5, -5 ); /* bounds in either order */
+		failures += r < -5 || r > 5;
+		failures += Q_RandInt( &rng, 7, 7 ) != 7;
+		(void)Q_RandInt( &rng, INT_MIN, INT_MAX ); /* the whole range */
+	}
+	for ( k = 0; k < 3000000; k++ ) counts[Q_RandInt( &rng, 0, 2 )]++;
+	for ( k = 0; k < 3; k++ ) failures += counts[k] < 990000 || counts[k] > 1010000;
+	printf( "rand check %s\n", failures ? "FAIL" : "ok" );
+}
+
 int main( void ) {
 	int fi, lib, i;
 #if defined( _MSC_VER ) && !defined( __clang__ )
@@ -415,5 +447,6 @@ int main( void ) {
 	(void)ulps;
 	textConversions();
 	scanCheck();
+	randCheck();
 	return 0;
 }

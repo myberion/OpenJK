@@ -72,7 +72,7 @@ int			mParticlesRendered;
 ////////////////////////////////////////////////////////////////////////////////////////
 // Returns a float min <= x < max (exclusive; will get max - 0.00001; but never max)
 inline float WE_flrand(float min, float max) {
-	return ((rand() * (max - min)) / (RAND_MAX)) + min;
+	return Q_flrand( min, max );
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -96,7 +96,7 @@ inline void VectorCeil(vec3_t in)
 
 inline float	FloatRand(void)
 {
-	return ((float)rand() / (float)RAND_MAX);
+	return Q_flrand( 0.0f, 1.0f );
 }
 
 inline	void	SnapFloatToGrid(float& f, int GridSize)
@@ -1330,7 +1330,7 @@ ratl::vector_vs<CWeatherParticleCloud, MAX_PARTICLE_CLOUDS>	mParticleClouds;
 ////////////////////////////////////////////////////////////////////////////////////////
 void R_InitWorldEffects(void)
 {
-	srand(ri.Milliseconds());
+	Rand_Init(ri.Milliseconds());
 
 	for (int i=0; i<mParticleClouds.size(); i++)
 	{

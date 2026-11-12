@@ -35,23 +35,16 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 extern qboolean BG_SabersOff( playerState_t *ps );
 saberInfo_t *BG_MySaber( int clientNum, int saberNum );
 
+// A number from val1 to val2 - 1 (val2 itself never came out of 1.01's formula, val1 + random * (val2 - val1)
+// truncated, and the saber's chances were tuned with it), or val1 when val2 <= val1. Drawn from the command's own
+// state, seeded with its time, so that the server and the client's prediction draw the same numbers (plan step 14).
 int PM_irand_timesync(int val1, int val2)
 {
-	int i;
-
-	// the same numbers as before, from a seed of its own: seeded with &pm->cmd.serverTime, each draw overwrote the
-	// command's time, so the movement code after it in the step read a random time (plan step 14)
-	i = (val1-1) + (Q_random( &pml.randSeed )*(val2 - val1)) + 1;
-	if (i < val1)
+	if ( val2 <= val1 )
 	{
-		i = val1;
+		return val1;
 	}
-	if (i > val2)
-	{
-		i = val2;
-	}
-
-	return i;
+	return Q_RandInt( &pml.rand, val1, val2 - 1 );
 }
 
 void BG_ForcePowerDrain( playerState_t *ps, forcePowers_t forcePower, int overrideAmt )

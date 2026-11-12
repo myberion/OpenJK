@@ -19,7 +19,8 @@ $CXX $FLAGS -std=c++17 -fno-exceptions -fno-rtti -I "$M/llvm-project/libc" -c "$
 case "$(uname -s)" in MINGW*|MSYS*) ARCHDEF= ;; *) ARCHDEF='-DARCH_STRING="mathbench"' ;; esac
 $CXX $FLAGS -std=c++17 -fno-exceptions -fno-rtti $ARCHDEF -I "$ROOT/lib/llvm-libc" \
 	-c "$ROOT/shared/qcommon/q_libm.cpp" -o "$OUT/q_libm.o"
-OBJS="$OUT/lm.o $OUT/q_libm.o"
+$CC $FLAGS $ARCHDEF -c "$ROOT/shared/qcommon/q_rand.c" -o "$OUT/q_rand.o"
+OBJS="$OUT/lm.o $OUT/q_libm.o $OUT/q_rand.o"
 DEFS=
 if [ "$NOCM" != 1 ]; then
 	DEFS=-DHAVE_CM

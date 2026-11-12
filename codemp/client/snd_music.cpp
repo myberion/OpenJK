@@ -1092,7 +1092,7 @@ float Music_GetRandomEntryTime( MusicState_e eMusicState )
 			static int	iPrevRandomNumber = -1;
 			static int	iCallCount = 0;
 						iCallCount++;
-			int iRandomEntryNum = (rand()+iCallCount) % (MusicFile.MusicEntryTimes.size());	// legal range
+			int iRandomEntryNum = (Q_irand( 0, 32767 )+iCallCount) % (MusicFile.MusicEntryTimes.size());	// legal range
 			if (iRandomEntryNum == iPrevRandomNumber && MusicFile.MusicEntryTimes.size()>1)
 			{
 				iRandomEntryNum += 1;

@@ -2596,11 +2596,11 @@ void CreateLaserTrap( gentity_t *laserTrap, vec3_t start, gentity_t *owner )
 
 	laserTrap->s.apos.trType = TR_GRAVITY;
 	laserTrap->s.apos.trTime = level.time;
-	laserTrap->s.apos.trBase[YAW] = rand()%360;
-	laserTrap->s.apos.trBase[PITCH] = rand()%360;
-	laserTrap->s.apos.trBase[ROLL] = rand()%360;
+	laserTrap->s.apos.trBase[YAW] = Q_irand( 0, 359 );
+	laserTrap->s.apos.trBase[PITCH] = Q_irand( 0, 359 );
+	laserTrap->s.apos.trBase[ROLL] = Q_irand( 0, 359 );
 
-	if (rand()%10 < 5)
+	if (Q_irand( 0, 9 ) < 5)
 	{
 		laserTrap->s.apos.trBase[YAW] = -laserTrap->s.apos.trBase[YAW];
 	}
@@ -2924,11 +2924,11 @@ void drop_charge (gentity_t *self, vec3_t start, vec3_t dir)
 
 	bolt->s.apos.trType = TR_GRAVITY;
 	bolt->s.apos.trTime = level.time;
-	bolt->s.apos.trBase[YAW] = rand()%360;
-	bolt->s.apos.trBase[PITCH] = rand()%360;
-	bolt->s.apos.trBase[ROLL] = rand()%360;
+	bolt->s.apos.trBase[YAW] = Q_irand( 0, 359 );
+	bolt->s.apos.trBase[PITCH] = Q_irand( 0, 359 );
+	bolt->s.apos.trBase[ROLL] = Q_irand( 0, 359 );
 
-	if (rand()%10 < 5)
+	if (Q_irand( 0, 9 ) < 5)
 	{
 		bolt->s.apos.trBase[YAW] = -bolt->s.apos.trBase[YAW];
 	}

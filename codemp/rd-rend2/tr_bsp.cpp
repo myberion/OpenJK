@@ -3877,8 +3877,8 @@ static int R_CreateSurfaceSpritesVertexData(
 		{
 			for ( float b = 0.0f, bend = (1.0f - a); b < bend; b += step )
 			{
-				float x = flrand(0.0f, 1.0f)*step + a;
-				float y = flrand(0.0f, 1.0f)*step + b;
+				float x = Q_flrand(0.0f, 1.0f)*step + a;
+				float y = Q_flrand(0.0f, 1.0f)*step + b;
 				float z = 1.0f - x - y;
 
 				// Ensure we're inside the triangle bounds.
@@ -3891,7 +3891,7 @@ static int R_CreateSurfaceSpritesVertexData(
 				VectorMA(sprite.position, x, p0, sprite.position);
 				VectorMA(sprite.position, y, p1, sprite.position);
 				VectorMA(sprite.position, z, p2, sprite.position);
-				sprite.position[3] = flrand(0.0f, 1.0f);
+				sprite.position[3] = Q_flrand(0.0f, 1.0f);
 
 				if (vertexLit)
 				{
@@ -3906,19 +3906,19 @@ static int R_CreateSurfaceSpritesVertexData(
 				// x*x + y*y = 1.0
 				// => y*y = 1.0 - x*x
 				// => y = -/+sqrt(1.0 - x*x)
-				float nx = flrand(-1.0f, 1.0f);
+				float nx = Q_flrand(-1.0f, 1.0f);
 				float ny = Q_sqrtf(1.0f - nx*nx);
-				ny *= irand(0, 1) ? -1 : 1;
+				ny *= Q_irand(0, 1) ? -1 : 1;
 
 				VectorSet(sprite.normal, nx, ny, 0.0f);
 
-				sprite.widthHeight[0] = stage->ss->width*(1.0f + (stage->ss->variance[0] * flrand(0.0f, 1.0f)));
-				sprite.widthHeight[1] = stage->ss->height*(1.0f + (stage->ss->variance[1] * flrand(0.0f, 1.0f)));
+				sprite.widthHeight[0] = stage->ss->width*(1.0f + (stage->ss->variance[0] * Q_flrand(0.0f, 1.0f)));
+				sprite.widthHeight[1] = stage->ss->height*(1.0f + (stage->ss->variance[1] * Q_flrand(0.0f, 1.0f)));
 				if (stage->ss->facing == SURFSPRITE_FACING_DOWN)
 					sprite.widthHeight[1] *= -1.0f;
 
-				sprite.skew[0] = stage->ss->height * stage->ss->vertSkew * flrand(-1.0f, 1.0f);
-				sprite.skew[1] = stage->ss->height * stage->ss->vertSkew * flrand(-1.0f, 1.0f);
+				sprite.skew[0] = stage->ss->height * stage->ss->vertSkew * Q_flrand(-1.0f, 1.0f);
+				sprite.skew[1] = stage->ss->height * stage->ss->vertSkew * Q_flrand(-1.0f, 1.0f);
 
 				sprites->push_back(sprite);
 				sprites->push_back(sprite);

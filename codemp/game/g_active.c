@@ -179,7 +179,7 @@ void P_WorldEffects( gentity_t *ent ) {
 				// play a gurp sound instead of a normal pain sound
 				if (ent->health <= ent->damage) {
 					G_Sound(ent, CHAN_VOICE, G_SoundIndex(/*"*drown.wav"*/"sound/player/gurp1.wav"));
-				} else if (rand()&1) {
+				} else if (Q_irand( 0, 1 )) {
 					G_Sound(ent, CHAN_VOICE, G_SoundIndex("sound/player/gurp1.wav"));
 				} else {
 					G_Sound(ent, CHAN_VOICE, G_SoundIndex("sound/player/gurp2.wav"));

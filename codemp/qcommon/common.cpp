@@ -1069,17 +1069,16 @@ void Com_ExecuteCfg(void)
 /*
 =================
 Com_InitRand
-Seed the random number generator, if possible with an OS supplied random seed.
+Seed the engine's random number stream (q_rand.h), if possible with an OS supplied random seed.
 =================
 */
 static void Com_InitRand(void)
 {
 	unsigned int seed;
 
-	if(Sys_RandomBytes((byte *) &seed, sizeof(seed)))
-		srand(seed);
-	else
-		srand(time(NULL));
+	if(!Sys_RandomBytes((byte *) &seed, sizeof(seed)))
+		seed = (unsigned int)time(NULL);
+	Rand_Init((int)seed);
 }
 
 /*
@@ -1182,9 +1181,6 @@ void Com_Init( char *commandLine ) {
 
 		Com_InitZoneMemoryVars();
 		Cmd_Init ();
-
-		// Seed the random number generator
-		Rand_Init(Sys_Milliseconds(true));
 
 		// get the developer cvar set as early as possible
 		com_developer = Cvar_Get("developer", "0", CVAR_TEMP, "Developer mode" );
@@ -2030,7 +2026,7 @@ void Com_RandomBytes( byte *string, int len )
 
 	Com_Printf( "Com_RandomBytes: using weak randomization\n" );
 	for( i = 0; i < len; i++ )
-		string[i] = (unsigned char)( rand() % 256 );
+		string[i] = (unsigned char)Q_irand( 0, 255 );
 }
 
 /*

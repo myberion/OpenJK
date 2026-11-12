@@ -17,6 +17,7 @@ set(netcodec_pmove_sources
 	"${netcodec_ojk}/codemp/qcommon/q_shared.c"
 	"${netcodec_ojk}/shared/qcommon/q_math.c"
 	"${netcodec_ojk}/shared/qcommon/q_libm.cpp"
+	"${netcodec_ojk}/shared/qcommon/q_rand.c"
 	"${netcodec_ojk}/shared/qcommon/q_string.c"
 	"${netcodec_ojk}/shared/qcommon/q_color.c"
 	pmove_det.c)

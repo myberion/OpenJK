@@ -394,7 +394,7 @@ static void CG_AddWeaponWithPowerups( refEntity_t *gun, int powerups ) {
 	if (cg.predictedPlayerState.electrifyTime > cg.time)
 	{ //add electrocution shell
 		int preShader = gun->customShader;
-		if ( rand() & 1 )
+		if ( Q_irand( 0, 1 ) )
 		{
 			gun->customShader = cgs.media.electricBodyShader;
 		}
@@ -766,7 +766,7 @@ Ghoul2 Insert End
 		CG_LightningBolt( nonPredictedCent, flashorigin );
 
 		if ( weapon->flashDlightColor[0] || weapon->flashDlightColor[1] || weapon->flashDlightColor[2] ) {
-			trap->R_AddLightToScene( flashorigin, 300 + (rand()&31), weapon->flashDlightColor[0],
+			trap->R_AddLightToScene( flashorigin, 300 + (Q_irand( 0, 31 )), weapon->flashDlightColor[0],
 				weapon->flashDlightColor[1], weapon->flashDlightColor[2] );
 		}
 	}
@@ -1878,23 +1878,23 @@ void CG_FireWeapon( centity_t *cent, qboolean altFire ) {
 			{
 				if (!cg.renderingThirdPerson )//gives an advantage to being in 3rd person, but would look silly otherwise
 				{//kick the view back
-					cg.kick_angles[PITCH] = flrand( -10, -15 );
+					cg.kick_angles[PITCH] = Q_flrand( -10, -15 );
 					cg.kick_time = cg.time;
 				}
 			}
 			else if (ent->weapon == WP_ROCKET_LAUNCHER)
 			{
-				CGCam_Shake(flrand(2, 3), 350);
+				CGCam_Shake(Q_flrand(2, 3), 350);
 			}
 			else if (ent->weapon == WP_REPEATER)
 			{
-				CGCam_Shake(flrand(2, 3), 350);
+				CGCam_Shake(Q_flrand(2, 3), 350);
 			}
 			else if (ent->weapon == WP_FLECHETTE)
 			{
 				if (altFire)
 				{
-					CGCam_Shake(flrand(2, 3), 350);
+					CGCam_Shake(Q_flrand(2, 3), 350);
 				}
 				else
 				{
@@ -1926,7 +1926,7 @@ void CG_FireWeapon( centity_t *cent, qboolean altFire ) {
 			}
 		}
 		if ( c > 0 ) {
-			c = rand() % c;
+			c = Q_irand( 0, c - 1 );
 			if ( weap->altFlashSound[c] )
 			{
 				trap->S_StartSound( NULL, ent->number, CHAN_WEAPON, weap->altFlashSound[c] );
@@ -1946,7 +1946,7 @@ void CG_FireWeapon( centity_t *cent, qboolean altFire ) {
 			}
 		}
 		if ( c > 0 ) {
-			c = rand() % c;
+			c = Q_irand( 0, c - 1 );
 			if ( weap->flashSound[c] )
 			{
 				trap->S_StartSound( NULL, ent->number, CHAN_WEAPON, weap->flashSound[c] );

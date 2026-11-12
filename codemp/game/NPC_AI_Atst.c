@@ -90,7 +90,7 @@ void G_ATSTCheckPain( gentity_t *self, gentity_t *other, int damage )
 	//int newBolt;
 	//int hitLoc = gPainHitLoc;
 
-	if ( rand() & 1 )
+	if ( Q_irand( 0, 1 ) )
 	{
 		G_SoundOnEnt( self, CHAN_LESS_ATTEN, "sound/chars/atst/atst_damaged1" );
 	}

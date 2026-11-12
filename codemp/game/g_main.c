@@ -187,7 +187,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		randomSeed = trap->Cvar_VariableIntegerValue( "g_debugSeed" );
 	}
 	Rand_Init( randomSeed );
-	srand( randomSeed );
 
 	//Init RMG to 0, it will be autoset to 1 if there is terrain on the level.
 	trap->Cvar_Set("RMG", "0");

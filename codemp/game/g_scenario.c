@@ -267,10 +267,9 @@ void G_ScenarioFrame( void ) {
 	}
 
 	// the same random numbers at the start of a repetition at any rate, from before the bots are placed: a bot killed in
-	// the previous repetition respawns at a spawn point drawn with rand() (ClientRespawn), which the free play's left-overs
+	// the previous repetition respawns at a spawn point drawn at random (ClientRespawn), which the free play's left-overs
 	// had moved
 	seed = 7919 * ( scn.rep + 1 );
-	srand( seed );
 	Rand_Init( seed );
 
 	VectorSet( fwd, Q_cospif( scn.yaw / 180.0f ), Q_sinpif( scn.yaw / 180.0f ), 0 );

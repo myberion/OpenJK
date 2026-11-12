@@ -1603,7 +1603,7 @@ Ghoul2 Insert End
 					ent.shaderRGBA[0] = 255;
 					ent.shaderRGBA[1] = ent.shaderRGBA[2] = 0;
 					ent.shaderRGBA[3] = 255;
-					if ( rand() & 1 )
+					if ( Q_irand( 0, 1 ) )
 					{
 						ent.customShader = cgs.media.electricBodyShader;
 					}

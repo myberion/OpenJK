@@ -85,7 +85,7 @@ void Seeker_MaintainHeight( void )
 			TIMER_Set( NPCS.NPC,"heightChange",Q_irand( 1000, 3000 ));
 
 			// Find the height difference
-			dif = (NPCS.NPC->enemy->r.currentOrigin[2] +  flrand( NPCS.NPC->enemy->r.maxs[2]/2, NPCS.NPC->enemy->r.maxs[2]+8 )) - NPCS.NPC->r.currentOrigin[2];
+			dif = (NPCS.NPC->enemy->r.currentOrigin[2] +  Q_flrand( NPCS.NPC->enemy->r.maxs[2]/2, NPCS.NPC->enemy->r.maxs[2]+8 )) - NPCS.NPC->r.currentOrigin[2];
 
 			difFactor = 1.0f;
 			if ( NPCS.NPC->client->NPC_class == CLASS_BOBAFETT )
@@ -108,7 +108,7 @@ void Seeker_MaintainHeight( void )
 			}
 			if ( NPCS.NPC->client->NPC_class == CLASS_BOBAFETT )
 			{
-				NPCS.NPC->client->ps.velocity[2] *= flrand( 0.85f, 3.0f );
+				NPCS.NPC->client->ps.velocity[2] *= Q_flrand( 0.85f, 3.0f );
 			}
 		}
 	}
@@ -183,7 +183,7 @@ void Seeker_Strafe( void )
 
 		// Pick a random strafe direction, then check to see if doing a strafe would be
 		//	reasonably valid
-		side = ( rand() & 1 ) ? -1 : 1;
+		side = ( Q_irand( 0, 1 ) ) ? -1 : 1;
 		VectorMA( NPCS.NPC->r.currentOrigin, SEEKER_STRAFE_DIS * side, right, end );
 
 		trap->Trace( &tr, NPCS.NPC->r.currentOrigin, NULL, NULL, end, NPCS.NPC->s.number, MASK_SOLID, qfalse, 0, 0 );
@@ -217,7 +217,7 @@ void Seeker_Strafe( void )
 		AngleVectors( NPCS.NPC->enemy->client->renderInfo.eyeAngles, dir, right, NULL );
 
 		// Pick a random side
-		side = ( rand() & 1 ) ? -1 : 1;
+		side = ( Q_irand( 0, 1 ) ) ? -1 : 1;
 		stDis = SEEKER_STRAFE_DIS;
 		if ( NPCS.NPC->client->NPC_class == CLASS_BOBAFETT )
 		{

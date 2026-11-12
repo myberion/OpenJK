@@ -50,22 +50,6 @@ qboolean WP_SaberBladeDoTransitionDamage( saberInfo_t *saber, int bladeNum );
 void WP_SaberAddG2Model( gentity_t *saberent, const char *saberModel, qhandle_t saberSkin );
 void WP_SaberRemoveG2Model( gentity_t *saberent );
 
-//	g_randFix 0 == Same as basejka. Broken on Linux, fine on Windows
-//	g_randFix 1 == Use proper behaviour of RAND_MAX. Fine on Linux, fine on Windows
-//	g_randFix 2 == Intentionally break RAND_MAX. Broken on Linux, broken on Windows.
-float RandFloat( float min, float max ) {
-	int randActual = rand();
-	float randMax = 32768.0f;
-#ifdef _WIN32
-	if ( g_randFix.integer == 2 )
-		randActual = (randActual<<16)|randActual;
-#elif defined(__GCC__)
-	if ( g_randFix.integer == 1 )
-		randMax = RAND_MAX;
-#endif
-	return ((randActual * (max - min)) / randMax) + min;
-}
-
 #ifdef DEBUG_SABER_BOX
 void	G_DebugBoxLines(vec3_t mins, vec3_t maxs, int duration)
 {
@@ -665,7 +649,7 @@ static QINLINE qboolean G_CheckLookTarget( gentity_t *ent, vec3_t	lookAngles, fl
 	{ //an NPC bolted to a vehicle should just look around randomly
 		if ( TIMER_Done( ent, "lookAround" ) )
 		{
-			ent->NPC->shootAngles[YAW] = flrand(0,360);
+			ent->NPC->shootAngles[YAW] = Q_flrand(0,360);
 			TIMER_Set( ent, "lookAround", Q_irand( 500, 3000 ) );
 		}
 		VectorSet( lookAngles, 0, ent->NPC->shootAngles[YAW], 0 );
@@ -7672,7 +7656,7 @@ static void G_KickSomeMofos(gentity_t *ent)
 	float remainingTime = (animLength-elapsedTime);
 	float kickDist = (ent->r.maxs[0]*1.5f)+STAFF_KICK_RANGE+8.0f;//fudge factor of 8
 	int	  kickDamage = Q_irand(10, 15);//Q_irand( 3, 8 ); //since it can only hit a guy once now
-	int	  kickPush = flrand( 50.0f, 100.0f );
+	int	  kickPush = Q_flrand( 50.0f, 100.0f );
 	qboolean doKick = qfalse;
 	renderInfo_t *ri = &ent->client->renderInfo;
 
@@ -7818,7 +7802,7 @@ static void G_KickSomeMofos(gentity_t *ent)
 			}
 			break;
 		case BOTH_A7_KICK_S:
-			kickPush = flrand( 75.0f, 125.0f );
+			kickPush = Q_flrand( 75.0f, 125.0f );
 			if ( ri->footRBolt != -1 )
 			{//actually trace to a bolt
 				if ( elapsedTime >= 550
@@ -7885,7 +7869,7 @@ static void G_KickSomeMofos(gentity_t *ent)
 			}
 			break;
 		case BOTH_A7_KICK_BF:
-			kickPush = flrand( 75.0f, 125.0f );
+			kickPush = Q_flrand( 75.0f, 125.0f );
 			kickDist += 20.0f;
 			if ( elapsedTime < 1500 )
 			{//auto-aim!
@@ -7923,7 +7907,7 @@ static void G_KickSomeMofos(gentity_t *ent)
 			}
 			break;
 		case BOTH_A7_KICK_RL:
-			kickPush = flrand( 75.0f, 125.0f );
+			kickPush = Q_flrand( 75.0f, 125.0f );
 			kickDist += 10.0f;
 
 			//ok, I'm tracing constantly on these things, they NEVER hit otherwise (in MP at least)
@@ -9242,7 +9226,7 @@ void WP_SaberBlock( gentity_t *playerent, vec3_t hitloc, qboolean missileBlock )
 	// Ultimately we might care if the shot was ahead or behind, but for now, just quadrant is fine.
 	AngleVectors( fwdangles, NULL, right, NULL );
 
-	rightdot = DotProduct(right, diff) + RandFloat(-0.2f,0.2f);
+	rightdot = DotProduct(right, diff) + Q_flrand(-0.2f,0.2f);
 	zdiff = hitloc[2] - playerent->client->ps.origin[2] + Q_irand(-8,8);
 
 	// Figure out what quadrant the block was in.

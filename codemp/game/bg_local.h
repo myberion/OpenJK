@@ -52,7 +52,8 @@ typedef struct
 	vec3_t		previous_velocity;
 	int			previous_waterlevel;
 
-	int			randSeed;	// PM_irand_timesync's seed: the command's time at the start of the step (plan step 14)
+	qrand_t		rand;	// PM_irand_timesync's numbers: seeded with the command's time, the same on the server and in
+						// the client's prediction (plan step 14)
 } pml_t;
 
 

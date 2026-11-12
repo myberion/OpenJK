@@ -39,7 +39,6 @@ G_ReflectMissile
   Reflect the missile roughly back at it's owner
 ================
 */
-float RandFloat(float min, float max);
 void G_ReflectMissile( gentity_t *ent, gentity_t *missile, vec3_t forward )
 {
 	vec3_t	bounce_dir;
@@ -82,7 +81,7 @@ void G_ReflectMissile( gentity_t *ent, gentity_t *missile, vec3_t forward )
 	}
 	for ( i = 0; i < 3; i++ )
 	{
-		bounce_dir[i] += RandFloat( -0.2f, 0.2f );
+		bounce_dir[i] += Q_flrand( -0.2f, 0.2f );
 	}
 
 	VectorNormalize( bounce_dir );
@@ -127,7 +126,7 @@ void G_DeflectMissile( gentity_t *ent, gentity_t *missile, vec3_t forward )
 
 	for ( i = 0; i < 3; i++ )
 	{
-		bounce_dir[i] += RandFloat( -1.0f, 1.0f );
+		bounce_dir[i] += Q_flrand( -1.0f, 1.0f );
 	}
 
 	VectorNormalize( bounce_dir );

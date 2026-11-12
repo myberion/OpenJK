@@ -176,7 +176,7 @@ CG_FragmentBounceSound
 */
 void CG_FragmentBounceSound( localEntity_t *le, trace_t *trace ) {
 	// half the fragments will make a bounce sounds
-	if ( rand() & 1 )
+	if ( Q_irand( 0, 1 ) )
 	{
 		sfxHandle_t	s = 0;
 
@@ -201,7 +201,7 @@ void CG_FragmentBounceSound( localEntity_t *le, trace_t *trace ) {
 		// FIXME: arbitrary...change if it bugs you
 		le->leBounceSoundType = LEBS_NONE;
 	}
-	else if ( rand() & 1 )
+	else if ( Q_irand( 0, 1 ) )
 	{
 		// we may end up bouncing again, but each bounce reduces the chance of playing the sound again or they may make a lot of noise when they settle
 		// FIXME: maybe just always do this??

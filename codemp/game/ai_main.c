@@ -1518,7 +1518,7 @@ void WPTouchRoutine(bot_state_t *bs)
 
 		if (gWPArray[lastNum] && gWPArray[lastNum]->inuse && gWPArray[lastNum]->index && bs->isCamping < level.time)
 		{
-			bs->isCamping = level.time + rand()%15000 + 30000;
+			bs->isCamping = level.time + Q_irand( 0, 14999 ) + 30000;
 			bs->wpCamping = bs->wpCurrent;
 			bs->wpCampingTo = gWPArray[lastNum];
 
@@ -4815,25 +4815,25 @@ void BotAimOffsetGoalAngles(bot_state_t *bs)
 		return;
 	}
 
-	if (rand()%10 <= 5)
+	if (Q_irand( 0, 9 ) <= 5)
 	{
-		bs->aimOffsetAmtYaw = rand()%(int)accVal;
+		bs->aimOffsetAmtYaw = Q_irand( 0, (int)accVal - 1 );
 	}
 	else
 	{
-		bs->aimOffsetAmtYaw = -(rand()%(int)accVal);
+		bs->aimOffsetAmtYaw = -(Q_irand( 0, (int)accVal - 1 ));
 	}
 
-	if (rand()%10 <= 5)
+	if (Q_irand( 0, 9 ) <= 5)
 	{
-		bs->aimOffsetAmtPitch = rand()%(int)accVal;
+		bs->aimOffsetAmtPitch = Q_irand( 0, (int)accVal - 1 );
 	}
 	else
 	{
-		bs->aimOffsetAmtPitch = -(rand()%(int)accVal);
+		bs->aimOffsetAmtPitch = -(Q_irand( 0, (int)accVal - 1 ));
 	}
 
-	bs->aimOffsetTime = level.time + rand()%500 + 200;
+	bs->aimOffsetTime = level.time + Q_irand( 0, 499 ) + 200;
 }
 
 //do we want to alt fire with this weapon?
@@ -5099,7 +5099,7 @@ int BotFallbackNavigation(bot_state_t *bs)
 	}
 	else
 	{
-		bs->goalAngles[YAW] = rand()%360;
+		bs->goalAngles[YAW] = Q_irand( 0, 359 );
 	}
 
 	return 0;
@@ -6168,7 +6168,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 		bs->wpSeenTime = 0;
 		bs->wpDirection = 0;
 
-		if (rand()%10 < 5 &&
+		if (Q_irand( 0, 9 ) < 5 &&
 			(!bs->doChat || bs->chatTime < level.time))
 		{
 			trap->EA_Attack(bs->client);
@@ -6365,7 +6365,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 
 	if (BotUseInventoryItem(bs))
 	{
-		if (rand()%10 < 5)
+		if (Q_irand( 0, 9 ) < 5)
 		{
 			trap->EA_Use(bs->client);
 		}
@@ -7456,7 +7456,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 
 	if (bs->cur_ps.saberLockTime > level.time)
 	{
-		if (rand()%10 < 5)
+		if (Q_irand( 0, 9 ) < 5)
 		{
 			bs->doAttack = 1;
 		}

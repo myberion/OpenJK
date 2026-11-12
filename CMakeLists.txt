@@ -377,6 +377,8 @@ set(SharedCommonFiles
 	"${SharedDir}/qcommon/q_color.c"
 	"${SharedDir}/qcommon/q_math.h"
 	"${SharedDir}/qcommon/q_math.c"
+	"${SharedDir}/qcommon/q_rand.h"
+	"${SharedDir}/qcommon/q_rand.c"
 	"${SharedDir}/qcommon/q_string.h"
 	"${SharedDir}/qcommon/q_string.c"
 	"${SharedDir}/qcommon/q_platform.h"

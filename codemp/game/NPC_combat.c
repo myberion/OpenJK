@@ -1612,7 +1612,7 @@ gentity_t *NPC_PickEnemy( gentity_t *closestTo, int enemyTeam, qboolean checkVis
 
 	if (num_choices)
 	{
-		return &g_entities[ choice[rand() % num_choices] ];
+		return &g_entities[ choice[Q_irand( 0, num_choices - 1 )] ];
 	}
 
 	/*
@@ -1758,7 +1758,7 @@ gentity_t *NPC_PickEnemy( gentity_t *closestTo, int enemyTeam, qboolean checkVis
 		return NULL;
 	}
 
-	return &g_entities[ choice[rand() % num_choices] ];
+	return &g_entities[ choice[Q_irand( 0, num_choices - 1 )] ];
 }
 
 /*
@@ -2196,7 +2196,7 @@ qboolean NPC_CheckAttack (float scale)
 	if(!scale)
 		scale = 1.0;
 
-	if(((float)NPCS.NPCInfo->stats.aggression) * scale < flrand(0, 4))
+	if(((float)NPCS.NPCInfo->stats.aggression) * scale < Q_flrand(0, 4))
 	{
 		return qfalse;
 	}

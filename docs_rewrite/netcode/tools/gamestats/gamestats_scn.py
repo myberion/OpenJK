@@ -1,6 +1,7 @@
 """Compares the statistics of scripted scenarios (plan step 14) between two runs of gamestats_windows.sh or gamestats.sh,
 for example the same module at sv_fps 20 and 100: prints SAME, or the lines that differ.
 Usage: python -I gamestats_scn.py <directory of the runs> <tagA> <tagB> [<tagA> <tagB> ...]
+   or: python -I gamestats_scn.py --dump <directory of the runs> <prefix> <tag>... (the lines, for a diff)
 (runs in <directory>/gs_<tag> for the Windows script, <directory>/<tag> for the Linux one). The statistics are the
 lines printed after "scenario done"; the events left by the free play before the scenario (bodies fading, items
 respawning with the global sound of a powerup, doors) and the death animation numbers (cycled by a static counter in
@@ -33,6 +34,14 @@ def stats(tag):
 
 
 args = sys.argv[2:]
+if sys.argv[1] == "--dump":
+    # --dump <directory> <prefix> <tag>...: the compared lines of each run, with the tag's prefix removed, to compare
+    # two platforms' files with diff
+    D, prefix = Path(args[0]), args[1]
+    for tag in args[2:]:
+        for line in stats(tag):
+            print(f"{tag[len(prefix):]}: {line}")
+    sys.exit(0)
 for a, b in zip(args[0::2], args[1::2]):
     sa, sb = stats(a), stats(b)
     print(f"{a} / {b}: {'SAME' if sa == sb else 'DIFF'}")

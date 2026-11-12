@@ -555,7 +555,7 @@ gentity_t *G_PickTarget (char *targetname)
 		return NULL;
 	}
 
-	return choice[rand() % num_choices];
+	return choice[Q_irand( 0, num_choices - 1 )];
 }
 
 void GlobalUse(gentity_t *self, gentity_t *other, gentity_t *activator)

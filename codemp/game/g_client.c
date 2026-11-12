@@ -671,7 +671,7 @@ gentity_t *SelectRandomDeathmatchSpawnPoint( qboolean isbot ) {
 		return G_Find( NULL, FOFS(classname), "info_player_deathmatch");
 	}
 
-	selection = rand() % count;
+	selection = Q_irand( 0, count - 1 );
 	return spots[ selection ];
 }
 

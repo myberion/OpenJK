@@ -1089,11 +1089,11 @@ void CG_G2MarkEvent(entityState_t *es)
 		//OR base this on the size of the thing you hit?
 		if ( g_vehWeaponInfo[es->otherEntityNum2].fG2MarkSize )
 		{
-			size = flrand( 0.6f, 1.4f )*g_vehWeaponInfo[es->otherEntityNum2].fG2MarkSize;
+			size = Q_flrand( 0.6f, 1.4f )*g_vehWeaponInfo[es->otherEntityNum2].fG2MarkSize;
 		}
 		else
 		{
-			size = flrand( 32.0f, 72.0f );
+			size = Q_flrand( 32.0f, 72.0f );
 		}
 		//specify mark shader in vehWeapon file
 		if ( g_vehWeaponInfo[es->otherEntityNum2].iG2MarkShaderHandle )
@@ -1425,35 +1425,35 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 				break;
 			}
 
-			trap->S_StartSound (NULL, es->number, CHAN_BODY, cgs.media.footsteps[ soundType ][rand()&3] );
+			trap->S_StartSound (NULL, es->number, CHAN_BODY, cgs.media.footsteps[ soundType ][Q_irand( 0, 3 )] );
 		}
 		break;
 	case EV_FOOTSTEP_METAL:
 		DEBUGNAME("EV_FOOTSTEP_METAL");
 		if (cg_footsteps.integer) {
 			trap->S_StartSound (NULL, es->number, CHAN_BODY,
-				cgs.media.footsteps[ FOOTSTEP_METALWALK ][rand()&3] );
+				cgs.media.footsteps[ FOOTSTEP_METALWALK ][Q_irand( 0, 3 )] );
 		}
 		break;
 	case EV_FOOTSPLASH:
 		DEBUGNAME("EV_FOOTSPLASH");
 		if (cg_footsteps.integer) {
 			trap->S_StartSound (NULL, es->number, CHAN_BODY,
-				cgs.media.footsteps[ FOOTSTEP_SPLASH ][rand()&3] );
+				cgs.media.footsteps[ FOOTSTEP_SPLASH ][Q_irand( 0, 3 )] );
 		}
 		break;
 	case EV_FOOTWADE:
 		DEBUGNAME("EV_FOOTWADE");
 		if (cg_footsteps.integer) {
 			trap->S_StartSound (NULL, es->number, CHAN_BODY,
-				cgs.media.footsteps[ FOOTSTEP_SPLASH ][rand()&3] );
+				cgs.media.footsteps[ FOOTSTEP_SPLASH ][Q_irand( 0, 3 )] );
 		}
 		break;
 	case EV_SWIM:
 		DEBUGNAME("EV_SWIM");
 		if (cg_footsteps.integer) {
 			trap->S_StartSound (NULL, es->number, CHAN_BODY,
-				cgs.media.footsteps[ FOOTSTEP_SPLASH ][rand()&3] );
+				cgs.media.footsteps[ FOOTSTEP_SPLASH ][Q_irand( 0, 3 )] );
 		}
 		break;
 
