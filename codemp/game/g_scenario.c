@@ -1,7 +1,7 @@
 // Scripted bot scenarios for plan step 14: two bots, an attacker and a defender, placed face to face and reset at every
-// repetition, play a fixed sequence of commands timed in milliseconds (one every 10 ms, as the bots of
-// bot_debugClientRate), so that a scenario run at 20 Hz and at the tick's rate compares the game per swing, per shot or
-// per power use rather than through the chaos of a free-for-all. A first repetition, not counted, replaces the bots'
+// repetition, play a fixed sequence of commands timed in milliseconds (one every 10 ms, the tick, as every bot sends
+// them), so that a scenario compares the game per swing, per shot or per power use rather than through the chaos of a
+// free-for-all. A first repetition, not counted, replaces the bots'
 // state left by the game before the scenario (animations); every reset also clears what the free play could leave in
 // the bots (powerups, pain timers and damage sums, walking direction), and the corpses, missiles, events and dropped
 // items are removed when the counted repetitions start, so that every run plays the same game; the statistics of the

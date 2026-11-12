@@ -8,7 +8,7 @@
 #   <game module>  the jampgame module to test (jampgamex86_64.so); each run copies it into its own fs_homepath
 #   <cvars>        cheat cvars set after devmap, separated by "; set "; pass each configuration as one
 #                  argument (quoted): split at its spaces it would lose its cvars. For example
-#                  'bot_debugClientRate 1'
+#                  'd_saberSPStyleDamage 0'
 #   SCENARIO       a scripted scenario (codemp/game/g_scenario.c) instead of the free-for-all, two bots: <minutes> must
 #                  cover the repetitions and an uncounted first one (2 s each); the scenario prints its own gamestats
 #                  at the end, which the watchdog takes as the end of the run
@@ -17,8 +17,8 @@
 #                  the clock and the free play from the machine's load
 # Example (four servers; FAST=1 on a machine nobody plays on):
 #   FAST=1 gamestats.sh /srv/jka/openjkded.x86_64 /srv/jka /srv/jka/base/jampgamex86_64.so 10 \
-#     'ra|bot_debugClientRate 1' 'rb|bot_debugClientRate 1' 'rc|bot_debugClientRate 1' 'rd|bot_debugClientRate 1'
-#   FAST=1 SCENARIO='saber 96 strong attack' gamestats.sh ... 4 's|bot_debugClientRate 1'
+#     ra rb rc rd
+#   FAST=1 SCENARIO='saber 96 strong attack' gamestats.sh ... 4 s
 #
 # The commands go in a cfg run by +exec: the engine keeps only 32 "+" commands of its command line
 # (MAX_CONSOLE_LINES), and a long "wait" never fires, so the measured time is chained in waits of 30 seconds.

@@ -1123,8 +1123,6 @@ void SV_Frame( int msec ) {
 		sv.timeResidual = SV_MAX_CATCHUP_TICKS * frameMsec;
 	}
 
-	if (!com_dedicated->integer) SV_BotFrame( sv.time + sv.timeResidual );
-
 	// if time is about to hit the 32nd bit, kick all clients
 	// and clear sv.time, rather
 	// than checking for negative time wraparound everywhere.
@@ -1168,14 +1166,13 @@ void SV_Frame( int msec ) {
 	// update ping based on the all received frames
 	SV_CalcPings();
 
-	if (com_dedicated->integer) {
-		const long long start = SV_Microseconds();
-		SV_BotFrame( sv.time );
-		SV_CostAdd( SV_COST_BOTS, start );
-	}
-
 	// run the game simulation in chunks
 	while ( sv.timeResidual >= frameMsec ) {
+		// the bots' AI and their commands up to the coming tick, before it, as players' packets arrive (plan step 14)
+		const long long botStart = SV_Microseconds();
+		SV_BotFrame( sv.time );
+		SV_CostAdd( SV_COST_BOTS, botStart );
+
 		sv.timeResidual -= frameMsec;
 		svs.time += frameMsec;
 		sv.time += frameMsec;

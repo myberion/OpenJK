@@ -77,7 +77,6 @@ boteventtracker_t gBotEventTracker[MAX_CLIENTS];
 
 //rww - new bot cvars..
 vmCvar_t bot_forcepowers;
-vmCvar_t bot_debugClientRate;
 vmCvar_t bot_forgimmick;
 vmCvar_t bot_honorableduelacceptance;
 vmCvar_t bot_pvstype;
@@ -7534,7 +7533,6 @@ int BotAIStartFrame(int time) {
 	if (gUpdateVars < level.time)
 	{
 		trap->Cvar_Update(&bot_pvstype);
-		trap->Cvar_Update(&bot_debugClientRate);
 		trap->Cvar_Update(&bot_camp);
 		trap->Cvar_Update(&bot_attachments);
 		trap->Cvar_Update(&bot_forgimmick);
@@ -7591,11 +7589,8 @@ int BotAIStartFrame(int time) {
 		}
 	}
 
-	// execute bot user commands every frame
-	if (bot_debugClientRate.integer)
-	{ //a command every 10 ms, one per tick of plan step 14 (100 Hz), at any server frame rate (plan step 14 tests); the
-	  //commands of all the bots run in the order of their times, interleaved as players' packets arrive, also when a
-	  //20 Hz frame runs five commands per bot
+	{ //the bot user commands: one every 10 ms, the tick, each run as a player's is when it arrives (plan step 14); the engine
+	  //calls this before every tick, and the commands of all the bots run in the order of their times
 		static int botCmdTime[MAX_CLIENTS];
 		const int until = time + TICK_MSEC;	// up to the coming tick's time, as a player's commands arrive before it
 		int t, first = until + 1;
@@ -7604,8 +7599,9 @@ int BotAIStartFrame(int time) {
 			if( !botstates[i] || !botstates[i]->inuse || g_entities[i].client->pers.connected != CON_CONNECTED ) {
 				continue;
 			}
-			if (botCmdTime[i] <= 0 || botCmdTime[i] > time || time - botCmdTime[i] > 200)
-			{ //first command, a restart of the level time, or a long stall
+			if (botCmdTime[i] <= 0 || botCmdTime[i] > until || time - botCmdTime[i] > 200)
+			{ //first command, a restart of the level time, or a long stall (with timescale below 1 a tick is shorter
+			  //than 10 ms, and the last command can be ahead of time: no restart)
 				botCmdTime[i] = time - 10;
 			}
 			first = Q_min( first, botCmdTime[i] + 10 );
@@ -7624,19 +7620,6 @@ int BotAIStartFrame(int time) {
 				trap->BotUserCommand(botstates[i]->client, &botstates[i]->lastucmd);
 			}
 		}
-		return qtrue;
-	}
-
-	for( i = 0; i < MAX_CLIENTS; i++ ) {
-		if( !botstates[i] || !botstates[i]->inuse ) {
-			continue;
-		}
-		if( g_entities[i].client->pers.connected != CON_CONNECTED ) {
-			continue;
-		}
-
-		BotUpdateInput(botstates[i], time, elapsed_time);
-		trap->BotUserCommand(botstates[i]->client, &botstates[i]->lastucmd);
 	}
 
 	return qtrue;
@@ -7650,7 +7633,6 @@ BotAISetup
 int BotAISetup( int restart ) {
 	//rww - new bot cvars..
 	trap->Cvar_Register(&bot_forcepowers, "bot_forcepowers", "1", CVAR_CHEAT);
-	trap->Cvar_Register(&bot_debugClientRate, "bot_debugClientRate", "0", CVAR_CHEAT);
 	trap->Cvar_Register(&bot_forgimmick, "bot_forgimmick", "0", CVAR_CHEAT);
 	trap->Cvar_Register(&bot_honorableduelacceptance, "bot_honorableduelacceptance", "0", CVAR_CHEAT);
 	trap->Cvar_Register(&bot_pvstype, "bot_pvstype", "1", CVAR_CHEAT);

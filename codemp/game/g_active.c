@@ -50,8 +50,6 @@ damage values to that client for pain blends and kicks, and
 global pain sound events for all clients.
 ===============
 */
-extern vmCvar_t bot_debugClientRate;
-
 void P_DamageFeedback( gentity_t *player ) {
 	gclient_t	*client;
 	float	count;
@@ -3584,8 +3582,8 @@ void ClientThink( int clientNum, usercmd_t *ucmd ) {
 		}
 	}
 */
-	if ( ( !(ent->r.svFlags & SVF_BOT) || bot_debugClientRate.integer ) && !g_synchronousClients.integer ) {
-		ClientThink_real( ent );	// bot_debugClientRate: the bots run every command, as players do (plan step 14 measurements)
+	if ( !g_synchronousClients.integer ) {
+		ClientThink_real( ent );	// the bots run every command as it arrives, as players do (plan step 14)
 	}
 	// vehicles are clients and when running synchronous they still need to think here
 	// so special case them.
@@ -3630,7 +3628,7 @@ void G_RunClient( gentity_t *ent ) {
 		return;
 	}
 
-	if ( ( !(ent->r.svFlags & SVF_BOT) || bot_debugClientRate.integer ) && !g_synchronousClients.integer ) {
+	if ( !g_synchronousClients.integer ) {
 		return;
 	}
 	ent->client->pers.cmd.serverTime = level.tickTime;

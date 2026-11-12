@@ -28,10 +28,10 @@ one() {
 	IFS='|' read -r min scn pre name <<< "$1"
 	if [ "$WINDOWS" = 1 ]; then
 		SEED=1 FAST=1 PREMAP="$pre" SCENARIO="$scn" bash "$HERE/gamestats_windows.sh" "$min" \
-			"${PREFIX}_${name}|$MODULE|bot_debugClientRate 1" > /dev/null 2>&1
+			"${PREFIX}_${name}|$MODULE" > /dev/null 2>&1
 	else
 		SEED=1 FAST=1 PREMAP="$pre" SCENARIO="$scn" bash "$HERE/gamestats.sh" "$DED" "$BASE" "$MODULE" "$min" \
-			"${PREFIX}_${name}|bot_debugClientRate 1" > /dev/null 2>&1
+			"${PREFIX}_${name}" > /dev/null 2>&1
 	fi
 	echo "done $name"
 }
