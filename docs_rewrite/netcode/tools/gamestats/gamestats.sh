@@ -3,7 +3,7 @@
 # sv_fps 20. Runs local dedicated servers (no network, sabers only, 16 bots on mp/ffa3, or a scripted scenario of two
 # bots) in parallel and prints the "gamestats" and "svnetstats" lines of each after the measured time.
 #
-# Usage: [FAST=1] [PREMAP='<cvar> <value>;...'] [SCENARIO='saber 96 medium idle'] gamestats.sh <openjkded binary> <fs_basepath> <game module> <minutes> '<tag>|<fps>[|<cvars>]' ...
+# Usage: [FAST=1] [SEED=<n>] [PREMAP='<cvar> <value>;...'] [SCENARIO='saber 96 medium idle'] gamestats.sh <openjkded binary> <fs_basepath> <game module> <minutes> '<tag>|<fps>[|<cvars>]' ...
 #   <fs_basepath>  the directory holding base/assets*.pk3
 #   <game module>  the jampgame module to test (jampgamex86_64.so); each run copies it into its own fs_homepath
 #   <cvars>        cheat cvars set after devmap, separated by "; set "; pass each configuration as one
@@ -12,6 +12,9 @@
 #   SCENARIO       a scripted scenario (codemp/game/g_scenario.c) instead of the free-for-all, two bots: <minutes> must
 #                  cover the repetitions and an uncounted first one (2 s each); the scenario prints its own gamestats
 #                  at the end, which the watchdog takes as the end of the run
+#   SEED           a first game seed: server n of the command line (from 0) gets SEED+n and, with FAST=1, the fixed frame
+#                  from before the map loads, so that every run replays the same game; without it the seed comes from
+#                  the clock and the free play from the machine's load
 # Example (the same module at 20 and 100 Hz, twice each; FAST=1 on a machine nobody plays on):
 #   FAST=1 gamestats.sh /srv/jka/openjkded.x86_64 /srv/jka /srv/jka/base/jampgamex86_64.so 10 \
 #     'r20a|20|bot_debugClientRate 1' 'r20b|20|bot_debugClientRate 1' \
@@ -36,7 +39,7 @@ shift 4
 OUT="${GAMESTATS_DIR:-/tmp/gamestats}"
 
 run() {
-	local tag="$1" fps="$2" cvars="$3"
+	local tag="$1" fps="$2" cvars="$3" idx="$4"
 	local home="$OUT/$tag"
 	rm -rf "$home"
 	mkdir -p "$home/base"
@@ -61,6 +64,13 @@ run() {
 		# the map loads, in frames of 8 ms whatever the rate tested (400 values, at most 3.2 s), gives each server
 		# its own seed (40 values of the frame of the rate tested gave the same seed, so the same game, twice)
 		echo "wait $(( RANDOM % 400 + 1 ))"
+		# SEED: server n of the command line (from 0) gets the game seed SEED+n (g_debugSeed) and, in fast mode, the fixed
+		# frame from before the map loads (the frames of the map's first seconds otherwise follow the real time, so the free
+		# play depended on the machine's load): every run then replays the same game, its free play included
+		if [ -n "${SEED:-}" ]; then
+			echo "set g_debugSeed $(( SEED + idx ))"
+			if [ "${FAST:-0}" = "1" ]; then echo "set fixedtime $(( 1000 / fps ))"; echo "set timedemo 1"; fi
+		fi
 		echo "set sv_fps $fps"
 		echo "devmap mp/ffa3"
 		if [ -n "$cvars" ]; then echo "set $cvars"; fi
@@ -106,8 +116,10 @@ run() {
 	grep -a "game statistics\|server CPU" "$home/base/qconsole.log" | tail -2 | sed "s/^/[$tag] /"
 }
 
+idx=0
 for spec in "$@"; do
 	IFS='|' read -r tag fps cvars <<< "$spec"
-	run "$tag" "$fps" "${cvars:-}" &
+	run "$tag" "$fps" "${cvars:-}" "$idx" &
+	idx=$(( idx + 1 ))
 done
 wait

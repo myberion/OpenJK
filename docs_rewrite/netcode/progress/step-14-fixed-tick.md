@@ -265,7 +265,7 @@ Results, same module at `sv_fps` 20 and 100 (Windows, clang, fast mode), equal c
 | force: lightning, grip, drain, rage, protect, absorb | 48 each | identical |
 | weapons 4 to 15, primary and alternate (24 cases) | 48 each | identical, except flechette primary: 1 shard of 195 in 1 repetition |
 
-The differences left are not rate effects: bodies, items and doors left by the free play before the scenario (`EV_BODYFADE`, `EV_ITEM_RESPAWN`, `EV_PLAYDOORSOUND`), the death animation cycled by a static counter in `player_die`, the flechette shards processed in another entity order (the two values swapped between two runs at the same rates). A free-for-all of 16 bots, 3 batches of 12 servers per rate, 60 minutes of game each: damage -2.8 % (standard error 1.8 %), deaths -2.2 % (1.8 %), blocks -0.9 % (2.0 %), within the noise.
+The bench was then made deterministic (12 November 2026, afternoon; [step-14-audit-100hz.md](step-14-audit-100hz.md) section 11): every reset clears what the free play could leave (the walking direction, the animations, a knocked-away saber, the blades' last positions, the damage sums, the entity slots and more), the random numbers are reseeded before the bots are placed, and `g_debugSeed` with the scripts' `SEED` replays a run exactly, its free play included; the 40 cases are identical at 20 and 100 Hz on Windows and on Linux, and every seed of the scanned cases gives the same counts. Before that, the differences left were not rate effects either: bodies, items and doors left by the free play before the scenario (`EV_BODYFADE`, `EV_ITEM_RESPAWN`, `EV_PLAYDOORSOUND`), the death animation cycled by a static counter in `player_die`, the flechette shards processed in another entity order (the two values swapped between two runs at the same rates). A free-for-all of 16 bots, 3 batches of 12 servers per rate, 60 minutes of game each: damage -2.8 % (standard error 1.8 %), deaths -2.2 % (1.8 %), blocks -0.9 % (2.0 %), within the noise.
 
 ### Also fixed in part 2 (12 November 2026)
 
@@ -275,7 +275,7 @@ The differences left are not rate effects: bodies, items and doors left by the f
 ### Left in part 2
 
 - CG5 (verified): `saberAttackChainCount` is capped at 16 (`game/bg_saber.c`) but coded on 4 bits, so 16 reaches the client as 0 and a long chain (fast style) is mispredicted once. Owner's choice (12 November 2026): a 5-bit field, no gameplay change. The field's contexts change alphabet (16 to 32 and 6 to 7 symbols), so the trained tables must be retrained: done with step 13 (owner, 12 November 2026).
-- Linux: the scenarios and X1 measured on the VPS (GCC build from the Debian VM).
+- Linux: done on 12 November 2026 (VPS, GCC build from the Debian VM): the 40 cases identical at 20 and 100 Hz; X1: an empty server at 100 Hz used 9.7 % of a core before, 1.1 % after.
 
 ### Owner's decisions on the audit's engine items (12 November 2026)
 

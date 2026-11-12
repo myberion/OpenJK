@@ -2,10 +2,12 @@
 # Windows version of gamestats.sh for the owner's machine (llvm-mingw clang build, run under lldb: the clang dedicated
 # server crashes without a console). Runs local dedicated servers (no network) with 16 saber bots and prints
 # gamestats after a measured time. The runs go in $GAMESTATS_DIR/gs_<tag>; BUILD and GAME are set below.
-# Usage: [FAST=0|1] [PREMAP='<cvar> <value>;...'] gamestats_windows.sh <minutes> '<tag>|<fps>|<game dll>[|<cvar value>]' ...   (all run in parallel)
+# Usage: [FAST=0|1] [SEED=<n>] [PREMAP='<cvar> <value>;...'] gamestats_windows.sh <minutes> '<tag>|<fps>|<game dll>[|<cvar value>]' ...   (all run in parallel)
 # The commands go in a cfg run by +exec: the engine keeps only 32 "+" commands of its command line
 # (MAX_CONSOLE_LINES); the measured time is chained in waits of 30 seconds. FAST=1 (default) sets fixedtime and
-# timedemo: the server runs its frames as fast as it can, each advancing the game by one interval.
+# timedemo: the server runs its frames as fast as it can, each advancing the game by one interval. SEED=<n>: server n of
+# the command line (from 0) gets the game seed SEED+n and, in fast mode, the fixed frame from before the map loads, so
+# that every run replays the same game (see gamestats.sh).
 # A server that does not exit after its quit (seen in fast mode under lldb) is killed once its statistics are written.
 set -u
 MINUTES="$1"
@@ -22,7 +24,7 @@ kill_server() {
 }
 
 run() {
-	local tag="$1" fps="$2" dll="$3" extra="$4"
+	local tag="$1" fps="$2" dll="$3" extra="$4" idx="$5"
 	local home="$SCRATCH/gs_${tag}"
 	rm -rf "$home"
 	mkdir -p "$home/base"
@@ -47,6 +49,13 @@ run() {
 		# the map loads, in frames of 8 ms whatever the rate tested (400 values, at most 3.2 s), gives each server
 		# its own seed (40 values of the frame of the rate tested gave the same seed, so the same game, twice)
 		echo "wait $(( RANDOM % 400 + 1 ))"
+		# SEED: server n of the command line (from 0) gets the game seed SEED+n (g_debugSeed) and, in fast mode, the fixed
+		# frame from before the map loads (the frames of the map's first seconds otherwise follow the real time, so the free
+		# play depended on the machine's load): every run then replays the same game, its free play included
+		if [ -n "${SEED:-}" ]; then
+			echo "set g_debugSeed $(( SEED + idx ))"
+			if [ "${FAST:-1}" = "1" ]; then echo "set fixedtime $(( 1000 / fps ))"; echo "set timedemo 1"; fi
+		fi
 		echo "set sv_fps $fps"
 		echo "devmap mp/ffa3"
 		if [ -n "$extra" ]; then echo "set $extra"; fi
@@ -93,12 +102,14 @@ run() {
 	grep -a "game statistics\|server CPU" "$home/base/qconsole.log" | tail -2 | sed "s/^/[$tag] /"
 }
 
+idx=0
 for spec in "$@"; do
 	IFS='|' read -r tag fps dll extra <<< "$spec"
 	if [ -z "$tag" ] || ! [[ "$fps" =~ ^[0-9]+$ ]] || [ ! -f "$dll" ]; then
 		echo "invalid configuration '$spec': expected '<tag>|<fps>|<game dll>[|<cvars>]'" >&2
 		continue
 	fi
-	run "$tag" "$fps" "$dll" "${extra:-}" &
+	run "$tag" "$fps" "$dll" "${extra:-}" "$idx" &
+	idx=$(( idx + 1 ))
 done
 wait

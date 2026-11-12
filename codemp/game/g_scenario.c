@@ -2,8 +2,10 @@
 // repetition, play a fixed sequence of commands timed in milliseconds (one every 10 ms, as the bots of
 // bot_debugClientRate), so that a scenario run at 20 Hz and at the tick's rate compares the game per swing, per shot or
 // per power use rather than through the chaos of a free-for-all. A first repetition, not counted, replaces the bots'
-// state left by the game before the scenario (animations); the statistics of the counted repetitions are printed at the
-// end (gamestats), and the bots then stand still until "scenario off".
+// state left by the game before the scenario (animations); every reset also clears what the free play could leave in
+// the bots (powerups, pain timers and damage sums, walking direction), and the corpses, missiles, events and dropped
+// items are removed when the counted repetitions start, so that every run plays the same game; the statistics of the
+// counted repetitions are printed at the end (gamestats), and the bots then stand still until "scenario off".
 //
 // scenario saber <reps> <fast|medium|strong|dual|staff> <idle|attack> [distance]
 // scenario force <reps> <lightning|grip|drain|rage|protect|absorb> [distance]
@@ -15,6 +17,10 @@
 extern void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower );
 extern qboolean G_SetSaber( gentity_t *ent, int saberNum, char *saberName, qboolean siegeOverride );
 extern void Svcmd_GameStats_f( void );
+extern void saberReactivate( gentity_t *saberent, gentity_t *saberOwner );
+extern void SaberGotHit( gentity_t *self, gentity_t *other, trace_t *trace );
+extern void SaberUpdateSelf( gentity_t *ent );
+extern void WP_SaberRemoveG2Model( gentity_t *saberent );
 
 #define SCN_REP_MSEC		2000	// one repetition
 #define SCN_SETTLE_MSEC		500		// still, after the reset, before the script starts
@@ -104,13 +110,50 @@ static qboolean G_ScenarioFindPlace( void ) {
 	return qfalse;
 }
 
+// a saber thrown or knocked away in the free play or the previous repetition comes back to the hand, as when its owner
+// catches it (DownedSaberThink, saberBackToOwner), in the state of a saber never thrown
+static void G_ScenarioSaberToHand( gentity_t *ent ) {
+	gclient_t *client = ent->client;
+	gentity_t *saberent;
+
+	if ( !client->ps.saberInFlight || !client->saberStoredIndex ) {
+		return;
+	}
+	saberent = &g_entities[client->saberStoredIndex];
+	client->ps.saberEntityNum = client->saberStoredIndex;
+	saberReactivate( saberent, ent );
+	saberent->touch = SaberGotHit;
+	saberent->think = SaberUpdateSelf;
+	saberent->genericValue5 = 0;
+	saberent->nextthink = level.time;
+	saberent->r.svFlags |= SVF_NOCLIENT;
+	saberent->s.eFlags = EF_NODRAW;
+	saberent->s.saberInFlight = qfalse;
+	saberent->s.loopSound = 0;
+	saberent->s.loopIsSoundset = qfalse;
+	WP_SaberRemoveG2Model( saberent );
+	client->ps.saberInFlight = qfalse;
+	client->ps.saberEntityState = 0;
+	client->ps.saberThrowDelay = 0;
+	client->saberKnockedTime = 0;
+}
+
 static void G_ScenarioPlace( gentity_t *ent, const vec3_t origin, float yaw ) {
 	gclient_t *client = ent->client;
 	vec3_t angles = { 0, 0, 0 };
-	int i;
+	int i, j;
 
 	if ( ent->health <= 0 || client->ps.stats[STAT_HEALTH] <= 0 ) {
 		ClientRespawn( ent );
+	}
+	G_ScenarioSaberToHand( ent );
+	// the blades' last positions, from before the bot is moved here: the first sweep of a repetition would start from them
+	client->lastSaberStorageTime = 0;
+	client->hasCurrentPosition = qfalse;
+	for ( i = 0; i < MAX_SABERS; i++ ) {
+		for ( j = 0; j < MAX_BLADES; j++ ) {
+			client->saber[i].blade[j].trail.lastTime = 0;
+		}
 	}
 	for ( i = 0; i < NUM_FORCE_POWERS; i++ ) {
 		if ( client->ps.fd.forcePowersActive & ( 1 << i ) ) {
@@ -135,10 +178,22 @@ static void G_ScenarioPlace( gentity_t *ent, const vec3_t origin, float yaw ) {
 	client->ps.legsTimer = client->ps.torsoTimer = 0;
 	client->ps.electrifyTime = 0;
 	client->ps.pm_time = 0;
-	client->ps.pm_flags &= ~( PMF_TIME_KNOCKBACK | PMF_TIME_WATERJUMP );
+	// PMF_BACKWARDS_RUN and movementDir change only with movement commands, so a still bot kept those of its last step
+	// in the free play: a backward one turns the legs of a pushed player the other way (BG_G2PlayerAngles), which moved
+	// the model points the missiles hit
+	client->ps.pm_flags &= ~( PMF_TIME_KNOCKBACK | PMF_TIME_WATERJUMP | PMF_BACKWARDS_RUN );
+	client->ps.movementDir = 0;
 	client->ps.saberAttackWound = client->ps.saberIdleWound = 0;
 	client->invulnerableTimer = 0;
 	client->ps.eFlags &= ~EF_INVULNERABLE;
+	// powerups picked up in the free play before the scenario, and the pain sound timers (P_DamageFeedback), which a
+	// pain in the previous repetition or in the free play would carry into this one
+	memset( client->ps.powerups, 0, sizeof( client->ps.powerups ) );
+	client->ps.painTime = 0;
+	ent->pain_debounce_time = 0;
+	// the damage P_DamageFeedback keeps summing until it plays a pain (under 10 points, or within 500 ms of a pain)
+	client->damage_blood = client->damage_armor = client->damage_knockback = 0;
+	client->g2LastSurfaceHit = client->g2LastSurfaceTime = 0;	// shown by scenario_trace at every health loss
 
 	trap->UnlinkEntity( (sharedEntity_t *)ent );
 	VectorCopy( origin, client->ps.origin );
@@ -191,7 +246,7 @@ static void G_ScenarioEquip( gentity_t *ent, qboolean attacker ) {
 // called at the start of every server frame: resets the two bots at the start of each repetition
 void G_ScenarioFrame( void ) {
 	vec3_t fwd, front;
-	int seed;
+	int seed, i;
 
 	if ( scn.type == SCN_NONE || scn.done ) {
 		return;
@@ -211,22 +266,56 @@ void G_ScenarioFrame( void ) {
 		return;
 	}
 
+	// the same random numbers at the start of a repetition at any rate, from before the bots are placed: a bot killed in
+	// the previous repetition respawns at a spawn point drawn with rand() (ClientRespawn), which the free play's left-overs
+	// had moved
+	seed = 7919 * ( scn.rep + 1 );
+	srand( seed );
+	Rand_Init( seed );
+
 	VectorSet( fwd, cos( DEG2RAD( scn.yaw ) ), sin( DEG2RAD( scn.yaw ) ), 0 );
 	VectorMA( scn.origin, scn.dist, fwd, front );
 	G_ScenarioPlace( &g_entities[scn.client[0]], scn.origin, scn.yaw );
 	G_ScenarioPlace( &g_entities[scn.client[1]], front, AngleNormalize360( scn.yaw + 180 ) );
 	G_ScenarioEquip( &g_entities[scn.client[0]], qtrue );
 	G_ScenarioEquip( &g_entities[scn.client[1]], qfalse );
+	// the animations restart from the weapon's ready pose: a still bot keeps its torso and legs animations (the choke of
+	// a grip still held, the slope stance of the legs), so the warm-up's, shaped by the free play, carried into every
+	// repetition; the ghoul2 animations restart with them (G_UpdateClientAnims)
+	for ( i = 0; i < 2; i++ ) {
+		gclient_t *client = g_entities[scn.client[i]].client;
 
-	// the same random numbers at the start of a repetition at any rate
-	seed = 7919 * ( scn.rep + 1 );
-	srand( seed );
-	Rand_Init( seed );
+		client->ps.torsoAnim = client->ps.legsAnim = WeaponReadyAnim[client->ps.weapon];
+		client->torsoAnimExecute = client->legsAnimExecute = -1;
+	}
 
 	scn.repStart = level.time;
 	scn.rep++;
 	if ( scn.rep == 1 ) {
 		memset( &g_stats, 0, sizeof( g_stats ) );	// the counted repetitions start
+		// without the corpses left by the free play or the warm-up, the body queue from its first slot (as BodySink
+		// leaves a body at its end)
+		for ( i = 0; i < BODY_QUEUE_SIZE; i++ ) {
+			trap->UnlinkEntity( (sharedEntity_t *)level.bodyQue[i] );
+			level.bodyQue[i]->physicsObject = qfalse;
+			level.bodyQue[i]->takedamage = qfalse;
+			level.bodyQue[i]->nextthink = 0;
+		}
+		level.bodyQueIndex = 0;
+		// the events, missiles (in flight or laid, as mines) and dropped items left by the free play or the warm-up are
+		// freed and every free slot can be taken at once: G_Spawn skips a slot freed less than a second ago, so the free
+		// play's last frees gave the missiles other entity numbers, and the missiles run in the order of their numbers
+		for ( i = MAX_CLIENTS; i < level.num_entities; i++ ) {
+			gentity_t *e = &g_entities[i];
+
+			if ( e->inuse && !e->neverFree &&
+				( e->freeAfterEvent || e->s.eType == ET_MISSILE || ( e->flags & FL_DROPPED_ITEM ) ) ) {
+				G_FreeEntity( e );
+			}
+			if ( !e->inuse ) {
+				e->freetime = 0;
+			}
+		}
 	}
 }
 

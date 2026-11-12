@@ -112,14 +112,14 @@ Further result (same module, `saber 64 medium idle`, one server per rate): 20 Hz
 - CG5: a 5-bit field for `saberAttackChainCount` (no gameplay change). It changes the alphabets of its contexts (`KindAlphabet` in `netcodec/src/contexts.h`: 16 to 32 symbols, 6 to 7), so the trained tables (`jka_tables.inc`) must be retrained, and the training corpus (`data/traces/train.bin`) is no longer on this machine: done with step 13 (retraining on recordings of this build, which regenerates the schema and the tables anyway; owner, 12 November 2026). Until then a chain of 16 attacks or more (fast style; staff and dual chain without the counter) is mispredicted once.
 - `PM_irand_timesync` fixed (done, below).
 - B1 and B2 wait for the snapshot store D3 (part 5).
-- X1: the dedicated server sleeps its last millisecond (done, below; to measure on the VPS).
+- X1: the dedicated server sleeps its last millisecond (done, below; measured on the VPS on 12 November 2026).
 - The interpolation redesign of agent 6 goes with part 4.
 - No hit confirmation sound for the attacker (agent 5's remark): not wanted.
 
 **Done on 12 November after the decisions (commit `1376279bd`, after `4efd458f0`).**
 - Movers: `G_RunMover` returns between the 20 Hz instants (`g_mover.c`), so they move, push, crush and think as at `sv_fps` 20; the per-push gates and the tick time are gone from `g_mover.c` (OpenJK's file plus that test), `level.previousTickTime` removed. Free-for-all batch (12 servers per rate): damage -1.3 %, deaths -0.9 %, blocks -2.0 %, within the noise.
 - `PM_irand_timesync` (`bg_saber.c`): seeded with `&pm->cmd.serverTime`, each draw overwrote the command's time, so the movement code after it in the step read a random time (footstep and slope timers, weapon charge times, saber lock and hand extension times, zoom...). It now draws from `pml.randSeed`, set to the command's time at the start of each step (`bg_local.h`, `PmoveSingle`): the same random numbers as before. The scenarios give the same counts before and after (the corrupted reads did not change their outcomes).
-- X1 (`qcommon/common.cpp`, `net_ip.cpp`, `qcommon.h`): `NET_Sleep` takes microseconds; outside Windows a dedicated server sleeps its last millisecond in steps of 100 us instead of the busy loop of `NET_Sleep(0)` (up to a tenth of a core at 100 Hz). `select` still returns at once when a packet arrives. On Windows the busy loop stays (`select` there waits whole timer periods). `com_busyWait 1` keeps the busy wait everywhere.
+- X1 (`qcommon/common.cpp`, `net_ip.cpp`, `qcommon.h`): `NET_Sleep` takes microseconds; outside Windows a dedicated server sleeps its last millisecond in steps of 100 us instead of the busy loop of `NET_Sleep(0)` (up to a tenth of a core at 100 Hz). `select` still returns at once when a packet arrives. On Windows the busy loop stays (`select` there waits whole timer periods). `com_busyWait 1` keeps the busy wait everywhere. Measured on the VPS (GCC 12 build, an empty server, `time timeout 120 openjkded.x86_64 +set sv_fps 100 +map mp/ffa3`, the same game module): user 3.106 s and system 8.516 s before (11.6 s, 9.7 % of a core), user 0.352 s and system 0.940 s after (1.3 s, 1.1 %).
 - `gamestats.sh` (Linux) takes `SCENARIO=` as the Windows script does; its header no longer mentions the removed `g_debugSaberGrid`.
 - All scenarios again (10 saber, 6 force, 24 weapon cases): identical at 20 and 100 Hz (flechette primary: the known shard order), unchanged against the commit.
 
@@ -148,8 +148,32 @@ Further result (same module, `saber 64 medium idle`, one server per rate): 20 Hz
 | B3 cgame drops snapshots after a 320 ms hitch; B4 client ping 999 above 256 ms | open, parts 4 and 9 |
 | S2 (the step document's inventory: packets drained once per frame) | wrong: the server runs each packet on arrival (`NET_Sleep` returns from `select`, `NET_Event` runs it); the step document is corrected |
 | W1 catch-up frames send one snapshot, W2 whole-millisecond frame timing, W3 listen server ticks per client frame, W5 server command repeats, W6 `CMD_BACKUP` 64, W7 ping mean over 32 frames | open, part 3 (W5 is S5, W6 part 4) |
-| X1 busy wait | done (Linux dedicated server), to measure |
+| X1 busy wait | done (Linux dedicated server): an empty server at 100 Hz 9.7 % of a core before, 1.1 % after (VPS) |
 | X3 server CPU at 100 Hz, X5 demos 5 times larger, lagometer 48 columns | open: part 7, later, part 9 |
 | interpolation redesign (agent 6) and its 20 Hz bugs | part 4 |
 
 **Found on the way, not fixed:** the Linux `Sys_Milliseconds` (`shared/sys/sys_unix.cpp`) uses `gettimeofday`, the wall clock: an NTP step moves the server's clock (frames run in a burst or stop). A monotonic clock (`clock_gettime(CLOCK_MONOTONIC)`) would fix it; to place in part 3 (tick loop).
+
+## 11. Session of 12 November 2026 (afternoon): Linux, and the scenario bench made deterministic
+
+**Linux (VPS, GCC 12 build from the Debian VM).** X1 measured (section 10). The 40 scenario cases of section 9: identical at `sv_fps` 20 and 100 with the module of the morning (`1376279bd`); with the module of this section: identical at 20 and 100 Hz as well (40 of 40).
+
+**Rare differences between two runs at the same rate.** On the VPS about one run in 40 of the staff and dual attack scenarios gave other counts than the other runs at the same rate (locally, with clang, about one in several hundred). Never a difference between the rates: every pair of runs with the same history gave the same counts at 20 and 100 Hz. The cause was the bench, not the game's timing: the free play before a scenario (30 s of bots playing) left state in the bots and in the level that the reset did not clear, and the free play itself depended on the machine's load, since `fixedtime` is set only after `devmap` and the first frames of the map followed the real time (one bot frame for several game frames under load). With the owner's game running, the differences came back (2 in 48 runs); with the seed and the fixed frame set before the map loads, never.
+
+Found and fixed in `g_scenario.c`, each with the scenario that showed it:
+
+| state left by the free play or the previous repetition | how it showed | fix |
+|---|---|---|
+| `movementDir` and `PMF_BACKWARDS_RUN` of a still bot (they change only with movement commands) | blaster alternate fire 2,427 or 2,432 damage: a pushed defender's legs turned the other way (`BG_G2PlayerAngles`), so the points the bolts hit moved by up to 1.3 units | cleared at every reset |
+| entity slots freed less than a second before (`G_Spawn` skips them) | missiles with other entity numbers, run in another order (the flechette shard order of section 9) | when the counted repetitions start: events, missiles (mines included) and dropped items freed, every free slot usable at once |
+| the damage `P_DamageFeedback` keeps summing until it plays a pain (under 10 points or within 500 ms of a pain; OpenJK's behaviour) | one `EV_PAIN` more | sums cleared at every reset |
+| pain timers, powerups, corpses, the last surface hit | `EV_PAIN`, powerup sounds, a field of the trace | cleared or removed |
+| torso and legs animations of a still bot (the choke of a grip still held at the reset, the slope stance of the legs) | grip: 171 periodic events instead of 168; every repetition differed, since each started as the previous one ended | the weapon's ready animations at every reset, the ghoul2 animations restarted |
+| the spawn point of a bot killed in the previous repetition, drawn with `rand()` before the repetition's reseed | strong idle: an idle touch one instant earlier from repetition 57 on (8 repetitions after the second death) | reseeded before the bots are placed |
+| a saber thrown or knocked away at the reset; the blade's first sweep starting from its position before the teleport | strong idle: 5 or 9 idle touches instead of 6, another stance | the saber back in the hand as when caught; the blades' last positions forgotten |
+
+Measured not to be causes: uninitialized locals in the game module or the engine (both built with `-ftrivial-auto-var-init=zero` and `=pattern`: the same counts on the 40 cases), the random numbers (they diverge only as a consequence), the movers, the saber entities' ghoul2 models, a bot's death just before the scenario.
+
+**Method.** `g_debugSeed` (game module) replaces the clock's start seed, and the scripts' `SEED=<n>` gives server n the seed `SEED+n` and sets the fixed frame before the map loads: a run replays the same game, the free play included (two runs of one seed: the same log apart from the time stamps). Seeds were scanned until one gave other counts, then compared with a normal seed with `scenario_trace` and temporary dumps of `playerState_t`, `gclient_t`, `gentity_t` and `forcedata_t` at the start of the counted repetitions.
+
+**Results with the fixes.** 96 seeds each of grip and strong idle, 48 each of staff, dual and fast attack, grip, blaster alternate and flechette primary: one result per case. The 40 cases identical at 20 and 100 Hz (Windows, clang, free play from the clock). VPS: none of 160 runs differs (staff attack, dual attack, strong idle, grip, 40 runs each, free play under load). The counts differ from section 9's, since every repetition now starts from the weapon's ready pose without the blade's previous position: the proof is the identity of the two rates and of the runs, not the counts.

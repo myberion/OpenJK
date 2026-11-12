@@ -3,13 +3,14 @@ for example the same module at sv_fps 20 and 100: prints SAME, or the lines that
 Usage: python -I gamestats_scn.py <directory of the runs> <tagA> <tagB> [<tagA> <tagB> ...]
 (runs in <directory>/gs_<tag> for the Windows script, <directory>/<tag> for the Linux one). The statistics are the
 lines printed after "scenario done"; the events left by the free play before the scenario (bodies fading, items
-respawning, doors) and the death animation numbers (cycled by a static counter in player_die) are ignored."""
+respawning with the global sound of a powerup, doors) and the death animation numbers (cycled by a static counter in
+player_die) are ignored."""
 import re
 import sys
 from pathlib import Path
 
 D = Path(sys.argv[1])
-IGNORE = re.compile(r" (EV_BODYFADE|EV_ITEM_RESPAWN|EV_PLAYDOORSOUND|EV_DEATH[123]) \d+")
+IGNORE = re.compile(r" (EV_BODYFADE|EV_ITEM_RESPAWN|EV_GLOBAL_SOUND|EV_PLAYDOORSOUND|EV_DEATH[123]) \d+")
 KEEP = ("saber swings", "force statistics", "event statistics", "damage statistics", "shot statistics",
         "style statistics")
 
