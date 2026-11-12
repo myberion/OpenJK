@@ -26,6 +26,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include <float.h>
 #include <math.h>
 #include <stdlib.h>
+#if !defined(_MSC_VER)
+#include <fenv.h>
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1237,14 +1240,41 @@ qboolean VectorCompare2( const vec3_t v1, const vec3_t v2 )
 	return qtrue;
 }
 
-// To nearest with ties to even, through an integer, on every platform (as Sys_SnapVector): it used to round to nearest
-// only with MSVC on 32-bit x86 (fistp) and to truncate toward zero everywhere else.
+// To nearest with ties to even, through an integer (so -0.5 gives +0), on every platform and compiler, as Sys_SnapVector:
+// it used to round to nearest only with MSVC on 32-bit x86 (fistp) and to truncate toward zero everywhere else. The
+// rounding mode is forced and restored, as in Sys_SnapVector: lrintf follows the current mode, so a caller left in
+// round-toward-zero would truncate.
+#if defined(_MSC_VER)
+#pragma fenv_access (on)
+#endif
 void SnapVector( float *v )
 {
+#if defined(_MSC_VER)
+	unsigned int oldcontrol;
+	unsigned int newcontrol;
+
+	_controlfp_s(&oldcontrol, 0, 0);
+	_controlfp_s(&newcontrol, _RC_NEAR, _MCW_RC);
+
 	v[0] = (float)lrintf(v[0]);
 	v[1] = (float)lrintf(v[1]);
 	v[2] = (float)lrintf(v[2]);
+
+	_controlfp_s(&newcontrol, oldcontrol, _MCW_RC);
+#else
+	int oldround = fegetround();
+	fesetround(FE_TONEAREST);
+
+	v[0] = (float)lrintf(v[0]);
+	v[1] = (float)lrintf(v[1]);
+	v[2] = (float)lrintf(v[2]);
+
+	fesetround(oldround);
+#endif
 }
+#if defined(_MSC_VER)
+#pragma fenv_access (off)
+#endif
 
 float DistanceHorizontal( const vec3_t p1, const vec3_t p2 )
 {

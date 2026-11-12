@@ -280,3 +280,57 @@ The bench was then made deterministic (12 November 2026, afternoon; [step-14-aud
 ### Owner's decisions on the audit's engine items (12 November 2026)
 
 B1 (snapshots without a base above 290 ms of round trip at 100 Hz) and B2 (`svs.nextSnapshotEntities` wraps after about 2.3 h with 32 clients at 100 Hz) wait for the snapshot store D3 (part 5); the interpolation redesign proposed by the audit goes with part 4; no hit confirmation sound. The status of every audit item is in [step-14-audit-100hz.md](step-14-audit-100hz.md) section 10.
+
+## 10. Part 3 (tick loop): design, and Linux and Windows aligned first (12 November 2026)
+
+### Decisions (owner, 12 November 2026)
+
+- `TICK_MSEC` (10) replaces `sv_fps` everywhere: engine (`SV_Frame`, `SV_FrameMsec`, the snapshot pacing of `sv_snapshot.cpp`, `svnetstats`), game module (`g_xcvar.h` declares `sv_fps` with a default of 40; `ai_main.c`, `g_svcmds.c`, a debug box in `w_saber.c`), client (the snapshot interval read from `sv_fps` in the server info, `cl_cgame.cpp:665`; `timedemo`'s 50 ms).
+- Ticks scheduled to the microsecond on a monotonic clock (W2: whole milliseconds were ±10 % of a tick); Linux `Sys_Milliseconds` (`shared/sys/sys_unix.cpp`, `gettimeofday`) moves to `clock_gettime(CLOCK_MONOTONIC)`.
+- Bots called every tick inside the tick loop; the per-command path of `bot_debugClientRate 1` (a command every 10 ms, run as a player's) becomes the only one and the cvar goes.
+- The ping measured over the 256-message window that exists (W7, valid up to about 2.5 s of round trip instead of 320 ms).
+- Server command repeats counted by cause in `svnetstats` (a new command while others are in flight, the carrier lost, the `2 × ping` timeout), measured in game with the owner (LAN and VPS), then the cause fixed (S5, W5, D4).
+- After a stall the server catches up at most 250 ms (25 ticks); beyond that the game clock skips ahead and the clients follow the jump as after `map_restart`. Surveyed: Unreal Engine clamps a frame to 0.4 s (`MaxUndilatedFrameTime`, `AWorldSettings::FixupDeltaSeconds`) and its physics to 1/30 s or 6 substeps of 1/60 s; Unity to 1/3 s (`Time.maximumDeltaTime`, which also bounds the `FixedUpdate` calls per frame); Godot to 8 physics steps per frame; Bevy to 250 ms (`Time<Virtual>::DEFAULT_MAX_DELTA`); Glenn Fiedler's "Fix Your Timestep!" 250 ms; Quake 3 and OpenJK today 5 s for a dedicated server (`Com_ModifyMsec`). All primary documentation except Unreal's ini default (secondary).
+- `map_restart` and a map load keep their three frames of 100 ms (identical to 1.01; the client follows the jump since step 11).
+- B1 and B2 wait for the snapshot store of part 5 (no public server before it; the VPS is for tests only).
+- The listen server keeps running its ticks inside the client's frames (W3); the dedicated server is the target.
+- The scenarios' 20 Hz reference becomes recorded counts of the 40 cases, the same file for every platform. Order: align Linux and Windows first (below) while `sv_fps` still exists, check 20 against 100 Hz with the aligned module, record the counts at 20 Hz, then remove `sv_fps`.
+
+### Linux and Windows must give identical results (owner, 12 November 2026)
+
+Even where 1.01's own Windows and Linux builds differed. Done: `SnapVector` forces round-to-nearest around `lrintf` and restores the mode, the same code as `Sys_SnapVector` (commit after `9de35ca1a`; owner's report `../snapvector-rounding-report.md`).
+
+**Measured.**
+
+- Math library, with `../tools/libm_hash.c` (one FNV-1a hash per function over about 2 million inputs in the game's ranges: angles of ±720 degrees to radians as `AngleVectors` does, `atan2` of ±4096 components, `acos` and `asin` of [-1, 1], `logf`, `fmodf`). Every transcendental function differs between glibc and the UCRT; `fmodf` (exact by definition) is identical. MSVC measured below the table: `cl /nologo /O2 /fp:precise Z:\OpenJK_Netcode\docs_rewrite\netcode\tools\libm_hash.c /Fo%TEMP%\libm_hash.obj /Fe%TEMP%\libm_hash.exe && %TEMP%\libm_hash.exe` in a Visual Studio x64 command prompt.
+
+| function | Windows, clang (llvm-mingw, UCRT) | Debian 12, GCC 12 (glibc) |
+|---|---|---|
+| `sin(float)` | f7f7e3ac76c8e035 | abfd7382bda704b8 |
+| `cos(float)` | 7ef488ef15663d2b | b2ab48992e84ab74 |
+| `sinf` | 46bf256ac1e2f95a | c48cdb1c9956d1d3 |
+| `cosf` | 4c2679f9372ae277 | a43d78d002f586df |
+| `atan2(float)` | 98b487d340834c8f | f59dfe1fc84f0704 |
+| `atan2f` | c1300b3f9bff3813 | 043b6b44a44fdc0d |
+| `atan2` in degrees | 82cb81e9034bec49 | 879ce300365bbaed |
+| `acos(float)` | 70177fff4aeee672 | d750f0b4190ef122 |
+| `acosf` | 2194c4ee5a416e59 | 6069765aa0db36af |
+| `asinf` | 575eaea2a745d7d3 | 3c310c16b9671a63 |
+| `logf` | f7e2e4651f64b231 | cd3ad938fe7d9731 |
+| `fmodf` | 714d6ad885587591 | 714d6ad885587591 |
+| `tan(float)` | 5f8501a58d2d1ecf | af611bba6bb43e05 |
+| `tanf` | c0e86a19c7e6a0a9 | dd660c87c77105a8 |
+| `atan(float)` | 5c6089d9560c0ef1 | 22836de2139e151d |
+| `pow(float)` | 53a84e4af9973cf3 | 407c3ce16438bd13 |
+| `powf` | 36149898e3e10973 | 49a7f705e4adb111 |
+
+Inventory of the calls (12 November 2026; `sqrt`, `floor`, `ceil` and `fmod` are exact by definition, so identical everywhere): game module `sin` 25, `cos` 15, `tan` 2, `acos` 2, `atan2` 1 (plus 33 `floor`, 28 `sqrt`, 24 `ceil`); cgame `sin` 58, `cos` 24, `tan` 7, `atan2` 5, `tanf` 2, `powf` 2, `atan` 2, `sinf` 1 (mostly effects; its `bg_*` files are the game module's); `shared/qcommon/q_math.c` `cosf` 6, `cos` 6, `sinf` 4, `atan2f` 2, `acos` 2, `logf`, `asinf`, `acosf`, `atan2`; the dedicated server's ghoul2 (`codemp/rd-dedicated`, model traces and bolts) `pow` 4, `sin` 2, `cos` 2: the engine must be aligned too, not only the modules; collision (`qcommon/cm_*`) only `sqrt`. MSVC x64 (`cl /O2 /fp:precise`, Windows VM, 12 November 2026): the same hashes as clang with the UCRT for every function except `pow` (53925401fce4b47e): for this code MSVC does not call the UCRT's `pow`. Clang 14 on Debian: the same hashes as GCC 12 on all 17 functions (on Linux the library decides, not the compiler). So three answers for `pow` (glibc, UCRT, MSVC), two for everything else (only `fmodf` is identical everywhere). Debian: `gcc -O2 -o /tmp/libm_hash /media/sf_jka/OpenJK_Netcode/docs_rewrite/netcode/tools/libm_hash.c -lm && /tmp/libm_hash`; Windows: the `cl` line above in an x64 Native Tools command prompt (cmd).
+
+- Game modules built by clang and MSVC (same engine, same UCRT): 39 of the 40 scenario cases identical; the flechette's alternate fire (`weapon 48 10 1`) is deterministic per compiler but differs (clang 2,333 damage and 3 deaths, MSVC 1,941 and 4, at 20 and 100 Hz alike): bouncing projectiles of one repetition explode in the next on other paths. The clang module imports `acosf`, `floorf`, `ceil` and `fmod` from the UCRT where the MSVC module imports `floor` and `sqrtf` and no `acosf`: probably MSVC computing some float functions through their double versions; to verify (it goes away if the game no longer calls the C library's functions).
+- Random numbers: the game module calls the C library's `rand()` 39 times (`ai_main.c` 12, `g_weapon.c` 8 for the rotation of mines and detpacks, `g_client.c:674` the spawn point, `g_utils.c:558` `G_PickTarget`, `g_items.c:2338` team items, `g_team.c`, NPC code, `w_saber.c` `RandFloat` with `#ifdef _WIN32` / `__GCC__` branches and `g_randFix`, and `srand` in `g_scenario.c`); glibc's and the UCRT's generators differ, so the same seed gives other draws. Raven's `Q_irand` / `Q_flrand` (`holdrand`, a copy of MSVC's LCG) is identical everywhere; `PM_irand_timesync` draws from the command's time so that the server and the client's prediction agree.
+
+**Plan.**
+
+1. Random numbers (owner: "one generator, modern, fast and of quality"): two kinds are needed and both use one core. A stream generator for every server-side decision, replacing `rand()`/`srand()` and `Q_irand`/`Q_flrand`'s `holdrand` in the game module (and cgame's, for its effects): **xoshiro128\*\*** (Blackman and Vigna, 2018; public domain (CC0), so no licence question with the GPL v2; 16 bytes of state, 32-bit output, passes BigCrush, 32-bit additions, shifts and rotations only, fast on x64 and 32-bit x86), seeded through splitmix (CC0); integers in a range by Lemire's multiply-shift (`(uint64)r * n >> 32`), floats from the top 24 bits. A seeded function for the draws `Pmove` makes on both sides (`PM_irand_timesync`): a 32-bit integer hash of (command time, draw index), as Source gives each user command a random seed from its number for the predicted weapon spread (from memory, to verify in the Source SDK 2013). `RandFloat`'s platform branches and `g_randFix` go. Every random outcome changes; the scenario counts are recorded after. PCG32 was the other candidate: a 64-bit multiply (slower on 32-bit x86) and a reference code under Apache 2.0, incompatible with the GPL v2.
+2. Math functions (owner: identical on every platform, the fastest, the most precise, an external library allowed): a deeper survey first, in the next session. Candidate: CORE-MATH (correctly rounded, so identical on every platform and compiler by construction; MIT licence; said to be often faster than glibc for binary32). To check: it covers `sinf`, `cosf`, `atan2f`, `acosf`, `asinf`, `logf` and the double `sin`, `cos`, `atan2`, `acos` the game calls (`shared/qcommon/q_math.c`, `game/bg_misc.c`, `game/bg_pmove.c`, then every module's other calls), its speed against glibc and the UCRT on these inputs, its build with MSVC, GCC and clang on x86 and x64, its FMA use with and without hardware FMA. Others to compare: SLEEF (Boost licence, not correctly rounded), musl / fdlibm (identical only if compiled alike), CRlibm (double only, older). Also: compile the game and cgame with `-ffp-contract=off` (a `-march` with FMA would contract expressions differently); find whether the engine's own float code (collision, ghoul2) also needs it.
+3. Check with the 40 scenarios on clang, MSVC and GCC: the same counts everywhere, and 20 against 100 Hz; record the counts; then part 3 as decided above.

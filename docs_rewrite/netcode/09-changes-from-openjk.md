@@ -176,7 +176,7 @@ In one sentence: the movement behaves exactly as an OpenJK server set to `pmove_
 | Player velocity after each movement step | rounded to whole units per second (default `pmove_float 0`) | never rounded | the client gets the exact velocity; see below |
 | Length of a movement step | the time since the previous command (default `pmove_fixed 0`) | the same | a fixed step is a gameplay question (plan step 14) |
 | Missile launch point, velocities, impact and explosion points | rounded to integers (`SnapVector`, `SnapVectorTowards`) | exact | the client sees the trajectory the server computes; +0.5 byte per message on the demos |
-| Rounding rule of `SnapVector` (events, dropped items, spawn point) | truncation, except MSVC 32-bit: nearest | to nearest, ties to even, on every compiler | a Linux server and a Windows server place them the same way |
+| Rounding rule of `SnapVector` (events, dropped items, spawn point) | truncation, except MSVC 32-bit: nearest | to nearest, ties to even, on every compiler, the rounding mode forced as in `Sys_SnapVector` | a Linux server and a Windows server place them the same way (1.01's Linux build truncated: its values move by at most 1 unit) |
 | Rounding rule of `Sys_SnapVector` (the engine's) | ties away from zero with MSVC, to even elsewhere | to even everywhere | no pmove call uses it now; kept consistent for any module that does |
 
 The velocity in more detail:
