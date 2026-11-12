@@ -215,15 +215,22 @@ static int SV_NetcodecAcknowledged( const client_t *client ) {
 	return client->reliableAcknowledge;
 }
 
-// whether this message sends the commands not yet acknowledged (see s_commands); it records them as sent if so
-static bool SV_NetcodecCommandsDue( const client_t *client, int seq ) {
+// Why a message sends the commands not yet acknowledged (see s_commands), for svnetstats' count of the repeats by cause
+// (plan step 14: commands were repeated without loss at short intervals); the first that applies, in this order.
+enum class CommandsDue { kNo, kNotInGame, kLost, kNew, kTimeout, kNewAndTimeout };
+
+// whether this message sends the commands not yet acknowledged, and why; it records them as sent if so
+static CommandsDue SV_NetcodecCommandsDue( const client_t *client, int seq ) {
 	auto &c = s_commands[ClientIndex( client )];
 	const int now = Sys_Milliseconds();
-	const bool due = client->state != CS_ACTIVE || client->netchan.remoteAddress.type == NA_BOT
-		|| client->reliableSequence > c.sent			// a new command
-		|| client->messageAcknowledge >= c.carrier		// the carrier arrived without them: lost
-		|| now - c.time > 2 * client->ping;				// no news of the carrier
-	if ( due ) {
+	const bool notInGame = client->state != CS_ACTIVE || client->netchan.remoteAddress.type == NA_BOT;
+	const bool lost = client->messageAcknowledge >= c.carrier;	// the carrier arrived without them
+	const bool fresh = client->reliableSequence > c.sent;			// a new command
+	const bool timeout = now - c.time > 2 * client->ping;			// no news of the carrier
+	const CommandsDue due = notInGame ? CommandsDue::kNotInGame : lost ? CommandsDue::kLost
+		: fresh && timeout ? CommandsDue::kNewAndTimeout : fresh ? CommandsDue::kNew
+		: timeout ? CommandsDue::kTimeout : CommandsDue::kNo;
+	if ( due != CommandsDue::kNo ) {
 		c.carrier = seq;
 		c.sent = client->reliableSequence;
 		c.time = now;
@@ -242,10 +249,13 @@ static void SV_NetcodecBegin( client_t *client, eng::ServerMessage &sm ) {
 	if ( client->reliableSequence > acknowledged ) {
 		netcodecStats_t &st = client->netcodecStats;
 		const int previous = s_commands[ClientIndex( client )].sent;
-		if ( SV_NetcodecCommandsDue( client, sm.seq ) ) {
+		const CommandsDue due = SV_NetcodecCommandsDue( client, sm.seq );
+		if ( due != CommandsDue::kNo ) {
 			const int alreadySent = previous < client->reliableSequence ? previous : client->reliableSequence;
+			const int repeats = alreadySent > acknowledged ? alreadySent - acknowledged : 0;
 			st.commands += client->reliableSequence - acknowledged;
-			st.repeats += alreadySent > acknowledged ? alreadySent - acknowledged : 0;
+			st.repeats += repeats;
+			st.repeatsBy[static_cast<int>( due ) - 1] += repeats;
 		} else {
 			sm.firstCommand = client->reliableSequence + 1;
 		}
@@ -503,12 +513,14 @@ void SV_NetcodecStats_f( void ) {
 		const int decoded = st.packets - st.packetsNotDecoded - st.packetsLimited;
 		Com_Printf( "%2d %s^7: %d messages, %.1f bytes per message, %d escaped; %d snapshots: %d without a base asked, "
 			"%d with the asked base refused, %d cut to fit, base 1: %d, 2: %d, 3: %d, 4: %d, 5-8: %d, 9+: %d messages back; "
-			"%d commands sent, %d of them repeats; %d client packets, %.1f bytes per packet, %d not decoded, "
+			"ping %d ms; %d commands sent, %d of them repeats (not in the game %d, carrier lost %d, new command %d, "
+			"twice the ping passed %d, both %d); %d client packets, %.1f bytes per packet, %d not decoded, "
 			"%d above the packet rate, %.2f user commands per packet, %d lost (runs of 1: %d, 2: %d, 3: %d, 4+: %d); "
 			"send time against the game clock: mean change %.3f ms, max %.3f ms, %d of %d changes of 1 ms or more\n",
 			i, cl->name, st.messages, st.messages ? st.bytes / st.messages : 0.0, st.escaped, st.snapshots, st.noBase,
 			st.baseRefused, st.cut, st.baseAge[0], st.baseAge[1], st.baseAge[2], st.baseAge[3], st.baseAge[4], st.baseAge[5],
-			st.commands, st.repeats, st.packets, st.packets ? st.packetBytes / st.packets : 0.0, st.packetsNotDecoded,
+			cl->ping, st.commands, st.repeats, st.repeatsBy[0], st.repeatsBy[1], st.repeatsBy[2], st.repeatsBy[3],
+			st.repeatsBy[4], st.packets, st.packets ? st.packetBytes / st.packets : 0.0, st.packetsNotDecoded,
 			st.packetsLimited, decoded ? (double)st.userCmds / decoded : 0.0,
 			st.packetsLost, st.lossRuns[0], st.lossRuns[1], st.lossRuns[2], st.lossRuns[3],
 			st.sendChanges ? st.sendChangeSum / st.sendChanges / 1000.0 : 0.0, st.sendChangeMax / 1000.0,

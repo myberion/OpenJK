@@ -142,6 +142,8 @@ typedef struct {
 	int			cut;			// snapshots too large, sent with only the entities nearest to the player
 	int			commands;		// server commands sent, counting each time one is sent
 	int			repeats;		// of them, commands sent before
+	int			repeatsBy[5];	// the repeats by why the message sent them (CommandsDue in sv_netcodec.cpp): not in the
+								// game or a bot, the carrier lost, a new command, twice the ping passed, both of the last two
 	int			baseAge[6];		// snapshots coded against a base 1, 2, 3, 4, 5 to 8, 9 or more messages back
 	int			packets;		// client packets received
 	double		packetBytes;
