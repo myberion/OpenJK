@@ -116,7 +116,7 @@ Further result (same module, `saber 64 medium idle`, one server per rate): 20 Hz
 - The interpolation redesign of agent 6 goes with part 4.
 - No hit confirmation sound for the attacker (agent 5's remark): not wanted.
 
-**Done on 12 November after the decisions (working tree, after commit `4efd458f0`).**
+**Done on 12 November after the decisions (commit `1376279bd`, after `4efd458f0`).**
 - Movers: `G_RunMover` returns between the 20 Hz instants (`g_mover.c`), so they move, push, crush and think as at `sv_fps` 20; the per-push gates and the tick time are gone from `g_mover.c` (OpenJK's file plus that test), `level.previousTickTime` removed. Free-for-all batch (12 servers per rate): damage -1.3 %, deaths -0.9 %, blocks -2.0 %, within the noise.
 - `PM_irand_timesync` (`bg_saber.c`): seeded with `&pm->cmd.serverTime`, each draw overwrote the command's time, so the movement code after it in the step read a random time (footstep and slope timers, weapon charge times, saber lock and hand extension times, zoom...). It now draws from `pml.randSeed`, set to the command's time at the start of each step (`bg_local.h`, `PmoveSingle`): the same random numbers as before. The scenarios give the same counts before and after (the corrupted reads did not change their outcomes).
 - X1 (`qcommon/common.cpp`, `net_ip.cpp`, `qcommon.h`): `NET_Sleep` takes microseconds; outside Windows a dedicated server sleeps its last millisecond in steps of 100 us instead of the busy loop of `NET_Sleep(0)` (up to a tenth of a core at 100 Hz). `select` still returns at once when a packet arrives. On Windows the busy loop stays (`select` there waits whole timer periods). `com_busyWait 1` keeps the busy wait everywhere.
