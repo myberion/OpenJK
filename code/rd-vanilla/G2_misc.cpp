@@ -740,7 +740,7 @@ static inline qboolean G2_SegmentTriangleTest( const vec3_t start, const vec3_t 
 
 	*denom=DotProduct(ray, returnedNormal);
 
-	if (Q_fabs(*denom)<tiny||        // triangle parallel to ray
+	if (Q_fabsf(*denom)<tiny||        // triangle parallel to ray
 		(!backFaces && *denom>0)||		// not accepting back faces
 		(!frontFaces && *denom<0))		//not accepting front faces
 	{
@@ -1504,7 +1504,7 @@ static void G2_TraceSurfaces(CTraceSurface &TS)
 		if (TS.collRecMap)
 		{
 #endif
-			if (!(Q_fabs(TS.m_fRadius) < 0.1))	// if not a point-trace
+			if (!(Q_fabsf(TS.m_fRadius) < 0.1))	// if not a point-trace
 			{
 				// .. then use radius check
 				//

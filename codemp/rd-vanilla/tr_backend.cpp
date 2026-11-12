@@ -1438,9 +1438,9 @@ const void *RB_RotatePic ( const void *data )
 		int numVerts = tess.numVertexes;
 		int numIndexes = tess.numIndexes;
 
-		float angle = DEG2RAD( cmd-> a );
-		float s = sinf( angle );
-		float c = cosf( angle );
+		float halfTurns = cmd-> a / 180.0f;
+		float s = Q_sinpif( halfTurns );
+		float c = Q_cospif( halfTurns );
 
 		matrix3_t m = {
 			{ c, s, 0.0f },
@@ -1537,9 +1537,9 @@ const void *RB_RotatePic2 ( const void *data )
 			int numVerts = tess.numVertexes;
 			int numIndexes = tess.numIndexes;
 
-			float angle = DEG2RAD( cmd-> a );
-			float s = sinf( angle );
-			float c = cosf( angle );
+			float halfTurns = cmd-> a / 180.0f;
+			float s = Q_sinpif( halfTurns );
+			float c = Q_cospif( halfTurns );
 
 			matrix3_t m = {
 				{ c, s, 0.0f },

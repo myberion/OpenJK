@@ -69,7 +69,7 @@ static qboolean G_ScenarioFindPlace( void ) {
 		vec3_t fwd, start, front, below;
 		trace_t tr;
 
-		VectorSet( fwd, cos( DEG2RAD( spot->s.angles[YAW] ) ), sin( DEG2RAD( spot->s.angles[YAW] ) ), 0 );
+		VectorSet( fwd, Q_cospif( spot->s.angles[YAW] / 180.0f ), Q_sinpif( spot->s.angles[YAW] / 180.0f ), 0 );
 		VectorCopy( spot->s.origin, start );
 		start[2] += 9;
 		VectorMA( start, scn.dist + 32, fwd, front );
@@ -273,7 +273,7 @@ void G_ScenarioFrame( void ) {
 	srand( seed );
 	Rand_Init( seed );
 
-	VectorSet( fwd, cos( DEG2RAD( scn.yaw ) ), sin( DEG2RAD( scn.yaw ) ), 0 );
+	VectorSet( fwd, Q_cospif( scn.yaw / 180.0f ), Q_sinpif( scn.yaw / 180.0f ), 0 );
 	VectorMA( scn.origin, scn.dist, fwd, front );
 	G_ScenarioPlace( &g_entities[scn.client[0]], scn.origin, scn.yaw );
 	G_ScenarioPlace( &g_entities[scn.client[1]], front, AngleNormalize360( scn.yaw + 180 ) );

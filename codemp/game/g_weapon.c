@@ -1643,7 +1643,11 @@ void WP_flechette_alt_blow( gentity_t *ent )
 static void WP_CreateFlechetteBouncyThing( vec3_t start, vec3_t fwd, gentity_t *self )
 //------------------------------------------------------------------------------
 {
-	gentity_t	*missile = CreateMissile( start, fwd, 700 + Q_flrand(0.0f, 1.0f) * 700, 1500 + Q_flrand(0.0f, 1.0f) * 2000, self, qtrue );
+	// the two draws in this order on every compiler: the order in which a call's arguments are evaluated is
+	// unspecified (MSVC and clang differed)
+	const float	speed = 700 + Q_flrand(0.0f, 1.0f) * 700;
+	const float	life = 1500 + Q_flrand(0.0f, 1.0f) * 2000;
+	gentity_t	*missile = CreateMissile( start, fwd, speed, life, self, qtrue );
 
 	missile->think = WP_flechette_alt_blow;
 
@@ -2220,11 +2224,11 @@ qboolean WP_LobFire( gentity_t *self, vec3_t start, vec3_t target, vec3_t mins, 
 			VectorCopy( start, lastPos );
 
 			//This may be kind of wasteful, especially on long throws... use larger steps?  Divide the travelTime into a certain hard number of slices?  Trace just to apex and down?
-			for ( elapsedTime = timeStep; elapsedTime < floor(travelTime)+timeStep; elapsedTime += timeStep )
+			for ( elapsedTime = timeStep; elapsedTime < Q_floor(travelTime)+timeStep; elapsedTime += timeStep )
 			{
 				if ( (float)elapsedTime > travelTime )
 				{//cap it
-					elapsedTime = floor( travelTime );
+					elapsedTime = Q_floor( travelTime );
 				}
 				BG_EvaluateTrajectory( &tr, level.time + elapsedTime, testPos );
 				trap->Trace( &trace, lastPos, mins, maxs, testPos, ignoreEntNum, clipmask, qfalse, 0, 0 );
@@ -2266,7 +2270,7 @@ qboolean WP_LobFire( gentity_t *self, vec3_t start, vec3_t target, vec3_t mins, 
 						break;
 					}
 				}
-				if ( elapsedTime == floor( travelTime ) )
+				if ( elapsedTime == Q_floor( travelTime ) )
 				{//reached end, all clear
 					break;
 				}
@@ -4020,7 +4024,7 @@ void WP_GetVehicleCamPos( gentity_t *ent, gentity_t *pilot, vec3_t camPos )
 	if ( ent->client->ps.hackingTime )
 	{
 		thirdPersonHorzOffset += (((float)ent->client->ps.hackingTime)/MAX_STRAFE_TIME) * -80.0f;
-		thirdPersonRange += fabs(((float)ent->client->ps.hackingTime)/MAX_STRAFE_TIME) * 100.0f;
+		thirdPersonRange += Q_fabs(((float)ent->client->ps.hackingTime)/MAX_STRAFE_TIME) * 100.0f;
 	}
 
 	if ( ent->m_pVehicle->m_pVehicleInfo->cameraPitchDependantVertOffset )

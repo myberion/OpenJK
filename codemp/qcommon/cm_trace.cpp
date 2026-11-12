@@ -105,7 +105,7 @@ float CM_DistanceFromLineSquared(vec3_t p, vec3_t lp1, vec3_t lp2, vec3_t dir) {
 			(proj[j] < lp1[j] && proj[j] < lp2[j]))
 			break;
 	if (j < 3) {
-		if (fabs(proj[j] - lp1[j]) < fabs(proj[j] - lp2[j]))
+		if (Q_fabs(proj[j] - lp1[j]) < Q_fabs(proj[j] - lp2[j]))
 			VectorSubtract(p, lp1, t);
 		else
 			VectorSubtract(p, lp2, t);
@@ -756,7 +756,7 @@ void CM_TraceThroughSphere( traceWork_t *tw, trace_t &trace, vec3_t origin, floa
 
 	d = b * b - 4.0f * c;// * a;
 	if (d > 0) {
-		sqrtd = sqrtf(d);
+		sqrtd = Q_sqrtf(d);
 		// = (- b + sqrtd) * 0.5f; // / (2.0f * a);
 		fraction = (- b - sqrtd) * 0.5f; // / (2.0f * a);
 		//
@@ -854,7 +854,7 @@ void CM_TraceThroughVerticalCylinder( traceWork_t *tw, trace_t &trace, vec3_t or
 
 	d = b * b - 4.0f * c;// * a;
 	if (d > 0) {
-		sqrtd = sqrtf(d);
+		sqrtd = Q_sqrtf(d);
 		// = (- b + sqrtd) * 0.5f;// / (2.0f * a);
 		fraction = (- b - sqrtd) * 0.5f;// / (2.0f * a);
 		//
@@ -1114,9 +1114,9 @@ void CM_TraceThroughTree( traceWork_t *tw, trace_t &trace, clipMap_t *local, int
 			// an axial brush right behind a slanted bsp plane
 			// will poke through when expanded, so adjust
 			// by sqrt(3)
-			offset = fabs(tw->extents[0]*plane->normal[0]) +
-				fabs(tw->extents[1]*plane->normal[1]) +
-				fabs(tw->extents[2]*plane->normal[2]);
+			offset = Q_fabs(tw->extents[0]*plane->normal[0]) +
+				Q_fabs(tw->extents[1]*plane->normal[1]) +
+				Q_fabs(tw->extents[2]*plane->normal[2]);
 
 			offset *= 2;
 			offset = tw->maxOffset;
@@ -1313,11 +1313,11 @@ void CM_Trace( trace_t *trace, const vec3_t start, const vec3_t end,
 	if ( tw.sphere.use ) {
 		for ( i = 0 ; i < 3 ; i++ ) {
 			if ( tw.start[i] < tw.end[i] ) {
-				tw.bounds[0][i] = tw.start[i] - fabs(tw.sphere.offset[i]) - tw.sphere.radius;
-				tw.bounds[1][i] = tw.end[i] + fabs(tw.sphere.offset[i]) + tw.sphere.radius;
+				tw.bounds[0][i] = tw.start[i] - Q_fabs(tw.sphere.offset[i]) - tw.sphere.radius;
+				tw.bounds[1][i] = tw.end[i] + Q_fabs(tw.sphere.offset[i]) + tw.sphere.radius;
 			} else {
-				tw.bounds[0][i] = tw.end[i] - fabs(tw.sphere.offset[i]) - tw.sphere.radius;
-				tw.bounds[1][i] = tw.start[i] + fabs(tw.sphere.offset[i]) + tw.sphere.radius;
+				tw.bounds[0][i] = tw.end[i] - Q_fabs(tw.sphere.offset[i]) - tw.sphere.radius;
+				tw.bounds[1][i] = tw.start[i] + Q_fabs(tw.sphere.offset[i]) + tw.sphere.radius;
 			}
 		}
 	}

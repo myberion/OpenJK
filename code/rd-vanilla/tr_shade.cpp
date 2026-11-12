@@ -1185,7 +1185,7 @@ static void ProjectDlightTexture( void ) {
 				clip |= 32;
 				modulate = 0.0f;
 			} else {
-				dist[bestIndex] = Q_fabs(dist[bestIndex]);
+				dist[bestIndex] = Q_fabsf(dist[bestIndex]);
 				if ( dist[bestIndex] < radius * 0.5f ) {
 					modulate = 1.0f;
 				} else {

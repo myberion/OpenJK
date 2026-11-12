@@ -1108,7 +1108,7 @@ static void FillInNormalizedZ(const byte *in, byte *out, int width, int height)
 			fny = OffsetByteToFloat(ny);
 			fll = 1.0f - fnx * fnx - fny * fny;
 			if (fll >= 0.0f)
-				fnz = (float)sqrt(fll);
+				fnz = (float)Q_sqrt(fll);
 			else
 				fnz = 0.0f;
 
@@ -1911,7 +1911,7 @@ static GLenum RawImage_GetFormat(const byte *data, int numPixels, qboolean light
 
 static int CalcNumMipmapLevels ( int width, int height )
 {
-	return static_cast<int>(ceil (log2 (Q_max (width, height))) + 1);
+	return static_cast<int>(Q_ceil (Q_log2 (Q_max (width, height))) + 1);
 }
 
 static qboolean IsBPTCTextureFormat( GLenum internalformat )
@@ -3090,7 +3090,7 @@ void R_InitFogTable( void ) {
 	exp = 0.5;
 
 	for ( i = 0 ; i < FOG_TABLE_SIZE ; i++ ) {
-		d = pow ( (float)i/(FOG_TABLE_SIZE-1), exp );
+		d = Q_pow ( (float)i/(FOG_TABLE_SIZE-1), exp );
 
 		tr.fogTable[i] = d;
 	}
@@ -3192,7 +3192,7 @@ static void R_CreateEnvBrdfLUT(void) {
 	for (unsigned y = 0; y < LUT_HEIGHT; ++y)
 	{
 		float const NdotV = (y + 0.5f) / LUT_HEIGHT;
-		float const vx = sqrtf(1.0f - NdotV * NdotV);
+		float const vx = Q_sqrtf(1.0f - NdotV * NdotV);
 		float const vy = 0.0f;
 		float const vz = NdotV;
 
@@ -3214,11 +3214,11 @@ static void R_CreateEnvBrdfLUT(void) {
 
 				// GGX Distribution
 				{
-					float const cosTheta = sqrtf((1.0f - e2) / (1.0f + (m2 - 1.0f) * e2));
-					float const sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
+					float const cosTheta = Q_sqrtf((1.0f - e2) / (1.0f + (m2 - 1.0f) * e2));
+					float const sinTheta = Q_sqrtf(1.0f - cosTheta * cosTheta);
 
-					float const hx = sinTheta * cosf(phi);
-					float const hy = sinTheta * sinf(phi);
+					float const hx = sinTheta * Q_cosf(phi);
+					float const hy = sinTheta * Q_sinf(phi);
 					float const hz = cosTheta;
 
 					float const vdh = vx * hx + vy * hy + vz * hz;
@@ -3232,7 +3232,7 @@ static void R_CreateEnvBrdfLUT(void) {
 					{
 						float const visibility = GSmithCorrelated(roughness, NdotV, NdotL);
 						float const NdotLVisPDF = NdotL * visibility * (4.0f * VdotH / NdotH);
-						float const fresnel = powf(1.0f - VdotH, 5.0f);
+						float const fresnel = Q_powf(1.0f - VdotH, 5.0f);
 
 						scale += NdotLVisPDF * (1.0f - fresnel);
 						bias += NdotLVisPDF * fresnel;
@@ -3241,11 +3241,11 @@ static void R_CreateEnvBrdfLUT(void) {
 
 				// Charlie Distribution
 				{
-					float const sinTheta = sqrtf(powf(e2, (2.0f * roughness) / ((2.0f * roughness) + 1.0f)));
-					float const cosTheta = sqrtf(1.0f - sinTheta * sinTheta);
+					float const sinTheta = Q_sqrtf(Q_powf(e2, (2.0f * roughness) / ((2.0f * roughness) + 1.0f)));
+					float const cosTheta = Q_sqrtf(1.0f - sinTheta * sinTheta);
 
-					float const hx = sinTheta * cosf(phi);
-					float const hy = sinTheta * sinf(phi);
+					float const hx = sinTheta * Q_cosf(phi);
+					float const hy = sinTheta * Q_sinf(phi);
 					float const hz = cosTheta;
 
 					float const vdh = vx * hx + vy * hy + vz * hz;
@@ -3578,7 +3578,7 @@ void R_SetColorMappings( void ) {
 		if ( g == 1 ) {
 			inf = i;
 		} else {
-			inf = 255 * pow ( i/255.0f, 1.0f / g ) + 0.5f;
+			inf = 255 * Q_pow ( i/255.0f, 1.0f / g ) + 0.5f;
 		}
 		inf <<= tr.overbrightBits;
 		if (inf < 0) {

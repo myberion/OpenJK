@@ -256,7 +256,7 @@ static void CG_DrawZoomMask( void )
 
 		CG_DrawPic( 212, 367, 200, 28, cgs.media.binocularOverlay );
 
-		color1[0] = sin( cg.time * 0.01f ) * 0.5f + 0.5f;
+		color1[0] = Q_sin( cg.time * 0.01f ) * 0.5f + 0.5f;
 		color1[0] = color1[0] * color1[0];
 		color1[1] = color1[0];
 		color1[2] = color1[0];
@@ -321,7 +321,7 @@ static void CG_DrawZoomMask( void )
 			color1[0] = 1.0f;
 			color1[1] = 1.0f;
 			color1[2] = 1.0f;
-			color1[3] = 0.7f + sin( cg.time * 0.01f ) * 0.3f;
+			color1[3] = 0.7f + Q_sin( cg.time * 0.01f ) * 0.3f;
 
 			trap->R_SetColor( color1 );
 		}
@@ -396,8 +396,8 @@ static void CG_DrawZoomMask( void )
 
 		for (fi = 18.5f; fi <= 18.5f + max; fi+= 3 ) // going from 15 to 45 degrees, with 5 degree increments
 		{
-			cx = 320 + sin( (fi+90.0f)/57.296f ) * 190;
-			cy = 240 + cos( (fi+90.0f)/57.296f ) * 190;
+			cx = 320 + Q_sinpif( (fi+90.0f) / 180.0f ) * 190;
+			cy = 240 + Q_cospif( (fi+90.0f) / 180.0f ) * 190;
 
 			CG_DrawRotatePic2( cx, cy, 12, 24, 90 - fi, cgs.media.disruptorInsertTick );
 		}
@@ -529,7 +529,7 @@ void CG_DrawFlagModel( float x, float y, float w, float h, int team, qboolean fo
 		len = 0.5 * ( maxs[2] - mins[2] );
 		origin[0] = len / 0.268;	// len / tan( fov/2 )
 
-		angles[YAW] = 60 * sin( cg.time / 2000.0 );;
+		angles[YAW] = 60 * Q_sin( cg.time / 2000.0 );;
 
 		if( team == TEAM_RED ) {
 			handle = cgs.media.redFlagModel;
@@ -2061,7 +2061,7 @@ void CG_DrawVehicleAmmo( const menuDef_t *menuHUD, const centity_t *veh )
 			&& cg_vehicleAmmoWarning == 0 )
 		{
 			memcpy(calcColor, g_color_table[ColorIndex(COLOR_RED)], sizeof(vec4_t));
-			calcColor[3] = sin(cg.time*0.005)*0.5f+0.5f;
+			calcColor[3] = Q_sin(cg.time*0.005)*0.5f+0.5f;
 		}
 		else
 		{
@@ -2132,7 +2132,7 @@ void CG_DrawVehicleAmmoUpper( const menuDef_t *menuHUD, const centity_t *veh )
 			&& cg_vehicleAmmoWarning == 0 )
 		{
 			memcpy(calcColor, g_color_table[ColorIndex(COLOR_RED)], sizeof(vec4_t));
-			calcColor[3] = sin(cg.time*0.005)*0.5f+0.5f;
+			calcColor[3] = Q_sin(cg.time*0.005)*0.5f+0.5f;
 		}
 		else
 		{
@@ -2204,7 +2204,7 @@ void CG_DrawVehicleAmmoLower( const menuDef_t *menuHUD, const centity_t *veh )
 			&& cg_vehicleAmmoWarning == 1 )
 		{
 			memcpy(calcColor, g_color_table[ColorIndex(COLOR_RED)], sizeof(vec4_t));
-			calcColor[3] = sin(cg.time*0.005)*0.5f+0.5f;
+			calcColor[3] = Q_sin(cg.time*0.005)*0.5f+0.5f;
 		}
 		else
 		{
@@ -3324,9 +3324,9 @@ float CG_DrawRadar ( float y )
 		AngleVectors ( cg.predictedPlayerState.viewangles, dirLook, NULL, NULL );
 
 		dirLook[2] = 0;
-		anglePlayer = atan2(dirPlayer[0],dirPlayer[1]);
+		anglePlayer = Q_atan2(dirPlayer[0],dirPlayer[1]);
 		VectorNormalize ( dirLook );
-		angleLook = atan2(dirLook[0],dirLook[1]);
+		angleLook = Q_atan2(dirLook[0],dirLook[1]);
 		angle = angleLook - anglePlayer;
 
 		switch ( cent->currentState.eType )
@@ -3338,8 +3338,8 @@ float CG_DrawRadar ( float y )
 					qhandle_t shader;
 					vec4_t    color;
 
-					x = (float)RADAR_X + (float)RADAR_RADIUS + (float)sin (angle) * distance;
-					ly = y + (float)RADAR_RADIUS + (float)cos (angle) * distance;
+					x = (float)RADAR_X + (float)RADAR_RADIUS + (float)Q_sin (angle) * distance;
+					ly = y + (float)RADAR_RADIUS + (float)Q_cos (angle) * distance;
 
 					arrowBaseScale = 9.0f;
 					shader = 0;
@@ -3458,8 +3458,8 @@ float CG_DrawRadar ( float y )
 						float  x;
 						float  ly;
 
-						x = (float)RADAR_X + (float)RADAR_RADIUS + (float)sin (angle) * distance;
-						ly = y + (float)RADAR_RADIUS + (float)cos (angle) * distance;
+						x = (float)RADAR_X + (float)RADAR_RADIUS + (float)Q_sin (angle) * distance;
+						ly = y + (float)RADAR_RADIUS + (float)Q_cos (angle) * distance;
 
 						arrowBaseScale = 9.0f;
 						zScale = 1.0f;
@@ -3560,8 +3560,8 @@ float CG_DrawRadar ( float y )
 						}
 						distance = (actualDist/RADAR_ASTEROID_RANGE)*RADAR_RADIUS;
 
-						x = (float)RADAR_X + (float)RADAR_RADIUS + (float)sin (angle) * distance;
-						ly = y + (float)RADAR_RADIUS + (float)cos (angle) * distance;
+						x = (float)RADAR_X + (float)RADAR_RADIUS + (float)Q_sin (angle) * distance;
+						ly = y + (float)RADAR_RADIUS + (float)Q_cos (angle) * distance;
 
 						if ( asteroidScale > 3.0f )
 						{
@@ -3623,8 +3623,8 @@ float CG_DrawRadar ( float y )
 					float  x;
 					float  ly;
 
-					x = (float)RADAR_X + (float)RADAR_RADIUS + (float)sin (angle) * distance;
-					ly = y + (float)RADAR_RADIUS + (float)cos (angle) * distance;
+					x = (float)RADAR_X + (float)RADAR_RADIUS + (float)Q_sin (angle) * distance;
+					ly = y + (float)RADAR_RADIUS + (float)Q_cos (angle) * distance;
 
 					arrowBaseScale = 3.0f;
 					if ( cg.predictedPlayerState.m_iVehicleNum )
@@ -3776,8 +3776,8 @@ float CG_DrawRadar ( float y )
 				arrow_w = arrowBaseScale * RADAR_RADIUS / 128;
 				arrow_h = arrowBaseScale * RADAR_RADIUS / 128;
 
-				CG_DrawRotatePic2( RADAR_X + RADAR_RADIUS + sin (angle) * distance + xOffset,
-								   y + RADAR_RADIUS + cos (angle) * distance,
+				CG_DrawRotatePic2( RADAR_X + RADAR_RADIUS + Q_sin (angle) * distance + xOffset,
+								   y + RADAR_RADIUS + Q_cos (angle) * distance,
 								   arrow_w, arrow_h,
 								   (360 - cent->lerpAngles[YAW]) + cg.predictedPlayerState.viewangles[YAW], cgs.media.mAutomapPlayerIcon );
 				break;
@@ -4867,7 +4867,7 @@ void CG_LerpCrosshairPos( float *x, float *y )
 	{//blend from old pos
 		float maxMove = 30.0f * ((float)cg.frametime/500.0f) * 640.0f/480.0f;
 		float xDiff = (*x - cg_crosshairPrevPosX);
-		if ( fabs(xDiff) > CRAZY_CROSSHAIR_MAX_ERROR_X )
+		if ( Q_fabs(xDiff) > CRAZY_CROSSHAIR_MAX_ERROR_X )
 		{
 			maxMove = CRAZY_CROSSHAIR_MAX_ERROR_X;
 		}
@@ -4886,7 +4886,7 @@ void CG_LerpCrosshairPos( float *x, float *y )
 	{//blend from old pos
 		float maxMove = 30.0f * ((float)cg.frametime/500.0f);
 		float yDiff = (*y - cg_crosshairPrevPosY);
-		if ( fabs(yDiff) > CRAZY_CROSSHAIR_MAX_ERROR_Y )
+		if ( Q_fabs(yDiff) > CRAZY_CROSSHAIR_MAX_ERROR_Y )
 		{
 			maxMove = CRAZY_CROSSHAIR_MAX_ERROR_X;
 		}
@@ -5275,7 +5275,7 @@ static void CG_DrawCrosshair( vec3_t worldPoint, int chEntValid ) {
 	if ( corona ) // drawing extra bits
 	{
 		ecolor[3] = 0.5f;
-		ecolor[0] = ecolor[1] = ecolor[2] = (1 - ecolor[3]) * ( sin( cg.time * 0.001f ) * 0.08f + 0.35f ); // don't draw full color
+		ecolor[0] = ecolor[1] = ecolor[2] = (1 - ecolor[3]) * ( Q_sin( cg.time * 0.001f ) * 0.08f + 0.35f ); // don't draw full color
 		ecolor[3] = 1.0f;
 
 		trap->R_SetColor( ecolor );
@@ -5298,8 +5298,8 @@ qboolean CG_WorldCoordToScreenCoordFloat(vec3_t worldCoord, float *x, float *y)
     float px, py;
     float z;
 
-    px = tan(cg.refdef.fov_x * (M_PI / 360) );
-    py = tan(cg.refdef.fov_y * (M_PI / 360) );
+    px = Q_tanpif( cg.refdef.fov_x / 360.0f );
+    py = Q_tanpif( cg.refdef.fov_y / 360.0f );
 
     VectorSubtract(worldCoord, cg.refdef.vieworg, trans);
 
@@ -5957,7 +5957,7 @@ static void CG_DrawRocketLocking( int lockEntNum, int lockTime )
 		// we are locked and loaded baby
 		if ( dif == 8 )
 		{
-			color[0] = color[1] = color[2] = sin( cg.time * 0.05f ) * 0.5f + 0.5f;
+			color[0] = color[1] = color[2] = Q_sin( cg.time * 0.05f ) * 0.5f + 0.5f;
 			color[3] = 1.0f; // this art is additive, so the alpha value does nothing
 
 			trap->R_SetColor( color );
@@ -7914,7 +7914,7 @@ static void CG_Draw2DScreenTints( void )
 	if ( (cg.refdef.viewContents&CONTENTS_LAVA) )
 	{//tint screen red
 		float phase = cg.time / 1000.0 * WAVE_FREQUENCY * M_PI * 2;
-		hcolor[3] = 0.5 + (0.15f*sin( phase ));
+		hcolor[3] = 0.5 + (0.15f*Q_sin( phase ));
 		hcolor[0] = 0.7f;
 		hcolor[1] = 0;
 		hcolor[2] = 0;
@@ -7924,7 +7924,7 @@ static void CG_Draw2DScreenTints( void )
 	else if ( (cg.refdef.viewContents&CONTENTS_SLIME) )
 	{//tint screen green
 		float phase = cg.time / 1000.0 * WAVE_FREQUENCY * M_PI * 2;
-		hcolor[3] = 0.4 + (0.1f*sin( phase ));
+		hcolor[3] = 0.4 + (0.1f*Q_sin( phase ));
 		hcolor[0] = 0;
 		hcolor[1] = 0.7f;
 		hcolor[2] = 0;
@@ -7934,7 +7934,7 @@ static void CG_Draw2DScreenTints( void )
 	else if ( (cg.refdef.viewContents&CONTENTS_WATER) )
 	{//tint screen light blue -- FIXME: don't do this if CONTENTS_FOG? (in case someone *does* make a water shader with fog in it?)
 		float phase = cg.time / 1000.0f * WAVE_FREQUENCY * M_PI * 2;
-		hcolor[3] = 0.3f + (0.05f*sinf( phase ));
+		hcolor[3] = 0.3f + (0.05f*Q_sinf( phase ));
 		hcolor[0] = 0;
 		hcolor[1] = 0.2f;
 		hcolor[2] = 0.8f;

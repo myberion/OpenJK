@@ -1100,7 +1100,7 @@ void AimAtTarget( gentity_t *self ) {
 
 	height = ent->s.origin[2] - origin[2];
 	gravity = g_gravity.value;
-	time = sqrt( height / ( .5 * gravity ) );
+	time = Q_sqrt( height / ( .5 * gravity ) );
 	if ( !time ) {
 		G_FreeEntity( self );
 		return;
@@ -1944,7 +1944,7 @@ void asteroid_field_think(gentity_t *self)
 
 				G_SetOrigin( newAsteroid, startSpot );
 				dist = Distance( endSpot, startSpot );
-				time = ceil(dist/speed)*1000;
+				time = Q_ceil(dist/speed)*1000;
 				Q3_Lerp2Origin( -1, newAsteroid->s.number, endSpot, time );
 
 				//spin it

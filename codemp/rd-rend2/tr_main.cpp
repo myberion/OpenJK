@@ -57,7 +57,7 @@ qboolean R_CompareVert(srfVert_t * v1, srfVert_t * v2, qboolean checkST)
 
 	for (i = 0; i < 3; i++)
 	{
-		if (floor(v1->xyz[i] + 0.1) != floor(v2->xyz[i] + 0.1))
+		if (Q_floor(v1->xyz[i] + 0.1) != Q_floor(v2->xyz[i] + 0.1))
 		{
 			return qfalse;
 		}
@@ -150,7 +150,7 @@ void R_CalcTangentSpace(vec3_t tangent, vec3_t bitangent, vec3_t normal,
 	VectorSet(v, v2[0] - v0[0], t2[0] - t0[0], t2[1] - t0[1]);
 
 	CrossProduct(u, v, cp);
-	if(fabs(cp[0]) > 10e-6)
+	if(Q_fabs(cp[0]) > 10e-6)
 	{
 		tangent[0] = -cp[1] / cp[0];
 		bitangent[0] = -cp[2] / cp[0];
@@ -160,7 +160,7 @@ void R_CalcTangentSpace(vec3_t tangent, vec3_t bitangent, vec3_t normal,
 	v[0] = v2[1] - v0[1];
 
 	CrossProduct(u, v, cp);
-	if(fabs(cp[0]) > 10e-6)
+	if(Q_fabs(cp[0]) > 10e-6)
 	{
 		tangent[1] = -cp[1] / cp[0];
 		bitangent[1] = -cp[2] / cp[0];
@@ -170,7 +170,7 @@ void R_CalcTangentSpace(vec3_t tangent, vec3_t bitangent, vec3_t normal,
 	v[0] = v2[2] - v0[2];
 
 	CrossProduct(u, v, cp);
-	if(fabs(cp[0]) > 10e-6)
+	if(Q_fabs(cp[0]) > 10e-6)
 	{
 		tangent[2] = -cp[1] / cp[0];
 		bitangent[2] = -cp[2] / cp[0];
@@ -233,7 +233,7 @@ void R_CalcTangentSpaceFast(vec3_t tangent, vec3_t bitangent, vec3_t normal,
 	VectorSet(v, v2[0] - v0[0], t2[0] - t0[0], t2[1] - t0[1]);
 
 	CrossProduct(u, v, cp);
-	if(fabs(cp[0]) > 10e-6)
+	if(Q_fabs(cp[0]) > 10e-6)
 	{
 		tangent[0] = -cp[1] / cp[0];
 		bitangent[0] = -cp[2] / cp[0];
@@ -243,7 +243,7 @@ void R_CalcTangentSpaceFast(vec3_t tangent, vec3_t bitangent, vec3_t normal,
 	v[0] = v2[1] - v0[1];
 
 	CrossProduct(u, v, cp);
-	if(fabs(cp[0]) > 10e-6)
+	if(Q_fabs(cp[0]) > 10e-6)
 	{
 		tangent[1] = -cp[1] / cp[0];
 		bitangent[1] = -cp[2] / cp[0];
@@ -253,7 +253,7 @@ void R_CalcTangentSpaceFast(vec3_t tangent, vec3_t bitangent, vec3_t normal,
 	v[0] = v2[2] - v0[2];
 
 	CrossProduct(u, v, cp);
-	if(fabs(cp[0]) > 10e-6)
+	if(Q_fabs(cp[0]) > 10e-6)
 	{
 		tangent[2] = -cp[1] / cp[0];
 		bitangent[2] = -cp[2] / cp[0];
@@ -349,7 +349,7 @@ qboolean R_CalcTangentVectors(srfVert_t * dv[3])
 
 	/* calculate barycentric basis for the triangle */
 	bb = (dv[1]->st[0] - dv[0]->st[0]) * (dv[2]->st[1] - dv[0]->st[1]) - (dv[2]->st[0] - dv[0]->st[0]) * (dv[1]->st[1] - dv[0]->st[1]);
-	if(fabs(bb) < 0.00000001f)
+	if(Q_fabs(bb) < 0.00000001f)
 		return qfalse;
 
 	/* do each vertex */
@@ -875,7 +875,7 @@ static void R_SetFarClip( viewParms_t *viewParms, const trRefdef_t *refdef )
 	// Bring in the zFar to the distanceCull distance
 	// The sky renders at zFar so need to move it out a little
 	// ...and make sure there is a minimum zfar to prevent problems
-	viewParms->zFar = Com_Clamp(2048.0f, tr.distanceCull * (1.732), sqrtf( farthestCornerDistance ));
+	viewParms->zFar = Com_Clamp(2048.0f, tr.distanceCull * (1.732), Q_sqrtf( farthestCornerDistance ));
 }
 
 /*
@@ -897,7 +897,7 @@ void R_SetupFrustum (viewParms_t *dest, float xmin, float xmax, float ymax, floa
 		// symmetric case can be simplified
 		VectorCopy(dest->ori.origin, ofsorigin);
 
-		length = sqrt(xmax * xmax + zProj * zProj);
+		length = Q_sqrt(xmax * xmax + zProj * zProj);
 		oppleg = xmax / length;
 		adjleg = zProj / length;
 
@@ -914,17 +914,17 @@ void R_SetupFrustum (viewParms_t *dest, float xmin, float xmax, float ymax, floa
 		VectorMA(dest->ori.origin, stereoSep, dest->ori.axis[1], ofsorigin);
 
 		oppleg = xmax + stereoSep;
-		length = sqrt(oppleg * oppleg + zProj * zProj);
+		length = Q_sqrt(oppleg * oppleg + zProj * zProj);
 		VectorScale(dest->ori.axis[0], oppleg / length, dest->frustum[0].normal);
 		VectorMA(dest->frustum[0].normal, zProj / length, dest->ori.axis[1], dest->frustum[0].normal);
 
 		oppleg = xmin + stereoSep;
-		length = sqrt(oppleg * oppleg + zProj * zProj);
+		length = Q_sqrt(oppleg * oppleg + zProj * zProj);
 		VectorScale(dest->ori.axis[0], -oppleg / length, dest->frustum[1].normal);
 		VectorMA(dest->frustum[1].normal, -zProj / length, dest->ori.axis[1], dest->frustum[1].normal);
 	}
 
-	length = sqrt(ymax * ymax + zProj * zProj);
+	length = Q_sqrt(ymax * ymax + zProj * zProj);
 	oppleg = ymax / length;
 	adjleg = zProj / length;
 
@@ -979,10 +979,10 @@ void R_SetupProjection(viewParms_t *dest, float zProj, float zFar, qboolean comp
 			stereoSep = 0;
 	}
 
-	ymax = zProj * tan(dest->fovY * M_PI / 360.0f);
+	ymax = zProj * Q_tanpif( dest->fovY / 360.0f );
 	ymin = -ymax;
 
-	xmax = zProj * tan(dest->fovX * M_PI / 360.0f);
+	xmax = zProj * Q_tanpif( dest->fovX / 360.0f );
 	xmin = -xmax;
 
 	width = xmax - xmin;
@@ -1310,7 +1310,7 @@ qboolean R_GetPortalOrientations(const msurface_t *surf, int entityNum,
 				CrossProduct( camera->axis[0], camera->axis[1], camera->axis[2] );
 			} else {
 				// bobbing rotate, with skinNum being the rotation offset
-				d = sin( tr.refdef.time * 0.003f );
+				d = Q_sin( tr.refdef.time * 0.003f );
 				d = e->e.skinNum + d * 4;
 				VectorCopy( camera->axis[1], transformed );
 				RotatePointAroundVector( camera->axis[1], camera->axis[0], transformed, d );
@@ -2386,7 +2386,7 @@ void R_SetupPshadowMaps(trRefdef_t *refdef)
 		VectorScale(lightDir, -1.0f, shadow->lightViewAxis[0]);
 		VectorSet(up, 0, 0, -1);
 
-		if ( fabs(DotProduct(up, shadow->lightViewAxis[0])) > 0.9f )
+		if ( Q_fabs(DotProduct(up, shadow->lightViewAxis[0])) > 0.9f )
 		{
 			VectorSet(up, -1, 0, 0);
 		}
@@ -2632,7 +2632,7 @@ qboolean R_AddPortalView(const trRefdef_t *refdef)
 
 static float CalcSplit(float n, float f, float i, float m)
 {
-	return (n * pow(f / n, i / m) + (f - n) * i / m) / 2.0f;
+	return (n * Q_pow(f / n, i / m) + (f - n) * i / m) / 2.0f;
 }
 
 void R_GatherFrameViews(trRefdef_t *refdef)
@@ -2899,7 +2899,7 @@ void R_GatherFrameViews(trRefdef_t *refdef)
 				VectorSet(lightViewAxis[2], 0, 0, 1);
 
 				// Check if too close to parallel to light direction
-				if (fabs(DotProduct(lightViewAxis[2], lightViewAxis[0])) > 0.9f)
+				if (Q_fabs(DotProduct(lightViewAxis[2], lightViewAxis[0])) > 0.9f)
 				{
 					// Use world left as light view up
 					VectorSet(lightViewAxis[2], 0, 1, 0);
@@ -2921,8 +2921,8 @@ void R_GatherFrameViews(trRefdef_t *refdef)
 					VectorSet(splitCenter, 0.f, 0.f, 0.f);
 
 					// add view near plane
-					lx = splitZNear * tan(refdef->fov_x * M_PI / 360.0f);
-					ly = splitZNear * tan(refdef->fov_y * M_PI / 360.0f);
+					lx = splitZNear * Q_tanpif( refdef->fov_x / 360.0f );
+					ly = splitZNear * Q_tanpif( refdef->fov_y / 360.0f );
 					VectorMA(refdef->vieworg, splitZNear, refdef->viewaxis[0], base);
 
 					VectorMA(base, lx, refdef->viewaxis[1], point);
@@ -2943,8 +2943,8 @@ void R_GatherFrameViews(trRefdef_t *refdef)
 					VectorAdd(point, splitCenter, splitCenter);
 
 					// add view far plane
-					lx = splitZFar * tan(refdef->fov_x * M_PI / 360.0f);
-					ly = splitZFar * tan(refdef->fov_y * M_PI / 360.0f);
+					lx = splitZFar * Q_tanpif( refdef->fov_x / 360.0f );
+					ly = splitZFar * Q_tanpif( refdef->fov_y / 360.0f );
 					VectorMA(refdef->vieworg, splitZFar, refdef->viewaxis[0], base);
 
 					VectorMA(base, lx, refdef->viewaxis[1], point);
@@ -2992,9 +2992,9 @@ void R_GatherFrameViews(trRefdef_t *refdef)
 				static float worldUnitsPerTexel = 2.0f * lightviewBounds[1][0] / (float)tr.sunShadowFbo[level]->width;
 				static float invWorldUnitsPerTexel = tr.sunShadowFbo[level]->width / (2.0f * lightviewBounds[1][0]);
 
-				tr.viewParms.world.modelViewMatrix[12] = floorf(tr.viewParms.world.modelViewMatrix[12] * invWorldUnitsPerTexel);
-				tr.viewParms.world.modelViewMatrix[13] = floorf(tr.viewParms.world.modelViewMatrix[13] * invWorldUnitsPerTexel);
-				tr.viewParms.world.modelViewMatrix[14] = floorf(tr.viewParms.world.modelViewMatrix[14] * invWorldUnitsPerTexel);
+				tr.viewParms.world.modelViewMatrix[12] = Q_floorf(tr.viewParms.world.modelViewMatrix[12] * invWorldUnitsPerTexel);
+				tr.viewParms.world.modelViewMatrix[13] = Q_floorf(tr.viewParms.world.modelViewMatrix[13] * invWorldUnitsPerTexel);
+				tr.viewParms.world.modelViewMatrix[14] = Q_floorf(tr.viewParms.world.modelViewMatrix[14] * invWorldUnitsPerTexel);
 
 				tr.viewParms.world.modelViewMatrix[12] *= worldUnitsPerTexel;
 				tr.viewParms.world.modelViewMatrix[13] *= worldUnitsPerTexel;

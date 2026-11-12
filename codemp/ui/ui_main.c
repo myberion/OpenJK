@@ -405,18 +405,18 @@ int UI_ParseAnimationFile(const char *filename, animation_t *animset, qboolean i
 		{
 			break;
 		}
-		fps = atof( token );
+		fps = Q_atof( token );
 		if ( fps == 0 )
 		{
 			fps = 1;//Don't allow divide by zero error
 		}
 		if ( fps < 0 )
 		{//backwards
-			animset[animNum].frameLerp = floor(1000.0f / fps);
+			animset[animNum].frameLerp = Q_floor(1000.0f / fps);
 		}
 		else
 		{
-			animset[animNum].frameLerp = ceil(1000.0f / fps);
+			animset[animNum].frameLerp = Q_ceil(1000.0f / fps);
 		}
 
 //		animset[animNum].initialLerp = ceil(1000.0f / fabs(fps));
@@ -2854,7 +2854,7 @@ static void UI_DrawServerRefreshDate(rectDef_t *rect, float scale, vec4_t color,
 		lowLight[1] = 0.8 * color[1];
 		lowLight[2] = 0.8 * color[2];
 		lowLight[3] = 0.8 * color[3];
-		LerpColor(color,lowLight,newColor,0.5+0.5*sin((float)(uiInfo.uiDC.realTime / PULSE_DIVISOR)));
+		LerpColor(color,lowLight,newColor,0.5+0.5*Q_sin((float)(uiInfo.uiDC.realTime / PULSE_DIVISOR)));
 
 		trap->SE_GetStringTextString("MP_INGAME_GETTINGINFOFORSERVERS", holdSPString, sizeof(holdSPString));
 		Text_Paint(rect->x, rect->y, scale, newColor, va((char *) holdSPString, trap->LAN_GetServerCount(UI_SourceForLAN())), 0, 0, textStyle, iMenuFont);
@@ -5087,16 +5087,16 @@ void UI_SetSiegeObjectiveGraphicPos(menuDef_t *menu,const char *itemName,const c
 		holdBuf = cvarBuf;
 		if (String_Parse(&holdBuf,&holdVal))
 		{
-			item->window.rectClient.x = atof(holdVal);
+			item->window.rectClient.x = Q_atof(holdVal);
 			if (String_Parse(&holdBuf,&holdVal))
 			{
-				item->window.rectClient.y = atof(holdVal);
+				item->window.rectClient.y = Q_atof(holdVal);
 				if (String_Parse(&holdBuf,&holdVal))
 				{
-					item->window.rectClient.w = atof(holdVal);
+					item->window.rectClient.w = Q_atof(holdVal);
 					if (String_Parse(&holdBuf,&holdVal))
 					{
-						item->window.rectClient.h = atof(holdVal);
+						item->window.rectClient.h = Q_atof(holdVal);
 
 						item->window.rect.x = item->window.rectClient.x;
 						item->window.rect.y = item->window.rectClient.y;

@@ -209,7 +209,7 @@ static void table_init()
 
 	/*--  scale factor table, scale by 32768 for 16 pcm output  --*/
 	   for (i = 0; i < 64; i++)
-		  sf_table[i] = (float) (32768.0 * 2.0 * pow(2.0, -i / 3.0));
+		  sf_table[i] = (float) (32768.0 * 2.0 * Q_pow(2.0, -i / 3.0));
 
 	/*--  grouped 3 level lookup table 5 bit token --*/
 	   for (i = 0; i < 32; i++)

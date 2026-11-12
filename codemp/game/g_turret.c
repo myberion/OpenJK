@@ -328,7 +328,7 @@ static void turret_aim( gentity_t *self )
 	else
 	{//FIXME: Pan back and forth in original facing
 		// no enemy, so make us slowly sweep back and forth as if searching for a new one
-		desiredAngles[YAW] = sin( level.time * 0.0001f + top->count );
+		desiredAngles[YAW] = Q_sin( level.time * 0.0001f + top->count );
 		desiredAngles[YAW] *=  60.0f;
 		desiredAngles[YAW] += self->s.angles[YAW];
 		desiredAngles[YAW] = AngleNormalize180( desiredAngles[YAW] );
@@ -340,14 +340,14 @@ static void turret_aim( gentity_t *self )
 	if ( diffYaw )
 	{
 		// cap max speed....
-		if ( fabs(diffYaw) > turnSpeed )
+		if ( Q_fabs(diffYaw) > turnSpeed )
 		{
 			diffYaw = ( diffYaw >= 0 ? turnSpeed : -turnSpeed );
 		}
 	}
 	if ( diffPitch )
 	{
-		if ( fabs(diffPitch) > turnSpeed )
+		if ( Q_fabs(diffPitch) > turnSpeed )
 		{
 			// cap max speed
 			diffPitch = (diffPitch > 0.0f ? turnSpeed : -turnSpeed );

@@ -189,7 +189,7 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		set_target_properties(${ProjectName} PROPERTIES INCLUDE_DIRECTORIES "${SPRDVanillaRendererIncludeDirectories}")
 		set_target_properties(${ProjectName} PROPERTIES PROJECT_LABEL ${Label})
 
-		target_link_libraries(${ProjectName} ${SPRDVanillaRendererLibraries})
+		target_link_libraries(${ProjectName} ${SPRDVanillaRendererLibraries} qlibm)
 	endfunction(add_sp_renderer_project)
 
 	if(BuildSPRdVanilla)

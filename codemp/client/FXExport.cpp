@@ -45,7 +45,7 @@ void FX_PlayEffect( const char *file, vec3_t org, vec3_t fwd, int vol, int rad )
 	{
 		assert(0);
 	}
-	if (fabs(fwd[0]) < 0.1 && fabs(fwd[1]) < 0.1 && fabs(fwd[2]) < 0.1)
+	if (Q_fabs(fwd[0]) < 0.1 && Q_fabs(fwd[1]) < 0.1 && Q_fabs(fwd[2]) < 0.1)
 	{
 		assert(0);
 	}
@@ -65,7 +65,7 @@ void FX_PlayEffectID( int id, vec3_t org, vec3_t fwd, int vol, int rad, qboolean
 	{
 		assert(0);
 	}
-	if (fabs(fwd[0]) < 0.1 && fabs(fwd[1]) < 0.1 && fabs(fwd[2]) < 0.1)
+	if (Q_fabs(fwd[0]) < 0.1 && Q_fabs(fwd[1]) < 0.1 && Q_fabs(fwd[2]) < 0.1)
 	{
 		assert(0);
 	}

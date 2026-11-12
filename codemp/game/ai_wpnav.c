@@ -2141,7 +2141,7 @@ int LoadPathData(const char *filename)
 		}
 		currentVar[i_cv] = '\0';
 
-		thiswp.weight = atof(currentVar);
+		thiswp.weight = Q_atof(currentVar);
 
 		i_cv = 0;
 		i++;
@@ -2155,7 +2155,7 @@ int LoadPathData(const char *filename)
 		}
 		currentVar[i_cv] = '\0';
 
-		thiswp.origin[0] = atof(currentVar);
+		thiswp.origin[0] = Q_atof(currentVar);
 
 		i_cv = 0;
 		i++;
@@ -2168,7 +2168,7 @@ int LoadPathData(const char *filename)
 		}
 		currentVar[i_cv] = '\0';
 
-		thiswp.origin[1] = atof(currentVar);
+		thiswp.origin[1] = Q_atof(currentVar);
 
 		i_cv = 0;
 		i++;
@@ -2181,7 +2181,7 @@ int LoadPathData(const char *filename)
 		}
 		currentVar[i_cv] = '\0';
 
-		thiswp.origin[2] = atof(currentVar);
+		thiswp.origin[2] = Q_atof(currentVar);
 
 		i += 4;
 
@@ -2235,7 +2235,7 @@ int LoadPathData(const char *filename)
 		}
 		currentVar[i_cv] = '\0';
 
-		thiswp.disttonext = atof(currentVar);
+		thiswp.disttonext = Q_atof(currentVar);
 
 		CreateNewWP_FromObject(&thiswp);
 		i++;

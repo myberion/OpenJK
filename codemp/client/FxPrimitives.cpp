@@ -366,7 +366,7 @@ void CParticle::UpdateSize(void)
 	else if (( mFlags & FX_SIZE_PARM_MASK ) == FX_SIZE_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf( (theFxHelper.mTime - mTimeStart) * mSizeParm );
+		perc1 = perc1 * Q_cosf( (theFxHelper.mTime - mTimeStart) * mSizeParm );
 	}
 	else if (( mFlags & FX_SIZE_PARM_MASK ) == FX_SIZE_CLAMP )
 	{
@@ -456,7 +456,7 @@ void CParticle::UpdateRGB(void)
 	else if (( mFlags & FX_RGB_PARM_MASK ) == FX_RGB_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf(( theFxHelper.mTime - mTimeStart ) * mRGBParm );
+		perc1 = perc1 * Q_cosf(( theFxHelper.mTime - mTimeStart ) * mRGBParm );
 	}
 	else if (( mFlags & FX_RGB_PARM_MASK ) == FX_RGB_CLAMP )
 	{
@@ -535,7 +535,7 @@ void CParticle::UpdateAlpha(void)
 	else if (( mFlags & FX_ALPHA_PARM_MASK ) == FX_ALPHA_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf( (theFxHelper.mTime - mTimeStart) * mAlphaParm );
+		perc1 = perc1 * Q_cosf( (theFxHelper.mTime - mTimeStart) * mAlphaParm );
 	}
 	else if (( mFlags & FX_ALPHA_PARM_MASK ) == FX_ALPHA_CLAMP )
 	{
@@ -1067,7 +1067,7 @@ void CTail::UpdateLength(void)
 	else if (( mFlags & FX_LENGTH_PARM_MASK ) == FX_LENGTH_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf( (theFxHelper.mTime - mTimeStart) * mLengthParm );
+		perc1 = perc1 * Q_cosf( (theFxHelper.mTime - mTimeStart) * mLengthParm );
 	}
 	else if (( mFlags & FX_LENGTH_PARM_MASK ) == FX_LENGTH_CLAMP )
 	{
@@ -1211,7 +1211,7 @@ void CCylinder::UpdateSize2(void)
 	else if (( mFlags & FX_SIZE2_PARM_MASK ) == FX_SIZE2_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf( (theFxHelper.mTime - mTimeStart) * mSize2Parm );
+		perc1 = perc1 * Q_cosf( (theFxHelper.mTime - mTimeStart) * mSize2Parm );
 	}
 	else if (( mFlags & FX_SIZE2_PARM_MASK ) == FX_SIZE2_CLAMP )
 	{
@@ -1560,7 +1560,7 @@ void CLight::UpdateSize(void)
 	else if (( mFlags & FX_SIZE_PARM_MASK ) == FX_SIZE_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf( (theFxHelper.mTime - mTimeStart) * mSizeParm );
+		perc1 = perc1 * Q_cosf( (theFxHelper.mTime - mTimeStart) * mSizeParm );
 	}
 	else if (( mFlags & FX_SIZE_PARM_MASK ) == FX_SIZE_CLAMP )
 	{
@@ -1634,7 +1634,7 @@ void CLight::UpdateRGB(void)
 	else if (( mFlags & FX_RGB_PARM_MASK ) == FX_RGB_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf(( theFxHelper.mTime - mTimeStart ) * mRGBParm );
+		perc1 = perc1 * Q_cosf(( theFxHelper.mTime - mTimeStart ) * mRGBParm );
 	}
 	else if (( mFlags & FX_RGB_PARM_MASK ) == FX_RGB_CLAMP )
 	{
@@ -1852,16 +1852,16 @@ void CPoly::CalcRotateMatrix(void)
 {
 	float	cosX, cosZ;
 	float	sinX, sinZ;
-	float	rad;
+	float	halfTurns;
 
 	// rotate around Z
-	rad = DEG2RAD( mRotDelta[YAW] * theFxHelper.mFrameTime * 0.01f );
-	cosZ = cosf( rad );
-	sinZ = sinf( rad );
+	halfTurns = mRotDelta[YAW] * theFxHelper.mFrameTime * 0.01f / 180.0f;
+	cosZ = Q_cospif( halfTurns );
+	sinZ = Q_sinpif( halfTurns );
 	// rotate around X
-	rad = DEG2RAD( mRotDelta[PITCH] * theFxHelper.mFrameTime * 0.01f );
-	cosX = cosf( rad );
-	sinX = sinf( rad );
+	halfTurns = mRotDelta[PITCH] * theFxHelper.mFrameTime * 0.01f / 180.0f;
+	cosX = Q_cospif( halfTurns );
+	sinX = Q_sinpif( halfTurns );
 
 /*Pitch - aroundx  Yaw - around z
 1 0  0			 c -s 0
@@ -1892,7 +1892,7 @@ Roll
 void CPoly::Rotate(void)
 {
 	vec3_t	temp[MAX_CPOLY_VERTS];
-	float	dif = fabs( (float)(mLastFrameTime - theFxHelper.mFrameTime) );
+	float	dif = Q_fabs( (float)(mLastFrameTime - theFxHelper.mFrameTime) );
 
 	if ( dif > 0.1f * mLastFrameTime )
 	{
@@ -2295,7 +2295,7 @@ void CFlash::Draw( void )
 		VectorMA( mRefEnt.origin, FLASH_DISTANCE_FROM_VIEWER, theFxHelper.refdef->viewaxis[0], mRefEnt.origin );
 
         // This is assuming that the screen is wider than it is tall.
-        mRefEnt.radius = FLASH_DISTANCE_FROM_VIEWER * tan (DEG2RAD (theFxHelper.refdef->fov_x * 0.5f));
+        mRefEnt.radius = FLASH_DISTANCE_FROM_VIEWER * Q_tanpif( theFxHelper.refdef->fov_x / 360.0f );
 
 		theFxHelper.AddFxToScene( &mRefEnt );
 	}

@@ -422,16 +422,16 @@ void PM_pitch_roll_for_slope( bgEntity_t *forwhom, vec3_t pass_slope, vec3_t sto
 	if ( storeAngles )
 	{
 		storeAngles[PITCH] = dot * pitch;
-		storeAngles[ROLL] = ((1-Q_fabs(dot)) * pitch * mod);
+		storeAngles[ROLL] = ((1-Q_fabsf(dot)) * pitch * mod);
 	}
 	else //if ( forwhom->client )
 	{
 		float oldmins2;
 
 		pm->ps->viewangles[PITCH] = dot * pitch;
-		pm->ps->viewangles[ROLL] = ((1-Q_fabs(dot)) * pitch * mod);
+		pm->ps->viewangles[ROLL] = ((1-Q_fabsf(dot)) * pitch * mod);
 		oldmins2 = pm->mins[2];
-		pm->mins[2] = -24 + 12 * fabs(pm->ps->viewangles[PITCH])/180.0f;
+		pm->mins[2] = -24 + 12 * Q_fabs(pm->ps->viewangles[PITCH])/180.0f;
 		//FIXME: if it gets bigger, move up
 		if ( oldmins2 > pm->mins[2] )
 		{//our mins is now lower, need to move up
@@ -445,7 +445,7 @@ void PM_pitch_roll_for_slope( bgEntity_t *forwhom, vec3_t pass_slope, vec3_t sto
 	else
 	{
 		forwhom->currentAngles[PITCH] = dot * pitch;
-		forwhom->currentAngles[ROLL] = ((1-Q_fabs(dot)) * pitch * mod);
+		forwhom->currentAngles[ROLL] = ((1-Q_fabsf(dot)) * pitch * mod);
 	}
 	*/
 }
@@ -572,7 +572,7 @@ static void PM_SetVehicleAngles( vec3_t normal )
 
 			// Magic number fun!  Speed is used for banking, so modulate the speed by a sine wave
 			//FIXME: this banks too early
-			speed *= sin( (150 + pml.frametime) * 0.003 );
+			speed *= Q_sin( (150 + pml.frametime) * 0.003 );
 
 			// Clamp to prevent harsh rolling
 			if ( speed > 60 )
@@ -727,7 +727,7 @@ void PM_HoverTrace( void )
 		//if ( pm->ps->waterheight < pm->ps->origin[2]+pm->maxs[2] )
 		if (pm->waterlevel <= 1)
 		{//part of us is sticking out of water
-			if ( fabs(pm->ps->velocity[0]) + fabs(pm->ps->velocity[1]) > 100 )
+			if ( Q_fabs(pm->ps->velocity[0]) + Q_fabs(pm->ps->velocity[1]) > 100 )
 			{//moving at a decent speed
 				if ( Q_irand( pml.frametime, 100 ) >= 50 )
 				{//splash
@@ -781,8 +781,8 @@ void PM_HoverTrace( void )
 		if (trace->plane.normal[0] > 0.5f || trace->plane.normal[0] < -0.5f ||
 			trace->plane.normal[1] > 0.5f || trace->plane.normal[1] < -0.5f)
 		{ //steep slanted hill, don't go up it.
-			float d = fabs(trace->plane.normal[0]);
-			float e = fabs(trace->plane.normal[1]);
+			float d = Q_fabs(trace->plane.normal[0]);
+			float e = Q_fabs(trace->plane.normal[1]);
 			if (e > d)
 			{
 				d = e;
@@ -804,7 +804,7 @@ void PM_HoverTrace( void )
 				}
 				if ( (trace->contents&(CONTENTS_WATER|CONTENTS_SLIME|CONTENTS_LAVA)) )
 				{//hovering on water, make a spash if moving
-					if ( fabs(pm->ps->velocity[0]) + fabs(pm->ps->velocity[1]) > 100 )
+					if ( Q_fabs(pm->ps->velocity[0]) + Q_fabs(pm->ps->velocity[1]) > 100 )
 					{//moving at a decent speed
 						if ( Q_irand( pml.frametime, 100 ) >= 50 )
 						{//splash
@@ -1183,7 +1183,7 @@ static float PM_CmdScale( usercmd_t *cmd ) {
 		return 0;
 	}
 
-	total = sqrt( (float)(cmd->forwardmove * cmd->forwardmove
+	total = Q_sqrt( (float)(cmd->forwardmove * cmd->forwardmove
 		+ cmd->rightmove * cmd->rightmove + umove * umove) );
 	scale = (float)pm->ps->speed * max / ( 127.0 * total );
 
@@ -1645,7 +1645,7 @@ qboolean PM_AdjustAngleForWallJump( playerState_t *ps, usercmd_t *ucmd, qboolean
 		if ( //ucmd->upmove <= 0 &&
 			ps->legsTimer > 100 &&
 			trace.fraction < 1.0f &&
-			fabs(trace.plane.normal[2]) <= 0.2f/*MAX_WALL_GRAB_SLOPE*/ )
+			Q_fabs(trace.plane.normal[2]) <= 0.2f/*MAX_WALL_GRAB_SLOPE*/ )
 		{//still a vertical wall there
 			//FIXME: don't pull around 90 turns
 			/*
@@ -1954,7 +1954,7 @@ static qboolean PM_CheckJump( void )
 								dotR = DotProduct( facingRight, pm->ps->velocity );
 								dotF = DotProduct( facingFwd, pm->ps->velocity );
 
-								if ( fabs(dotR) > fabs(dotF) * 1.5 )
+								if ( Q_fabs(dotR) > Q_fabs(dotF) * 1.5 )
 								{
 									if ( dotR > 150 )
 									{
@@ -2633,7 +2633,7 @@ static qboolean PM_CheckJump( void )
 						VectorNormalize( idealNormal );
 						traceEnt = PM_BGEntForNum(trace.entityNum);
 						if ( trace.fraction < 1.0f
-							&&fabs(trace.plane.normal[2]) <= 0.2f/*MAX_WALL_GRAB_SLOPE*/
+							&&Q_fabs(trace.plane.normal[2]) <= 0.2f/*MAX_WALL_GRAB_SLOPE*/
 							&&((trace.entityNum<ENTITYNUM_WORLD&&traceEnt&&traceEnt->s.solid!=SOLID_BMODEL)||DotProduct(trace.plane.normal,idealNormal)>0.7) )
 						{//there is a wall there
 							float dot = DotProduct( pm->ps->velocity, trace.plane.normal );
@@ -3116,7 +3116,7 @@ static void PM_AirMove( void ) {
 			{//going backwards
 				if ( speed < 0 )
 				{//speed is negative, but since our command is reverse, make speed positive
-					speed = fabs( speed );
+					speed = Q_fabs( speed );
 					/*
 					if ( pml.groundPlane )
 					{//on a slope, still have some control
@@ -3143,7 +3143,7 @@ static void PM_AirMove( void ) {
 					if ( smove )
 					{//trying to strafe
 						float minSpeed = pVeh->m_pVehicleInfo->speedMax * 0.5f * pVeh->m_pVehicleInfo->strafePerc;
-						strafeSpeed = fabs(DotProduct( pm->ps->velocity, vfwd ))*pVeh->m_pVehicleInfo->strafePerc;
+						strafeSpeed = Q_fabs(DotProduct( pm->ps->velocity, vfwd ))*pVeh->m_pVehicleInfo->strafePerc;
 						if ( strafeSpeed < minSpeed )
 						{
 							strafeSpeed = minSpeed;
@@ -3658,7 +3658,7 @@ static void PM_CrashLandEffect( void )
 	{
 		return;
 	}
-	delta = fabs(pml.previous_velocity[2])/10;//VectorLength( pml.previous_velocity );?
+	delta = Q_fabs(pml.previous_velocity[2])/10;//VectorLength( pml.previous_velocity );?
 	if ( delta >= 30 )
 	{
 		vec3_t bottom;
@@ -3720,7 +3720,7 @@ static void PM_CrashLand( void ) {
 		pm->ps->inAirAnim = qfalse;
 		return;
 	}
-	t = (-b - sqrt( den ) ) / ( 2 * a );
+	t = (-b - Q_sqrt( den ) ) / ( 2 * a );
 
 	delta = vel + t * acc;
 	delta = delta*delta * 0.0001;
@@ -4669,7 +4669,7 @@ void PM_AnglesForSlope( const float yaw, const vec3_t slope, vec3_t angles )
 
 	angles[YAW] = 0;
 	angles[PITCH] = dot * pitch;
-	angles[ROLL] = ((1-Q_fabs(dot)) * pitch * mod);
+	angles[ROLL] = ((1-Q_fabsf(dot)) * pitch * mod);
 }
 
 void PM_FootSlopeTrace( float *pDiff, float *pInterval )
@@ -5200,7 +5200,7 @@ static void PM_Footsteps( void ) {
 	// calculate speed and cycle to be used for
 	// all cyclic walking effects
 	//
-	pm->xyspeed = sqrt( pm->ps->velocity[0] * pm->ps->velocity[0]
+	pm->xyspeed = Q_sqrt( pm->ps->velocity[0] * pm->ps->velocity[0]
 		+  pm->ps->velocity[1] * pm->ps->velocity[1] );
 
 	if (pm->ps->saberMove == LS_SPINATTACK)
@@ -9024,7 +9024,7 @@ static float BG_SwingAngles( float destination, float swingTolerance, float clam
 	// modify the speed depending on the delta
 	// so it doesn't seem so linear
 	swing = AngleSubtract( destination, *angle );
-	scale = fabs( swing );
+	scale = Q_fabs( swing );
 	if ( scale < swingTolerance * 0.5 ) {
 		scale = 0.5;
 	} else if ( scale < swingTolerance ) {
@@ -9845,7 +9845,7 @@ void PM_VehFaceHyperspacePoint(bgEntity_t *veh)
 		for ( i = 0; i < 3; i++ )
 		{
 			aDelta = AngleSubtract(veh->playerState->hyperSpaceAngles[i], veh->m_pVehicle->m_vOrientation[i]);
-			if ( fabs( aDelta ) < turnRate )
+			if ( Q_fabs( aDelta ) < turnRate )
 			{//all is good
 				veh->playerState->viewangles[i] = veh->playerState->hyperSpaceAngles[i];
 				matchedAxes++;
@@ -9853,7 +9853,7 @@ void PM_VehFaceHyperspacePoint(bgEntity_t *veh)
 			else
 			{
 				aDelta = AngleSubtract(veh->playerState->hyperSpaceAngles[i], veh->playerState->viewangles[i]);
-				if ( fabs( aDelta ) < turnRate )
+				if ( Q_fabs( aDelta ) < turnRate )
 				{
 					veh->playerState->viewangles[i] = veh->playerState->hyperSpaceAngles[i];
 				}
@@ -9928,7 +9928,7 @@ void PM_VehFaceHyperspacePoint(bgEntity_t *veh)
 		for ( i = 0; i < 3; i++ )
 		{
 			aDelta = AngleSubtract(veh->playerState->hyperSpaceAngles[i], veh->m_pVehicle->m_vOrientation[i]);
-			if ( fabs( aDelta ) < turnRate )
+			if ( Q_fabs( aDelta ) < turnRate )
 			{//all is good
 				pm->ps->viewangles[i] = veh->playerState->hyperSpaceAngles[i];
 				matchedAxes++;
@@ -9936,7 +9936,7 @@ void PM_VehFaceHyperspacePoint(bgEntity_t *veh)
 			else
 			{
 				aDelta = AngleSubtract(veh->playerState->hyperSpaceAngles[i], pm->ps->viewangles[i]);
-				if ( fabs( aDelta ) < turnRate )
+				if ( Q_fabs( aDelta ) < turnRate )
 				{
 					pm->ps->viewangles[i] = veh->playerState->hyperSpaceAngles[i];
 				}

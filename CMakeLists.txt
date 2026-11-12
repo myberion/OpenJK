@@ -273,6 +273,11 @@ elseif (("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU") OR ("${CMAKE_C_COMPILER_ID}" M
 	# enable somewhat modern C++
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
+	# the same floating-point results on every compiler and target: no fused multiply-add contracted from a separate
+	# multiply and add (MSVC's /fp:precise does not contract); docs_rewrite/netcode/12-deterministic-math-survey.md
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffp-contract=off")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffp-contract=off")
+
 	if("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-comment")
@@ -377,6 +382,17 @@ set(SharedCommonFiles
 	"${SharedDir}/qcommon/q_platform.h"
 	"${CMAKE_BINARY_DIR}/shared/qcommon/q_version.h"
 	)
+# The math functions whose results IEEE 754 does not fix (shared/qcommon/q_libm.h, included by q_math.h), the same
+# bits on every platform: LLVM libc's correctly rounded functions (lib/llvm-libc, C++17 inside). Every binary built
+# with SharedCommonFiles links it.
+add_library(qlibm STATIC "${SharedDir}/qcommon/q_libm.h" "${SharedDir}/qcommon/q_libm.cpp")
+target_include_directories(qlibm PRIVATE "${CMAKE_SOURCE_DIR}/lib/llvm-libc")
+target_compile_definitions(qlibm PRIVATE ${SharedDefines})   # ARCH_STRING and the others, for q_platform.h
+# an explicit flag: the -std=c++11 of CMAKE_CXX_FLAGS wins when the compiler's default already satisfies cxx_std_17
+target_compile_options(qlibm PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/std:c++17,-std=c++17>)
+set_target_properties(qlibm PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden
+	VISIBILITY_INLINES_HIDDEN ON)
+
 set(SharedCommonSafeFiles
 	"${SharedDir}/qcommon/safe/gsl.h"
 	"${SharedDir}/qcommon/safe/string.cpp"

@@ -383,7 +383,7 @@ qboolean Float_Parse(char **p, float *f) {
 	char	*token;
 	token = COM_ParseExt((const char **)p, qfalse);
 	if (token && token[0] != 0) {
-		*f = atof(token);
+		*f = Q_atof(token);
 		return qtrue;
 	} else {
 		return qfalse;
@@ -1029,16 +1029,16 @@ qboolean Script_SetItemRectCvar(itemDef_t *item, char **args)
 			{
 				menu = (menuDef_t *) item->parent;
 
-				item2->window.rectClient.x = atof(holdVal) + menu->window.rect.x;
+				item2->window.rectClient.x = Q_atof(holdVal) + menu->window.rect.x;
 				if (String_Parse(&holdBuf,&holdVal))
 				{
-					item2->window.rectClient.y = atof(holdVal) + menu->window.rect.y;
+					item2->window.rectClient.y = Q_atof(holdVal) + menu->window.rect.y;
 					if (String_Parse(&holdBuf,&holdVal))
 					{
-						item2->window.rectClient.w = atof(holdVal);
+						item2->window.rectClient.w = Q_atof(holdVal);
 						if (String_Parse(&holdBuf,&holdVal))
 						{
-							item2->window.rectClient.h = atof(holdVal);
+							item2->window.rectClient.h = Q_atof(holdVal);
 
 							item2->window.rect.x = item2->window.rectClient.x;
 							item2->window.rect.y = item2->window.rectClient.y;
@@ -1226,16 +1226,16 @@ qboolean Script_SetItemColorCvar(itemDef_t *item, char **args)
 			holdBuf = cvarBuf;
 			if (String_Parse(&holdBuf,(const char **) &holdVal))
 			{
-				color[0] = atof(holdVal);
+				color[0] = Q_atof(holdVal);
 				if (String_Parse(&holdBuf,(const char **) &holdVal))
 				{
-					color[1] = atof(holdVal);
+					color[1] = Q_atof(holdVal);
 					if (String_Parse(&holdBuf,(const char **) &holdVal))
 					{
-						color[2] = atof(holdVal);
+						color[2] = Q_atof(holdVal);
 						if (String_Parse(&holdBuf,(const char **) &holdVal))
 						{
-							color[3] = atof(holdVal);
+							color[3] = Q_atof(holdVal);
 						}
 					}
 				}
@@ -1551,10 +1551,10 @@ void Menu_TransitionItemByName(menuDef_t *menu, const char *p, const rectDef_t *
 			item->window.offsetTime = time;
 			memcpy(&item->window.rectClient, rectFrom, sizeof(rectDef_t));
 			memcpy(&item->window.rectEffects, rectTo, sizeof(rectDef_t));
-			item->window.rectEffects2.x = fabs(rectTo->x - rectFrom->x) / amt;
-			item->window.rectEffects2.y = fabs(rectTo->y - rectFrom->y) / amt;
-			item->window.rectEffects2.w = fabs(rectTo->w - rectFrom->w) / amt;
-			item->window.rectEffects2.h = fabs(rectTo->h - rectFrom->h) / amt;
+			item->window.rectEffects2.x = Q_fabs(rectTo->x - rectFrom->x) / amt;
+			item->window.rectEffects2.y = Q_fabs(rectTo->y - rectFrom->y) / amt;
+			item->window.rectEffects2.w = Q_fabs(rectTo->w - rectFrom->w) / amt;
+			item->window.rectEffects2.h = Q_fabs(rectTo->h - rectFrom->h) / amt;
 
 			Item_UpdatePosition(item);
 		}
@@ -1602,17 +1602,17 @@ void Menu_Transition3ItemByName(menuDef_t *menu, const char *p, const float minx
 
 //				VectorSet(modelptr->g2maxs2, maxx, maxy, maxz);
 
-				modelptr->g2maxsEffect[0] = fabs(modelptr->g2maxs2[0] - modelptr->g2maxs[0]) / amt;
-				modelptr->g2maxsEffect[1] = fabs(modelptr->g2maxs2[1] - modelptr->g2maxs[1]) / amt;
-				modelptr->g2maxsEffect[2] = fabs(modelptr->g2maxs2[2] - modelptr->g2maxs[2]) / amt;
+				modelptr->g2maxsEffect[0] = Q_fabs(modelptr->g2maxs2[0] - modelptr->g2maxs[0]) / amt;
+				modelptr->g2maxsEffect[1] = Q_fabs(modelptr->g2maxs2[1] - modelptr->g2maxs[1]) / amt;
+				modelptr->g2maxsEffect[2] = Q_fabs(modelptr->g2maxs2[2] - modelptr->g2maxs[2]) / amt;
 
-				modelptr->g2minsEffect[0] = fabs(modelptr->g2mins2[0] - modelptr->g2mins[0]) / amt;
-				modelptr->g2minsEffect[1] = fabs(modelptr->g2mins2[1] - modelptr->g2mins[1]) / amt;
-				modelptr->g2minsEffect[2] = fabs(modelptr->g2mins2[2] - modelptr->g2mins[2]) / amt;
+				modelptr->g2minsEffect[0] = Q_fabs(modelptr->g2mins2[0] - modelptr->g2mins[0]) / amt;
+				modelptr->g2minsEffect[1] = Q_fabs(modelptr->g2mins2[1] - modelptr->g2mins[1]) / amt;
+				modelptr->g2minsEffect[2] = Q_fabs(modelptr->g2mins2[2] - modelptr->g2mins[2]) / amt;
 
 
-				modelptr->fov_Effectx = fabs(modelptr->fov_x2 - modelptr->fov_x) / amt;
-				modelptr->fov_Effecty = fabs(modelptr->fov_y2 - modelptr->fov_y) / amt;
+				modelptr->fov_Effectx = Q_fabs(modelptr->fov_x2 - modelptr->fov_x) / amt;
+				modelptr->fov_Effecty = Q_fabs(modelptr->fov_y2 - modelptr->fov_y) / amt;
 			}
 		}
 	}
@@ -1933,35 +1933,35 @@ qboolean Script_Transition3(itemDef_t *item, char **args)
 	{
 		if (String_Parse( args, &value))
 		{
-			minx = atof(value);
+			minx = Q_atof(value);
 			if (String_Parse( args, &value))
 			{
-				miny = atof(value);
+				miny = Q_atof(value);
 				if (String_Parse( args, &value))
 				{
-					minz = atof(value);
+					minz = Q_atof(value);
 					if (String_Parse( args, &value))
 					{
-						maxx = atof(value);
+						maxx = Q_atof(value);
 						if (String_Parse( args, &value))
 						{
-							maxy = atof(value);
+							maxy = Q_atof(value);
 							if (String_Parse( args, &value))
 							{
-								maxz = atof(value);
+								maxz = Q_atof(value);
 								if (String_Parse( args, &value))
 								{
-									fovtx = atof(value);
+									fovtx = Q_atof(value);
 									if (String_Parse( args, &value))
 									{
-										fovty = atof(value);
+										fovty = Q_atof(value);
 
 										if (String_Parse( args, &value))
 										{
 											time = atoi(value);
 											if (String_Parse( args, &value))
 											{
-												amt = atof(value);
+												amt = Q_atof(value);
 												//set up the variables
 												Menu_Transition3ItemByName((menuDef_t *) item->parent,
 														name,
@@ -4493,13 +4493,13 @@ void Item_TextColor(itemDef_t *item, vec4_t *newColor) {
 		lowLight[1] = 0.8 * parent->focusColor[1];
 		lowLight[2] = 0.8 * parent->focusColor[2];
 		lowLight[3] = 0.8 * parent->focusColor[3];
-		LerpColor(parent->focusColor,lowLight,*newColor,0.5+0.5*sin((float)(DC->realTime / PULSE_DIVISOR)));
+		LerpColor(parent->focusColor,lowLight,*newColor,0.5+0.5*Q_sin((float)(DC->realTime / PULSE_DIVISOR)));
 	} else if (item->textStyle == ITEM_TEXTSTYLE_BLINK && !((DC->realTime/BLINK_DIVISOR) & 1)) {
 		lowLight[0] = 0.8 * item->window.foreColor[0];
 		lowLight[1] = 0.8 * item->window.foreColor[1];
 		lowLight[2] = 0.8 * item->window.foreColor[2];
 		lowLight[3] = 0.8 * item->window.foreColor[3];
-		LerpColor(item->window.foreColor,lowLight,*newColor,0.5+0.5*sin((float)(DC->realTime / PULSE_DIVISOR)));
+		LerpColor(item->window.foreColor,lowLight,*newColor,0.5+0.5*Q_sin((float)(DC->realTime / PULSE_DIVISOR)));
 	} else {
 		memcpy(newColor, &item->window.foreColor, sizeof(vec4_t));
 		// items can be enabled and disabled based on cvars
@@ -4734,7 +4734,7 @@ void Item_TextField_Paint(itemDef_t *item) {
 		lowLight[1] = 0.8 * parent->focusColor[1];
 		lowLight[2] = 0.8 * parent->focusColor[2];
 		lowLight[3] = 0.8 * parent->focusColor[3];
-		LerpColor(parent->focusColor,lowLight,newColor,0.5+0.5*sin((float)(DC->realTime / PULSE_DIVISOR)));
+		LerpColor(parent->focusColor,lowLight,newColor,0.5+0.5*Q_sin((float)(DC->realTime / PULSE_DIVISOR)));
 	} else {
 		memcpy(&newColor, &item->window.foreColor, sizeof(vec4_t));
 	}
@@ -5025,7 +5025,7 @@ void Item_Slider_Paint(itemDef_t *item) {
 		lowLight[1] = 0.8 * parent->focusColor[1];
 		lowLight[2] = 0.8 * parent->focusColor[2];
 		lowLight[3] = 0.8 * parent->focusColor[3];
-		LerpColor(parent->focusColor,lowLight,newColor,0.5+0.5*sin((float)(DC->realTime / PULSE_DIVISOR)));
+		LerpColor(parent->focusColor,lowLight,newColor,0.5+0.5*Q_sin((float)(DC->realTime / PULSE_DIVISOR)));
 	} else {
 		memcpy(&newColor, &item->window.foreColor, sizeof(vec4_t));
 	}
@@ -5077,7 +5077,7 @@ void Item_Bind_Paint(itemDef_t *item)
 			lowLight[2] = 0.8f * parent->focusColor[2];
 			lowLight[3] = 0.8f * parent->focusColor[3];
 		}
-		LerpColor(parent->focusColor,lowLight,newColor,0.5+0.5*sin((float)(DC->realTime / PULSE_DIVISOR)));
+		LerpColor(parent->focusColor,lowLight,newColor,0.5+0.5*Q_sin((float)(DC->realTime / PULSE_DIVISOR)));
 	}
 	else
 	{
@@ -5377,7 +5377,7 @@ void Item_Model_Paint(itemDef_t *item)
 		origin[0] = item->textscale;
 	}
 	refdef.fov_x = (modelPtr->fov_x) ? modelPtr->fov_x : (int)((float)refdef.width / 640.0f * 90.0f);
-	refdef.fov_y = (modelPtr->fov_y) ? modelPtr->fov_y : atan2( refdef.height, refdef.width / tan( refdef.fov_x / 360 * M_PI ) ) * ( 360 / M_PI );
+	refdef.fov_y = (modelPtr->fov_y) ? modelPtr->fov_y : 2.0f * Q_atan2degf( refdef.height, refdef.width / Q_tanpif( refdef.fov_x / 360.0f ) );
 
 	//refdef.fov_x = (int)((float)refdef.width / 640.0f * 90.0f);
 	//refdef.fov_y = atan2( refdef.height, refdef.width / tan( refdef.fov_x / 360 * M_PI ) ) * ( 360 / M_PI );
@@ -5920,13 +5920,13 @@ void Item_OwnerDraw_Paint(itemDef_t *item) {
 			lowLight[1] = 0.8 * parent->focusColor[1];
 			lowLight[2] = 0.8 * parent->focusColor[2];
 			lowLight[3] = 0.8 * parent->focusColor[3];
-			LerpColor(parent->focusColor,lowLight,color,0.5+0.5*sin((float)(DC->realTime / PULSE_DIVISOR)));
+			LerpColor(parent->focusColor,lowLight,color,0.5+0.5*Q_sin((float)(DC->realTime / PULSE_DIVISOR)));
 		} else if (item->textStyle == ITEM_TEXTSTYLE_BLINK && !((DC->realTime/BLINK_DIVISOR) & 1)) {
 			lowLight[0] = 0.8 * item->window.foreColor[0];
 			lowLight[1] = 0.8 * item->window.foreColor[1];
 			lowLight[2] = 0.8 * item->window.foreColor[2];
 			lowLight[3] = 0.8 * item->window.foreColor[3];
-			LerpColor(item->window.foreColor,lowLight,color,0.5+0.5*sin((float)(DC->realTime / PULSE_DIVISOR)));
+			LerpColor(item->window.foreColor,lowLight,color,0.5+0.5*Q_sin((float)(DC->realTime / PULSE_DIVISOR)));
 		}
 
 		if ( item->disabled )
@@ -5971,7 +5971,7 @@ void Item_Paint(itemDef_t *item)
 	{
 		if (DC->realTime > item->window.nextTime)
 		{
-			float rx, ry, a, c, s, w, h;
+			float rx, ry, c, s, w, h;
 
 			item->window.nextTime = DC->realTime + item->window.offsetTime;
 			// translate
@@ -5979,9 +5979,8 @@ void Item_Paint(itemDef_t *item)
 			h = item->window.rectClient.h / 2;
 			rx = item->window.rectClient.x + w - item->window.rectEffects.x;
 			ry = item->window.rectClient.y + h - item->window.rectEffects.y;
-			a = 3 * M_PI / 180;
-			c = cos(a);
-			s = sin(a);
+			c = Q_cospif( 3.0f / 180.0f );
+			s = Q_sinpif( 3.0f / 180.0f );
 			item->window.rectClient.x = (rx * c - ry * s) + item->window.rectEffects.x - w;
 			item->window.rectClient.y = (rx * s + ry * c) + item->window.rectEffects.y - h;
 			Item_UpdatePosition(item);
@@ -7449,16 +7448,16 @@ qboolean ItemParse_rectcvar( itemDef_t *item, int handle )
 	holdBuf = cvarBuf;
 	if (String_Parse(&holdBuf,&holdVal))
 	{
-		item->window.rectClient.x = atof(holdVal);
+		item->window.rectClient.x = Q_atof(holdVal);
 		if (String_Parse(&holdBuf,&holdVal))
 		{
-			item->window.rectClient.y = atof(holdVal);
+			item->window.rectClient.y = Q_atof(holdVal);
 			if (String_Parse(&holdBuf,&holdVal))
 			{
-				item->window.rectClient.w = atof(holdVal);
+				item->window.rectClient.w = Q_atof(holdVal);
 				if (String_Parse(&holdBuf,&holdVal))
 				{
-					item->window.rectClient.h = atof(holdVal);
+					item->window.rectClient.h = Q_atof(holdVal);
 					return qtrue;
 				}
 			}

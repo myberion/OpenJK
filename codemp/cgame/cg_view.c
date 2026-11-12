@@ -85,7 +85,7 @@ void CG_TestModel_f (void) {
 	cg.testModelEntity.hModel = trap->R_RegisterModel( cg.testModelName );
 
 	if ( trap->Cmd_Argc() == 3 ) {
-		cg.testModelEntity.backlerp = atof( CG_Argv( 2 ) );
+		cg.testModelEntity.backlerp = Q_atof( CG_Argv( 2 ) );
 		cg.testModelEntity.frame = 1;
 		cg.testModelEntity.oldframe = 0;
 	}
@@ -363,7 +363,7 @@ static void CG_CalcIdealThirdPersonViewLocation(void)
 			thirdPersonRange = veh->m_pVehicle->m_pVehicleInfo->cameraRange;
 			if ( veh->playerState->hackingTime )
 			{
-				thirdPersonRange += fabs(((float)veh->playerState->hackingTime)/MAX_STRAFE_TIME) * 100.0f;
+				thirdPersonRange += Q_fabs(((float)veh->playerState->hackingTime)/MAX_STRAFE_TIME) * 100.0f;
 			}
 		}
 	}
@@ -459,10 +459,9 @@ static void CG_UpdateThirdPersonTargetDamp(void)
 
 		// Note that since there are a finite number of "practical" delta millisecond values possible,
 		// the ratio should be initialized into a chart ultimately.
-		if ( cg_smoothCamera.integer )
-			ratio = powf(dampfactor, dtime);
-		else
-			ratio = Q_powf( dampfactor, dtime );
+		// as cg_smoothCamera 0 (the default of 1.01 and OpenJK): a whole number of damping intervals, at least one, so
+		// the camera follows faster at a higher frame rate
+		ratio = Q_powf( dampfactor, (float)Q_max( 1, (int)dtime ) );
 
 		// This value is how much distance is "left" from the ideal.
 		VectorMA(cameraIdealTarget, -ratio, targetdiff, cameraCurTarget);
@@ -518,7 +517,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 		}
 
 		// Note that the camera pitch has already been capped off to 89.
-		pitch = Q_fabs(cameraFocusAngles[PITCH]);
+		pitch = Q_fabsf(cameraFocusAngles[PITCH]);
 
 		// The higher the pitch, the larger the factor, so as you look up, it damps a lot less.
 		pitch /= 115.0;
@@ -549,10 +548,9 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 
 		// Note that since there are a finite number of "practical" delta millisecond values possible,
 		// the ratio should be initialized into a chart ultimately.
-		if ( cg_smoothCamera.integer )
-			ratio = powf(dampfactor, dtime);
-		else
-			ratio = Q_powf( dampfactor, dtime );
+		// as cg_smoothCamera 0 (the default of 1.01 and OpenJK): a whole number of damping intervals, at least one, so
+		// the camera follows faster at a higher frame rate
+		ratio = Q_powf( dampfactor, (float)Q_max( 1, (int)dtime ) );
 
 		// This value is how much distance is "left" from the ideal.
 		VectorMA(cameraIdealLoc, -ratio, locdiff, cameraCurLoc);
@@ -752,10 +750,10 @@ static void CG_OffsetThirdPersonView( void )
 
 		AngleVectors(cameraFocusAngles, camerafwd, NULL, cameraup);
 
-		deltayaw = fabs(cameraFocusAngles[YAW] - cameraLastYaw);
+		deltayaw = Q_fabs(cameraFocusAngles[YAW] - cameraLastYaw);
 		if (deltayaw > 180.0f)
 		{ // Normalize this angle so that it is between 0 and 180.
-			deltayaw = fabs(deltayaw - 360.0f);
+			deltayaw = Q_fabs(deltayaw - 360.0f);
 		}
 		cameraStiffFactor = deltayaw / (float)(cg.time-cameraLastFrame);
 		if (cameraStiffFactor < 1.0)
@@ -1091,7 +1089,7 @@ static void CG_OffsetFighterView( void )
 		if ( veh->playerState->hackingTime )
 		{
 			horzOffset += (((float)veh->playerState->hackingTime)/MAX_STRAFE_TIME) * -80.0f;
-			range += fabs(((float)veh->playerState->hackingTime)/MAX_STRAFE_TIME) * 100.0f;
+			range += Q_fabs(((float)veh->playerState->hackingTime)/MAX_STRAFE_TIME) * 100.0f;
 		}
 	}
 
@@ -1245,18 +1243,18 @@ static int CG_CalcFov( void ) {
 		const float aspect = (float)cgs.glconfig.vidWidth/(float)cgs.glconfig.vidHeight;
 		const float desiredFov = fov_x;
 
-		fov_x = atan( tan( desiredFov*M_PI / 360.0f ) * baseAspect*aspect )*360.0f / M_PI;
+		fov_x = 2.0f * Q_atandegf( Q_tanpif( desiredFov / 360.0f ) * baseAspect*aspect );
 	}
 
-	x = cg.refdef.width / tan( fov_x / 360 * M_PI );
-	fov_y = atan2( cg.refdef.height, x );
+	x = cg.refdef.width / Q_tanpif( fov_x / 360.0f );
+	fov_y = Q_atan2( cg.refdef.height, x );
 	fov_y = fov_y * 360 / M_PI;
 
 	// warp if underwater
 	cg.refdef.viewContents = CG_PointContents( cg.refdef.vieworg, -1 );
 	if ( cg.refdef.viewContents & ( CONTENTS_WATER | CONTENTS_SLIME | CONTENTS_LAVA ) ){
 		phase = cg.time / 1000.0 * WAVE_FREQUENCY * M_PI * 2;
-		v = WAVE_AMPLITUDE * sin( phase );
+		v = WAVE_AMPLITUDE * Q_sin( phase );
 		fov_x += v;
 		fov_y -= v;
 		inwater = qtrue;
@@ -1541,8 +1539,8 @@ static int CG_CalcViewValues( void ) {
 	}
 
 	cg.bobcycle = ( ps->bobCycle & 128 ) >> 7;
-	cg.bobfracsin = fabs( sin( ( ps->bobCycle & 127 ) / 127.0 * M_PI ) );
-	cg.xyspeed = sqrt( ps->velocity[0] * ps->velocity[0] +
+	cg.bobfracsin = Q_fabsf( Q_sinpif( ( ps->bobCycle & 127 ) / 127.0f ) );
+	cg.xyspeed = Q_sqrt( ps->velocity[0] * ps->velocity[0] +
 		ps->velocity[1] * ps->velocity[1] );
 
 	if (cg.xyspeed > 270)
@@ -1704,21 +1702,21 @@ void CG_DrawSkyBoxPortal(const char *cstr)
 	{
 		trap->Error( ERR_DROP, "CG_DrawSkyBoxPortal: error parsing skybox configstring\n");
 	}
-	cg.refdef.vieworg[0] = atof(token);
+	cg.refdef.vieworg[0] = Q_atof(token);
 
 	token = COM_ParseExt(&cstr, qfalse);
 	if (!token || !token[0])
 	{
 		trap->Error( ERR_DROP, "CG_DrawSkyBoxPortal: error parsing skybox configstring\n");
 	}
-	cg.refdef.vieworg[1] = atof(token);
+	cg.refdef.vieworg[1] = Q_atof(token);
 
 	token = COM_ParseExt(&cstr, qfalse);
 	if (!token || !token[0])
 	{
 		trap->Error( ERR_DROP, "CG_DrawSkyBoxPortal: error parsing skybox configstring\n");
 	}
-	cg.refdef.vieworg[2] = atof(token);
+	cg.refdef.vieworg[2] = Q_atof(token);
 
 	token = COM_ParseExt(&cstr, qfalse);
 	if (!token || !token[0])
@@ -1787,11 +1785,11 @@ void CG_DrawSkyBoxPortal(const char *cstr)
 		const float aspect = (float)cgs.glconfig.vidWidth / (float)cgs.glconfig.vidHeight;
 		const float desiredFov = fov_x;
 
-		fov_x = atan(tan(desiredFov*M_PI / 360.0f) * baseAspect*aspect)*360.0f / M_PI;
+		fov_x = 2.0f * Q_atandegf( Q_tanpif( desiredFov / 360.0f ) * baseAspect*aspect );
 	}
 
-	x = cg.refdef.width / tan( fov_x / 360 * M_PI );
-	fov_y = atan2( cg.refdef.height, x );
+	x = cg.refdef.width / Q_tanpif( fov_x / 360.0f );
+	fov_y = Q_atan2( cg.refdef.height, x );
 	fov_y = fov_y * 360 / M_PI;
 
 	cg.refdef.fov_x = fov_x;
@@ -2335,8 +2333,8 @@ void CG_SetupFrustum( void ) {
 	float ang;
 
 	ang = cg.refdef.fov_x / 180 * M_PI * 0.5f;
-	xs = sin( ang );
-	xc = cos( ang );
+	xs = Q_sin( ang );
+	xc = Q_cos( ang );
 
 	VectorScale( cg.refdef.viewaxis[0], xs, frustum[0].normal );
 	VectorMA( frustum[0].normal, xc, cg.refdef.viewaxis[1], frustum[0].normal );
@@ -2345,8 +2343,8 @@ void CG_SetupFrustum( void ) {
 	VectorMA( frustum[1].normal, -xc, cg.refdef.viewaxis[1], frustum[1].normal );
 
 	ang = cg.refdef.fov_y / 180 * M_PI * 0.5f;
-	xs = sin( ang );
-	xc = cos( ang );
+	xs = Q_sin( ang );
+	xc = Q_cos( ang );
 
 	VectorScale( cg.refdef.viewaxis[0], xs, frustum[2].normal );
 	VectorMA( frustum[2].normal, xc, cg.refdef.viewaxis[2], frustum[2].normal );

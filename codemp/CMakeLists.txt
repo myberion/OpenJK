@@ -177,7 +177,7 @@ if(BuildMPEngine OR BuildMPDed)
 	#    Common files/libraries/defines of both Engine and Dedicated Server
 
 	# libraries: Botlib
-	set(MPEngineAndDedLibraries ${MPBotLib} netcodec::netcodec)
+	set(MPEngineAndDedLibraries ${MPBotLib} netcodec::netcodec qlibm)
 	# Platform-specific libraries
 	if(WIN32)
 		set(MPEngineAndDedLibraries ${MPEngineAndDedLibraries} "winmm" "wsock32")

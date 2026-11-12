@@ -522,7 +522,7 @@ static void Autosprite2Deform( void ) {
 			v1 = xyz + 4 * edgeVerts[nums[j]][0];
 			v2 = xyz + 4 * edgeVerts[nums[j]][1];
 
-			l = 0.5 * sqrt( lengths[j] );
+			l = 0.5 * Q_sqrt( lengths[j] );
 
 			// we need to see which direction this edge
 			// is used to determine direction of projection
@@ -788,8 +788,8 @@ void RB_CalcScrollTexMatrix( const float scrollSpeed[2], float *matrix )
 
 	// clamp so coordinates don't continuously get larger, causing problems
 	// with hardware limits
-	adjustedScrollS = adjustedScrollS - floor( adjustedScrollS );
-	adjustedScrollT = adjustedScrollT - floor( adjustedScrollT );
+	adjustedScrollS = adjustedScrollS - Q_floor( adjustedScrollS );
+	adjustedScrollT = adjustedScrollT - Q_floor( adjustedScrollT );
 
 	matrix[0] = 1.0f; matrix[2] = 0.0f; matrix[4] = adjustedScrollS;
 	matrix[1] = 0.0f; matrix[3] = 1.0f; matrix[5] = adjustedScrollT;

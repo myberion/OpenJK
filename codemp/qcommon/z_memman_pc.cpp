@@ -569,7 +569,7 @@ static void Z_Details_f(void)
 			//
 			float	fSize		= (float)(iThisSize) / 1024.0f / 1024.0f;
 			int		iSize		= fSize;
-			int		iRemainder 	= 100.0f * (fSize - floor(fSize));
+			int		iRemainder 	= 100.0f * (fSize - Q_floor(fSize));
 			Com_Printf("%20s %9d (%2d.%02dMB) in %6d blocks (%9d average)\n",
 					    psTagStrings[i],
 							  iThisSize,

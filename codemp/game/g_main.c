@@ -2971,7 +2971,7 @@ void G_RunFrame( int levelTime ) {
 
 			trap->Cvar_VariableStringBuffer("timescale", buf, sizeof(buf));
 
-			tFVal = atof(buf);
+			tFVal = Q_atof(buf);
 
 			trap->Cvar_Set("timescale", "1");
 			if (tFVal == 1.0f)
@@ -3008,7 +3008,7 @@ void G_RunFrame( int levelTime ) {
 
 				trap->Cvar_VariableStringBuffer("timescale", buf, sizeof(buf));
 
-				tFVal = atof(buf);
+				tFVal = Q_atof(buf);
 
 				trap->Cvar_Set("timescale", "1");
 				if (timeDif > 1500 && tFVal == 1.0f)

@@ -503,7 +503,7 @@ int Q3_PlaySound( int taskID, int entID, const char *name, const char *channel )
 
 		trap->Cvar_VariableStringBuffer("timescale", buf, sizeof(buf));
 
-		tFVal = atof(buf);
+		tFVal = Q_atof(buf);
 
 
 		if ( tFVal > 1.0f )
@@ -1241,7 +1241,7 @@ int Q3_GetFloat( int entID, int type, const char *name, float *value )
 			G_DebugPrint( WL_ERROR, "GET_PARM: %s %s did not have any parms set!\n", ent->classname, ent->targetname );
 			return 0;	// would prefer qfalse, but I'm fitting in with what's here <sigh>
 		}
-		*value = atof( ent->parms->parm[toGet - SET_PARM1] );
+		*value = Q_atof( ent->parms->parm[toGet - SET_PARM1] );
 		break;
 
 	case SET_COUNT:
@@ -1619,7 +1619,7 @@ int Q3_GetVector( int entID, int type, const char *name, vec3_t value )
 	case SET_PARM14:
 	case SET_PARM15:
 	case SET_PARM16:
-		if ( sscanf( ent->parms->parm[toGet - SET_PARM1], "%f %f %f", &value[0], &value[1], &value[2] ) != 3 ) {
+		if ( Q_ScanFloats( ent->parms->parm[toGet - SET_PARM1], value, 3 ) != 3 ) {
 			G_DebugPrint( WL_WARNING, "Q3_GetVector: failed sscanf on SET_PARM%d (%s)\n", toGet, name );
 			VectorClear( value );
 		}
@@ -2155,7 +2155,7 @@ static void Q3_SetOriginOffset( int entID, int axis, float offset )
 	duration = 0;
 	if ( ent->speed )
 	{
-		duration = fabs(offset)/fabs(ent->speed)*1000.0f;
+		duration = Q_fabs(offset)/Q_fabs(ent->speed)*1000.0f;
 	}
 	Q3_Lerp2Origin( -1, entID, origin, duration );
 }
@@ -2319,7 +2319,7 @@ static qboolean Q3_SetNavGoal( int entID, const char *name )
 			else
 			{
 				ent->NPC->goalEntity = targ;
-				ent->NPC->goalRadius = sqrt(ent->r.maxs[0]+ent->r.maxs[0]) + sqrt(targ->r.maxs[0]+targ->r.maxs[0]);
+				ent->NPC->goalRadius = Q_sqrt(ent->r.maxs[0]+ent->r.maxs[0]) + Q_sqrt(targ->r.maxs[0]+targ->r.maxs[0]);
 				ent->NPC->aiFlags &= ~NPCAI_TOUCHED_GOAL;
 			}
 		}
@@ -3720,7 +3720,7 @@ static float Q3_GameSideCheckStringCounterIncrement( const char *string )
 		if ( string[1] )
 		{
 			numString = (char *)&string[1];
-			val = atof( numString );
+			val = Q_atof( numString );
 		}
 	}
 	else if ( string[0] == '-' )
@@ -3728,7 +3728,7 @@ static float Q3_GameSideCheckStringCounterIncrement( const char *string )
 		if ( string[1] )
 		{
 			numString = (char *)&string[1];
-			val = atof( numString ) * -1;
+			val = Q_atof( numString ) * -1;
 		}
 	}
 
@@ -4036,7 +4036,7 @@ void Q3_SetParm (int entID, int parmNum, const char *parmValue)
 
 	if ( (val = Q3_GameSideCheckStringCounterIncrement( parmValue )) )
 	{
-		val += atof( ent->parms->parm[parmNum] );
+		val += Q_atof( ent->parms->parm[parmNum] );
 		Com_sprintf( ent->parms->parm[parmNum], sizeof(ent->parms->parm[parmNum]), "%f", val );
 	}
 	else
@@ -5886,7 +5886,7 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 	switch ( toSet )
 	{
 	case SET_ORIGIN:
-		if ( sscanf( data, "%f %f %f", &vector_data[0], &vector_data[1], &vector_data[2] ) != 3 ) {
+		if ( Q_ScanFloats( data, vector_data, 3 ) != 3 ) {
 			G_DebugPrint( WL_WARNING, "Q3_Set: failed sscanf on SET_ORIGIN (%s)\n", type_name );
 			VectorClear( vector_data );
 		}
@@ -5898,7 +5898,7 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		break;
 
 	case SET_TELEPORT_DEST:
-		if ( sscanf( data, "%f %f %f", &vector_data[0], &vector_data[1], &vector_data[2] ) != 3 ) {
+		if ( Q_ScanFloats( data, vector_data, 3 ) != 3 ) {
 			G_DebugPrint( WL_WARNING, "Q3_Set: failed sscanf on SET_TELEPORT_DEST (%s)\n", type_name );
 			VectorClear( vector_data );
 		}
@@ -5915,7 +5915,7 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 
 	case SET_ANGLES:
 		//Q3_SetAngles( entID, *(vec3_t *) data);
-		if ( sscanf( data, "%f %f %f", &vector_data[0], &vector_data[1], &vector_data[2] ) != 3 ) {
+		if ( Q_ScanFloats( data, vector_data, 3 ) != 3 ) {
 			G_DebugPrint( WL_WARNING, "Q3_Set: failed sscanf on SET_ANGLES (%s)\n", type_name );
 			VectorClear( vector_data );
 		}
@@ -5923,22 +5923,22 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		break;
 
 	case SET_XVELOCITY:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetVelocity( entID, 0, float_data);
 		break;
 
 	case SET_YVELOCITY:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetVelocity( entID, 1, float_data);
 		break;
 
 	case SET_ZVELOCITY:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetVelocity( entID, 2, float_data);
 		break;
 
 	case SET_Z_OFFSET:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetOriginOffset( entID, 2, float_data);
 		break;
 
@@ -6077,14 +6077,14 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		break;
 
 	case SET_DPITCH://FIXME: make these set tempBehavior to BS_FACE and await completion?  Or set lockedDesiredPitch/Yaw and aimTime?
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetDPitch( entID, float_data );
 		trap->ICARUS_TaskIDSet( (sharedEntity_t *)ent, TID_ANGLE_FACE, taskID );
 		return qfalse;
 		break;
 
 	case SET_DYAW:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetDYaw( entID, float_data );
 		trap->ICARUS_TaskIDSet( (sharedEntity_t *)ent, TID_ANGLE_FACE, taskID );
 		return qfalse;
@@ -6142,7 +6142,7 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		break;
 
 	case SET_YAWSPEED:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetYawSpeed ( entID, float_data);
 		break;
 
@@ -6162,22 +6162,22 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		break;
 
 	case SET_GRAVITY:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetGravity ( entID, float_data);
 		break;
 
 	case SET_WAIT:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetWait( entID, float_data);
 		break;
 
 	case SET_FOLLOWDIST:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetFollowDist( entID, float_data);
 		break;
 
 	case SET_SCALE:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetScale( entID, float_data);
 		break;
 
@@ -6244,7 +6244,7 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		break;
 
 	case SET_SHOOTDIST:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetShootDist( entID, float_data );
 		break;
 
@@ -6253,17 +6253,17 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		break;
 
 	case SET_VISRANGE:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetVisrange( entID, float_data );
 		break;
 
 	case SET_EARSHOT:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetEarshot( entID, float_data );
 		break;
 
 	case SET_VIGILANCE:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_SetVigilance( entID, float_data );
 		break;
 
@@ -6605,7 +6605,7 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		Q3_CameraGroup(entID, (char *)data);
 		break;
 	case SET_CAMERA_GROUP_Z_OFS:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_CameraGroupZOfs( float_data );
 		break;
 	case SET_CAMERA_GROUP_TAG:
@@ -6640,7 +6640,7 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 	case SET_FACEBLINKFROWN:
 	case SET_FACEFROWN:
 	case SET_FACENORMAL:
-		float_data = atof((char *) data);
+		float_data = Q_atof((char *) data);
 		Q3_Face(entID, toSet, float_data);
 		break;
 

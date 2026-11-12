@@ -628,7 +628,7 @@ float DistanceFromLineSquared(vec3_t p, vec3_t lp1, vec3_t lp2)
 			(proj[j] < lp1[j] && proj[j] < lp2[j]))
 			break;
 	if (j < 3) {
-		if (fabs(proj[j] - lp1[j]) < fabs(proj[j] - lp2[j]))
+		if (Q_fabs(proj[j] - lp1[j]) < Q_fabs(proj[j] - lp2[j]))
 			VectorSubtract(p, lp1, dir);
 		else
 			VectorSubtract(p, lp2, dir);
@@ -1291,7 +1291,7 @@ void BotCheckBlocked(bot_movestate_t *ms, vec3_t dir, int checkbottom, bot_mover
 	//test for entities obstructing the bot's path
 	AAS_PresenceTypeBoundingBox(ms->presencetype, mins, maxs);
 	//
-	if (fabs(DotProduct(dir, up)) < 0.7)
+	if (Q_fabs(DotProduct(dir, up)) < 0.7)
 	{
 		mins[2] += sv_maxstep->value; //if the bot can step on
 		maxs[2] -= 10; //a little lower to avoid low ceiling
@@ -2061,7 +2061,7 @@ bot_moveresult_t BotTravel_Elevator(bot_movestate_t *ms, aas_reachability_t *rea
 		botimport.Print(PRT_MESSAGE, "bot on elevator\n");
 #endif //DEBUG_ELEVATOR
 		//if vertically not too far from the end point
-		if (fabs(ms->origin[2] - reach->end[2]) < sv_maxbarrier->value)
+		if (Q_fabs(ms->origin[2] - reach->end[2]) < sv_maxbarrier->value)
 		{
 #ifdef DEBUG_ELEVATOR
 			botimport.Print(PRT_MESSAGE, "bot moving to end\n");
@@ -2209,7 +2209,7 @@ bot_moveresult_t BotFinishTravel_Elevator(bot_movestate_t *ms, aas_reachability_
 	//
 	VectorSubtract(reach->end, ms->origin, topdir);
 	//
-	if (fabs(bottomdir[2]) < fabs(topdir[2]))
+	if (Q_fabs(bottomdir[2]) < Q_fabs(topdir[2]))
 	{
 		VectorNormalize(bottomdir);
 		EA_Move(ms->client, bottomdir, 300);
@@ -2656,8 +2656,8 @@ bot_moveresult_t BotTravel_Grapple(bot_movestate_t *ms, aas_reachability_t *reac
 		result.flags |= MOVERESULT_MOVEMENTVIEW;
 		//
 		if (dist < 5 &&
-			fabs(AngleDiff(result.ideal_viewangles[0], ms->viewangles[0])) < 2 &&
-			fabs(AngleDiff(result.ideal_viewangles[1], ms->viewangles[1])) < 2)
+			Q_fabs(AngleDiff(result.ideal_viewangles[0], ms->viewangles[0])) < 2 &&
+			Q_fabs(AngleDiff(result.ideal_viewangles[1], ms->viewangles[1])) < 2)
 		{
 #ifdef DEBUG_GRAPPLE
 			botimport.Print(PRT_MESSAGE, "BotTravel_Grapple: activating grapple\n");
@@ -2724,8 +2724,8 @@ bot_moveresult_t BotTravel_RocketJump(bot_movestate_t *ms, aas_reachability_t *r
 	result.ideal_viewangles[PITCH] = 90;
 	//
 	if (dist < 5 &&
-			fabs(AngleDiff(result.ideal_viewangles[0], ms->viewangles[0])) < 5 &&
-			fabs(AngleDiff(result.ideal_viewangles[1], ms->viewangles[1])) < 5)
+			Q_fabs(AngleDiff(result.ideal_viewangles[0], ms->viewangles[0])) < 5 &&
+			Q_fabs(AngleDiff(result.ideal_viewangles[1], ms->viewangles[1])) < 5)
 	{
 		//botimport.Print(PRT_MESSAGE, "between jump start and run start point\n");
 		hordir[0] = reach->end[0] - ms->origin[0];
@@ -2784,8 +2784,8 @@ bot_moveresult_t BotTravel_BFGJump(bot_movestate_t *ms, aas_reachability_t *reac
 	dist = VectorNormalize(hordir);
 	//
 	if (dist < 5 &&
-			fabs(AngleDiff(result.ideal_viewangles[0], ms->viewangles[0])) < 5 &&
-			fabs(AngleDiff(result.ideal_viewangles[1], ms->viewangles[1])) < 5)
+			Q_fabs(AngleDiff(result.ideal_viewangles[0], ms->viewangles[0])) < 5 &&
+			Q_fabs(AngleDiff(result.ideal_viewangles[1], ms->viewangles[1])) < 5)
 	{
 		//botimport.Print(PRT_MESSAGE, "between jump start and run start point\n");
 		hordir[0] = reach->end[0] - ms->origin[0];

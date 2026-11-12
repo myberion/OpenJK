@@ -1007,7 +1007,7 @@ qboolean G_ParseAnimationFile(int glaIndex, const char *skeletonName, int fileIn
 			assert(animations[animNum].frameLerp >= 1);
 		}
 
-/*		lerp = ceil(1000.0f / Q_fabs(fps));
+/*		lerp = ceil(1000.0f / Q_fabsf(fps));
 		assert(lerp > -32767 && lerp < 32767);
 		animations[animNum].initialLerp = lerp;
 */

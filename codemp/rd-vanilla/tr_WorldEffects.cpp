@@ -82,16 +82,16 @@ extern void			SetViewportAndScissor( void );
 
 inline void VectorFloor(vec3_t in)
 {
-	in[0] = floorf(in[0]);
-	in[1] = floorf(in[1]);
-	in[2] = floorf(in[2]);
+	in[0] = Q_floorf(in[0]);
+	in[1] = Q_floorf(in[1]);
+	in[2] = Q_floorf(in[2]);
 }
 
 inline void VectorCeil(vec3_t in)
 {
-	in[0] = ceilf(in[0]);
-	in[1] = ceilf(in[1]);
-	in[2] = ceilf(in[2]);
+	in[0] = Q_ceilf(in[0]);
+	in[1] = Q_ceilf(in[1]);
+	in[2] = Q_ceilf(in[2]);
 }
 
 inline float	FloatRand(void)
@@ -164,34 +164,34 @@ struct	SVecRange
 		if (V[0]<mMins[0])
 		{
 			const float d = mMins[0]-V[0];
-			V[0] = mMaxs[0]-fmod(d, mMaxs[0]-mMins[0]);
+			V[0] = mMaxs[0]-Q_fmod(d, mMaxs[0]-mMins[0]);
 		}
 		if (V[0]>mMaxs[0])
 		{
 			const float d = V[0]-mMaxs[0];
-			V[0] = mMins[0]+fmod(d, mMaxs[0]-mMins[0]);
+			V[0] = mMins[0]+Q_fmod(d, mMaxs[0]-mMins[0]);
 		}
 
 		if (V[1]<mMins[1])
 		{
 			const float d = mMins[1]-V[1];
-			V[1] = mMaxs[1]-fmod(d, mMaxs[1]-mMins[1]);
+			V[1] = mMaxs[1]-Q_fmod(d, mMaxs[1]-mMins[1]);
 		}
 		if (V[1]>mMaxs[1])
 		{
 			const float d = V[1]-mMaxs[1];
-			V[1] = mMins[1]+fmod(d, mMaxs[1]-mMins[1]);
+			V[1] = mMins[1]+Q_fmod(d, mMaxs[1]-mMins[1]);
 		}
 
 		if (V[2]<mMins[2])
 		{
 			const float d = mMins[2]-V[2];
-			V[2] = mMaxs[2]-fmod(d, mMaxs[2]-mMins[2]);
+			V[2] = mMaxs[2]-Q_fmod(d, mMaxs[2]-mMins[2]);
 		}
 		if (V[2]>mMaxs[2])
 		{
 			const float d = V[2]-mMaxs[2];
-			V[2] = mMins[2]+fmod(d, mMaxs[2]-mMins[2]);
+			V[2] = mMins[2]+Q_fmod(d, mMaxs[2]-mMins[2]);
 		}
 	}
 
@@ -978,13 +978,13 @@ public:
 				mRotationChangeNext--;
 
 				float	RotationDeltaDifference = (mRotationDeltaTarget - mRotationDelta);
-				if (fabsf(RotationDeltaDifference)>0.01)
+				if (Q_fabsf(RotationDeltaDifference)>0.01)
 				{
 					mRotationDelta += RotationDeltaDifference;		// Blend To New Delta
 				}
                 mRotationCurrent += (mRotationDelta * mSecondsElapsed);
-				float s = sinf(mRotationCurrent);
-				float c = cosf(mRotationCurrent);
+				float s = Q_sinf(mRotationCurrent);
+				float c = Q_cosf(mRotationCurrent);
 
 				CVec3	TempCamLeft(mCameraLeft);
 
@@ -1451,7 +1451,7 @@ qboolean WE_ParseVector( const char **text, int count, float *v ) {
 			ri.Printf (PRINT_WARNING, "WARNING: missing vector element in weather effect\n" );
 			return qfalse;
 		}
-		v[i] = atof( token );
+		v[i] = Q_atof( token );
 	}
 
 	token = COM_ParseExt( text, qfalse );

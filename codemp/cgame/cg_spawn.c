@@ -106,7 +106,7 @@ qboolean CG_SpawnFloat( const char *key, const char *defaultString, float *out )
 	qboolean present;
 
 	present = CG_SpawnString( key, defaultString, &s );
-	*out	= atof( s );
+	*out	= Q_atof( s );
 	return present;
 }
 qboolean CG_SpawnInt( const char *key, const char *defaultString, int *out ) {
@@ -139,7 +139,7 @@ qboolean CG_SpawnVector( const char *key, const char *defaultString, float *out 
 	qboolean present;
 
 	present = CG_SpawnString( key, defaultString, &s );
-	if ( sscanf( s, "%f %f %f", &out[0], &out[1], &out[2] ) != 3 ) {
+	if ( Q_ScanFloats( s, out, 3 ) != 3 ) {
 		trap->Print( "CG_SpawnVector: Failed sscanf on %s (default: %s)\n", key, defaultString );
 		VectorClear( out );
 		return qfalse;

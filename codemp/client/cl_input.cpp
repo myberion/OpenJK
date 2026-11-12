@@ -1097,10 +1097,10 @@ void CL_MouseMove( usercmd_t *cmd ) {
 			// cl_mouseAccelOffset is the rate for which the acceleration will have doubled the non accelerated amplification
 			// NOTE: decouple the config cvars for independent acceleration setup along X and Y?
 
-			rate[0] = fabs( mx ) / speed;
-			rate[1] = fabs( my ) / speed;
-			power[0] = powf( rate[0] / cl_mouseAccelOffset->value, cl_mouseAccel->value );
-			power[1] = powf( rate[1] / cl_mouseAccelOffset->value, cl_mouseAccel->value );
+			rate[0] = Q_fabs( mx ) / speed;
+			rate[1] = Q_fabs( my ) / speed;
+			power[0] = Q_powf( rate[0] / cl_mouseAccelOffset->value, cl_mouseAccel->value );
+			power[1] = Q_powf( rate[1] / cl_mouseAccelOffset->value, cl_mouseAccel->value );
 
 			if ( cl_mYawOverride || cl_mPitchOverride )
 			{//FIXME: different people have different speed mouses,
@@ -1279,7 +1279,7 @@ void CL_FinishMove( usercmd_t *cmd ) {
 		//yawDelta *= (4.0f*pVeh->m_fTimeModifier);
 		cl_sendAngles[ROLL] -= yawDelta;
 
-		float nRoll = fabs(cl_sendAngles[ROLL]);
+		float nRoll = Q_fabs(cl_sendAngles[ROLL]);
 
 		pitchDelta = AngleSubtract(cl.viewangles[PITCH],cl_lastViewAngles[PITCH]);
 		//pitchDelta *= (2.0f*pVeh->m_fTimeModifier);

@@ -866,7 +866,7 @@ void CFxScheduler::PlayEffect( int id, vec3_t origin, matrix3_t axis, const int 
 		}
 		// Only use scalability if there is a range
 		// Temp fix until I have time to reweight all the scalability files
-		if(fabsf(prim->mSpawnCount.GetMax() - prim->mSpawnCount.GetMin()) > 1.0f)
+		if(Q_fabsf(prim->mSpawnCount.GetMax() - prim->mSpawnCount.GetMin()) > 1.0f)
 		{
 			count = Round(prim->mSpawnCount.GetVal() * fxscale);
 		}
@@ -1270,14 +1270,15 @@ void CFxScheduler::CreateEffect( CPrimitiveTemplate *fx, const vec3_t origin, ma
 		float x, y;
 		float width, height;
 
-		x = DEG2RAD( flrand(0.0f, 360.0f) );
-		y = DEG2RAD( flrand(0.0f, 180.0f) );
+		// half turns
+		x = flrand(0.0f, 360.0f) / 180.0f;
+		y = flrand(0.0f, 180.0f) / 180.0f;
 
 		width = fx->mRadius.GetVal();
 		height = fx->mHeight.GetVal();
 
 		// calculate point on ellipse
-		VectorSet( temp, sin(x) * width * sin(y), cos(x) * width * sin(y), cos(y) * height ); // sinx * siny, cosx * siny, cosy
+		VectorSet( temp, Q_sinpif(x) * width * Q_sinpif(y), Q_cospif(x) * width * Q_sinpif(y), Q_cospif(y) * height ); // sinx * siny, cosx * siny, cosy
 		VectorAdd( org, temp, org );
 
 		if ( fx->mSpawnFlags & FX_AXIS_FROM_SPHERE )

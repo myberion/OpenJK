@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include "q_platform.h"
+#include "q_libm.h"
 
 
 #if defined(__cplusplus)
@@ -88,7 +89,7 @@ float erandom( float mean );
 #define DEG2RAD( a ) ( ( (a) * PI_DIV_180 ) )
 #define RAD2DEG( a ) ( ( (a) * INV_PI_DIV_180 ) )
 
-#define SQRTFAST( x ) ( (x) * Q_rsqrt( x ) )
+#define SQRTFAST( x ) ( (x) * Q_rsqrtf( x ) )
 
 #define Q_min(x,y) ((x)<(y)?(x):(y))
 #define Q_max(x,y) ((x)>(y)?(x):(y))
@@ -112,14 +113,8 @@ float Com_Clamp( float min, float max, float value );
 int Com_AbsClampi( int min, int max, int value );
 float Com_AbsClamp( float min, float max, float value );
 
-float Q_rsqrt( float number );
-float Q_fabs( float f );
 
-float Q_acos(float c);
-float Q_asin(float c);
-float Q_powf ( float x, int y );
-qboolean Q_isnan (float f);
-int Q_log2( int val );
+int Q_ilog2( int val );
 
 float LerpAngle(float from, float to, float frac);
 float AngleSubtract( float a1, float a2 );

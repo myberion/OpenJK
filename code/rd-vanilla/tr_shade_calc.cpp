@@ -1079,7 +1079,7 @@ void RB_CalcSpecularAlpha( unsigned char *alphas ) {
 		reflected[2] = normal[2]*d - lightDir[2];
 
 		VectorSubtract (backEnd.ori.viewOrigin, v, viewer);
-		ilength = Q_rsqrt( DotProduct( viewer, viewer ) );
+		ilength = Q_rsqrtf( DotProduct( viewer, viewer ) );
 		l = DotProduct (reflected, viewer);
 		l *= ilength;
 

@@ -457,10 +457,10 @@ int CM_PlaneEqual(patchPlane_t *p, float plane[4], int *flipped) {
 	float invplane[4];
 
 	if (
-	   Q_fabs(p->plane[0] - plane[0]) < NORMAL_EPSILON
-	&& Q_fabs(p->plane[1] - plane[1]) < NORMAL_EPSILON
-	&& Q_fabs(p->plane[2] - plane[2]) < NORMAL_EPSILON
-	&& Q_fabs(p->plane[3] - plane[3]) < DIST_EPSILON )
+	   Q_fabsf(p->plane[0] - plane[0]) < NORMAL_EPSILON
+	&& Q_fabsf(p->plane[1] - plane[1]) < NORMAL_EPSILON
+	&& Q_fabsf(p->plane[2] - plane[2]) < NORMAL_EPSILON
+	&& Q_fabsf(p->plane[3] - plane[3]) < DIST_EPSILON )
 	{
 		*flipped = qfalse;
 		return qtrue;
@@ -470,10 +470,10 @@ int CM_PlaneEqual(patchPlane_t *p, float plane[4], int *flipped) {
 	invplane[3] = -plane[3];
 
 	if (
-	   Q_fabs(p->plane[0] - invplane[0]) < NORMAL_EPSILON
-	&& Q_fabs(p->plane[1] - invplane[1]) < NORMAL_EPSILON
-	&& Q_fabs(p->plane[2] - invplane[2]) < NORMAL_EPSILON
-	&& Q_fabs(p->plane[3] - invplane[3]) < DIST_EPSILON )
+	   Q_fabsf(p->plane[0] - invplane[0]) < NORMAL_EPSILON
+	&& Q_fabsf(p->plane[1] - invplane[1]) < NORMAL_EPSILON
+	&& Q_fabsf(p->plane[2] - invplane[2]) < NORMAL_EPSILON
+	&& Q_fabsf(p->plane[3] - invplane[3]) < DIST_EPSILON )
 	{
 		*flipped = qtrue;
 		return qtrue;
@@ -487,13 +487,13 @@ void CM_SnapVector(vec3_t normal) {
 
 	for (i=0 ; i<3 ; i++)
 	{
-		if ( Q_fabs(normal[i] - 1) < NORMAL_EPSILON )
+		if ( Q_fabsf(normal[i] - 1) < NORMAL_EPSILON )
 		{
 			VectorClear (normal);
 			normal[i] = 1;
 			break;
 		}
-		if ( Q_fabs(normal[i] - -1) < NORMAL_EPSILON )
+		if ( Q_fabsf(normal[i] - -1) < NORMAL_EPSILON )
 		{
 			VectorClear (normal);
 			normal[i] = -1;

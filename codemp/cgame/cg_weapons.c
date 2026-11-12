@@ -263,7 +263,7 @@ static void CG_CalculateWeaponPosition( vec3_t origin, vec3_t angles ) {
 	if ( cg_weaponBob.value ) {
 		// idle drift
 		scale = cg.xyspeed + 40;
-		fracsin = sin( cg.time * 0.001 );
+		fracsin = Q_sin( cg.time * 0.001 );
 		angles[ROLL] += scale * fracsin * 0.01;
 		angles[YAW] += scale * fracsin * 0.01;
 		angles[PITCH] += scale * fracsin * 0.01;
@@ -848,8 +848,8 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 
 	if ( cg_fovViewmodel.integer )
 	{
-		float fracDistFOV = tanf( cg_fov.value * ( M_PI/180 ) * 0.5f );
-		float fracWeapFOV = ( 1.0f / fracDistFOV ) * tanf( cg_fovViewmodel.value * ( M_PI/180 ) * 0.5f );
+		float fracDistFOV = Q_tanpif( cg_fov.value / 360.0f );
+		float fracWeapFOV = ( 1.0f / fracDistFOV ) * Q_tanpif( cg_fovViewmodel.value / 360.0f );
 		VectorScale( hand.axis[0], fracWeapFOV, hand.axis[0] );
 	}
 
@@ -876,9 +876,9 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 		}
 
 		trap->G2API_GetBoneFrame(cent->ghoul2, "lower_lumbar", cg.time, &currentFrame, cgs.gameModels, 0);
-		hand.frame = CG_MapTorsoToWeaponFrame( ci, ceil( currentFrame ), ps->torsoAnim );
-		hand.oldframe = CG_MapTorsoToWeaponFrame( ci, floor( currentFrame ), ps->torsoAnim );
-		hand.backlerp = 1.0f - (currentFrame-floor(currentFrame));
+		hand.frame = CG_MapTorsoToWeaponFrame( ci, Q_ceil( currentFrame ), ps->torsoAnim );
+		hand.oldframe = CG_MapTorsoToWeaponFrame( ci, Q_floor( currentFrame ), ps->torsoAnim );
+		hand.backlerp = 1.0f - (currentFrame-Q_floor(currentFrame));
 
 		// Handle the fringe situation where oldframe is invalid
 		if ( hand.frame == -1 )

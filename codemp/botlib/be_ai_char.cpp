@@ -372,7 +372,7 @@ int BotFindCachedCharacter(char *charfile, float skill)
 	{
 		if ( !botcharacters[handle] ) continue;
 		if ( strcmp( botcharacters[handle]->filename, charfile ) == 0 &&
-			(skill < 0 || fabs(botcharacters[handle]->skill - skill) < 0.01) )
+			(skill < 0 || Q_fabs(botcharacters[handle]->skill - skill) < 0.01) )
 		{
 			return handle;
 		} //end if

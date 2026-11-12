@@ -205,7 +205,10 @@ bool CPrimitiveTemplate::ParseFloat( const char *val, float *min, float *max )
 	}
 
 	// attempt to read out the values
-	int v = sscanf( val, "%f %f", min, max );
+	float values[2];
+	int v = Q_ScanFloats( val, values, 2 );
+	if ( v >= 1 ) *min = values[0];
+	if ( v >= 2 ) *max = values[1];
 
 	if ( v == 0 )
 	{ // nothing was there, failure
@@ -241,8 +244,12 @@ bool CPrimitiveTemplate::ParseVector( const char *val, vec3_t min, vec3_t max )
 		return false;
 	}
 
-	// attempt to read out our values
-	int v = sscanf( val, "%f %f %f   %f %f %f", &min[0], &min[1], &min[2], &max[0], &max[1], &max[2] );
+	// attempt to read out our values (only those read are stored, as sscanf does)
+	float values[6];
+	int v = Q_ScanFloats( val, values, 6 );
+	for ( int i = 0; i < v; ++i ) {
+		if ( i < 3 ) min[i] = values[i]; else max[i - 3] = values[i];
+	}
 
 	// Check for completeness
 	if ( v < 3 || v == 4 || v == 5 )

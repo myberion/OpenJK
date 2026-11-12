@@ -236,8 +236,8 @@ namespace
 				};
 
 				vec2_t rayOrigin = {
-					tr.world->bmodels[0].bounds[0][0] + (floorf((mins[0] - tr.world->bmodels[0].bounds[0][0]) / stepSize[0]) + 0.5f) * stepSize[0],
-					tr.world->bmodels[0].bounds[0][1] + (floorf((mins[1] - tr.world->bmodels[0].bounds[0][1]) / stepSize[1]) + 0.5f) * stepSize[1]
+					tr.world->bmodels[0].bounds[0][0] + (Q_floorf((mins[0] - tr.world->bmodels[0].bounds[0][0]) / stepSize[0]) + 0.5f) * stepSize[0],
+					tr.world->bmodels[0].bounds[0][1] + (Q_floorf((mins[1] - tr.world->bmodels[0].bounds[0][1]) / stepSize[1]) + 0.5f) * stepSize[1]
 				};
 
 				for (int y = 0; y < (int)numSteps[1]; y++)
@@ -522,7 +522,7 @@ qboolean WE_ParseVector(const char **text, int count, float *v) {
 			ri.Printf(PRINT_WARNING, "WARNING: missing vector element in weather effect\n");
 			return qfalse;
 		}
-		v[i] = atof(token);
+		v[i] = Q_atof(token);
 	}
 
 	token = COM_ParseExt(text, qfalse);
@@ -1122,14 +1122,14 @@ void RB_SurfaceWeather( srfWeather_t *surf )
 
 	RB_EndSurface();
 
-	const float numMinZonesX = std::floor((abs(tr.world->bmodels[0].bounds[0][0]) / CHUNK_EXTENDS) + 0.5f);
-	const float numMinZonesY = std::floor((abs(tr.world->bmodels[0].bounds[0][1]) / CHUNK_EXTENDS) + 0.5f);
+	const float numMinZonesX = Q_floor((abs(tr.world->bmodels[0].bounds[0][0]) / CHUNK_EXTENDS) + 0.5f);
+	const float numMinZonesY = Q_floor((abs(tr.world->bmodels[0].bounds[0][1]) / CHUNK_EXTENDS) + 0.5f);
 	vec3_t viewOrigin;
 	VectorCopy(backEnd.viewParms.ori.origin, viewOrigin);
 	float centerZoneOffsetX =
-		std::floor((viewOrigin[0] / CHUNK_EXTENDS) + 0.5f);
+		Q_floor((viewOrigin[0] / CHUNK_EXTENDS) + 0.5f);
 	float centerZoneOffsetY =
-		std::floor((viewOrigin[1] / CHUNK_EXTENDS) + 0.5f);
+		Q_floor((viewOrigin[1] / CHUNK_EXTENDS) + 0.5f);
 
 	vec2_t zoneOffsets[9];
 	GLint  zoneMapping[9];

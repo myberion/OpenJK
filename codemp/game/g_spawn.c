@@ -47,7 +47,7 @@ qboolean	G_SpawnFloat( const char *key, const char *defaultString, float *out ) 
 	qboolean	present;
 
 	present = G_SpawnString( key, defaultString, &s );
-	*out = atof( s );
+	*out = Q_atof( s );
 	return present;
 }
 
@@ -65,7 +65,7 @@ qboolean	G_SpawnVector( const char *key, const char *defaultString, float *out )
 	qboolean	present;
 
 	present = G_SpawnString( key, defaultString, &s );
-	if ( sscanf( s, "%f %f %f", &out[0], &out[1], &out[2] ) != 3 ) {
+	if ( Q_ScanFloats( s, out, 3 ) != 3 ) {
 		trap->Print( "G_SpawnVector: Failed sscanf on %s (default: %s)\n", key, defaultString );
 		VectorClear( out );
 		return qfalse;
@@ -826,7 +826,7 @@ void G_ParseField( const char *key, const char *value, gentity_t *ent )
 			*(char **)(b+f->ofs) = G_NewString (value);
 			break;
 		case F_VECTOR:
-			if ( sscanf( value, "%f %f %f", &vec[0], &vec[1], &vec[2] ) == 3 ) {
+			if ( Q_ScanFloats( value, vec, 3 ) == 3 ) {
 				((float *)(b+f->ofs))[0] = vec[0];
 				((float *)(b+f->ofs))[1] = vec[1];
 				((float *)(b+f->ofs))[2] = vec[2];
@@ -840,10 +840,10 @@ void G_ParseField( const char *key, const char *value, gentity_t *ent )
 			*(int *)(b+f->ofs) = atoi(value);
 			break;
 		case F_FLOAT:
-			*(float *)(b+f->ofs) = atof(value);
+			*(float *)(b+f->ofs) = Q_atof(value);
 			break;
 		case F_ANGLEHACK:
-			v = atof(value);
+			v = Q_atof(value);
 			((float *)(b+f->ofs))[0] = 0;
 			((float *)(b+f->ofs))[1] = v;
 			((float *)(b+f->ofs))[2] = 0;
@@ -1014,7 +1014,7 @@ static void HandleEntityAdjustment(void)
 	G_SpawnString("origin", NOVALUE, &value);
 	if (Q_stricmp(value, NOVALUE) != 0)
 	{
-		if ( sscanf( value, "%f %f %f", &origin[0], &origin[1], &origin[2] ) != 3 ) {
+		if ( Q_ScanFloats( value, origin, 3 ) != 3 ) {
 			trap->Print( "HandleEntityAdjustment: failed sscanf on 'origin' (%s)\n", value );
 			VectorClear( origin );
 		}
@@ -1024,9 +1024,9 @@ static void HandleEntityAdjustment(void)
 		origin[0] = origin[1] = origin[2] = 0.0;
 	}
 
-	rotation = DEG2RAD(level.mRotationAdjust);
-	newOrigin[0] = origin[0]*cos(rotation) - origin[1]*sin(rotation);
-	newOrigin[1] = origin[0]*sin(rotation) + origin[1]*cos(rotation);
+	rotation = level.mRotationAdjust / 180.0f; // half turns
+	newOrigin[0] = origin[0]*(double)Q_cospif(rotation) - origin[1]*(double)Q_sinpif(rotation);
+	newOrigin[1] = origin[0]*(double)Q_sinpif(rotation) + origin[1]*(double)Q_cospif(rotation);
 	newOrigin[2] = origin[2];
 	VectorAdd(newOrigin, level.mOriginAdjust, newOrigin);
 	// damn VMs don't handle outputing a float that is compatible with sscanf in all cases
@@ -1036,12 +1036,12 @@ static void HandleEntityAdjustment(void)
 	G_SpawnString("angles", NOVALUE, &value);
 	if (Q_stricmp(value, NOVALUE) != 0)
 	{
-		if ( sscanf( value, "%f %f %f", &angles[0], &angles[1], &angles[2] ) != 3 ) {
+		if ( Q_ScanFloats( value, angles, 3 ) != 3 ) {
 			trap->Print( "HandleEntityAdjustment: failed sscanf on 'angles' (%s)\n", value );
 			VectorClear( angles );
 		}
 
-		angles[YAW] = fmod(angles[YAW] + level.mRotationAdjust, 360.0f);
+		angles[YAW] = Q_fmod(angles[YAW] + level.mRotationAdjust, 360.0f);
 		// damn VMs don't handle outputing a float that is compatible with sscanf in all cases
 		Com_sprintf(temp, sizeof( temp ), "%0.0f %0.0f %0.0f", angles[0], angles[1], angles[2]);
 		AddSpawnField("angles", temp);
@@ -1051,13 +1051,13 @@ static void HandleEntityAdjustment(void)
 		G_SpawnString("angle", NOVALUE, &value);
 		if (Q_stricmp(value, NOVALUE) != 0)
 		{
-			angles[YAW] = atof( value );
+			angles[YAW] = Q_atof( value );
 		}
 		else
 		{
 			angles[YAW] = 0.0;
 		}
-		angles[YAW] = fmod(angles[YAW] + level.mRotationAdjust, 360.0f);
+		angles[YAW] = Q_fmod(angles[YAW] + level.mRotationAdjust, 360.0f);
 		Com_sprintf(temp, sizeof( temp ), "%0.0f", angles[YAW]);
 		AddSpawnField("angle", temp);
 	}
@@ -1067,7 +1067,7 @@ static void HandleEntityAdjustment(void)
 	G_SpawnString("direction", NOVALUE, &value);
 	if (Q_stricmp(value, NOVALUE) != 0)
 	{
-		if ( sscanf( value, "%f %f %f", &angles[0], &angles[1], &angles[2] ) != 3 ) {
+		if ( Q_ScanFloats( value, angles, 3 ) != 3 ) {
 			trap->Print( "HandleEntityAdjustment: failed sscanf on 'direction' (%s)\n", value );
 			VectorClear( angles );
 		}
@@ -1076,7 +1076,7 @@ static void HandleEntityAdjustment(void)
 	{
 		angles[0] = angles[1] = angles[2] = 0.0;
 	}
-	angles[YAW] = fmod(angles[YAW] + level.mRotationAdjust, 360.0f);
+	angles[YAW] = Q_fmod(angles[YAW] + level.mRotationAdjust, 360.0f);
 	Com_sprintf(temp, sizeof( temp ), "%0.0f %0.0f %0.0f", angles[0], angles[1], angles[2]);
 	AddSpawnField("direction", temp);
 

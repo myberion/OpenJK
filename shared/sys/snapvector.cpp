@@ -21,7 +21,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 ===========================================================================
 */
 
-#include <math.h>
+#include "qcommon/q_libm.h"
 #if _MSC_VER
 # include <float.h>
 # pragma fenv_access (on)
@@ -42,9 +42,9 @@ void Sys_SnapVector(float *v)
 	_controlfp_s(&oldcontrol, 0, 0);
 	_controlfp_s(&newcontrol, _RC_NEAR, _MCW_RC);
 
-	v[0] = (float)lrintf(v[0]);
-	v[1] = (float)lrintf(v[1]);
-	v[2] = (float)lrintf(v[2]);
+	v[0] = (float)Q_lrintf(v[0]);
+	v[1] = (float)Q_lrintf(v[1]);
+	v[2] = (float)Q_lrintf(v[2]);
 
 	_controlfp_s(&newcontrol, oldcontrol, _MCW_RC);
 #else
@@ -52,9 +52,9 @@ void Sys_SnapVector(float *v)
 	int oldround = fegetround();
 	fesetround(FE_TONEAREST);
 
-	v[0] = (float)lrintf(v[0]);
-	v[1] = (float)lrintf(v[1]);
-	v[2] = (float)lrintf(v[2]);
+	v[0] = (float)Q_lrintf(v[0]);
+	v[1] = (float)Q_lrintf(v[1]);
+	v[2] = (float)Q_lrintf(v[2]);
 
 	fesetround(oldround);
 #endif

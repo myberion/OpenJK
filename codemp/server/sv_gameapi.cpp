@@ -1771,16 +1771,16 @@ intptr_t SV_GameSystemCalls( intptr_t *args ) {
 		return args[1];
 
 	case TRAP_SIN:
-		return FloatAsInt( sin( VMF(1) ) );
+		return FloatAsInt( Q_sin( VMF(1) ) );
 
 	case TRAP_COS:
-		return FloatAsInt( cos( VMF(1) ) );
+		return FloatAsInt( Q_cos( VMF(1) ) );
 
 	case TRAP_ATAN2:
-		return FloatAsInt( atan2( VMF(1), VMF(2) ) );
+		return FloatAsInt( Q_atan2( VMF(1), VMF(2) ) );
 
 	case TRAP_SQRT:
-		return FloatAsInt( sqrt( VMF(1) ) );
+		return FloatAsInt( Q_sqrt( VMF(1) ) );
 
 	case TRAP_MATRIXMULTIPLY:
 		MatrixMultiply( (vec3_t *)VMA(1), (vec3_t *)VMA(2), (vec3_t *)VMA(3) );
@@ -1795,10 +1795,10 @@ intptr_t SV_GameSystemCalls( intptr_t *args ) {
 		return 0;
 
 	case TRAP_FLOOR:
-		return FloatAsInt( floor( VMF(1) ) );
+		return FloatAsInt( Q_floor( VMF(1) ) );
 
 	case TRAP_CEIL:
-		return FloatAsInt( ceil( VMF(1) ) );
+		return FloatAsInt( Q_ceil( VMF(1) ) );
 
 	case TRAP_TESTPRINTINT:
 		return 0;
@@ -1807,10 +1807,10 @@ intptr_t SV_GameSystemCalls( intptr_t *args ) {
 		return 0;
 
 	case TRAP_ACOS:
-		return FloatAsInt( Q_acos( VMF(1) ) );
+		return FloatAsInt( Q_acosf( VMF(1) ) );
 
 	case TRAP_ASIN:
-		return FloatAsInt( Q_asin( VMF(1) ) );
+		return FloatAsInt( Q_asinf( VMF(1) ) );
 
 	case G_PRINT:
 		Com_Printf( "%s", VMA(1) );

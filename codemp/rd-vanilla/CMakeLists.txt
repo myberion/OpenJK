@@ -165,4 +165,4 @@ set_property(TARGET ${MPVanillaRenderer} APPEND PROPERTY COMPILE_OPTIONS ${OPENJ
 
 set_target_properties(${MPVanillaRenderer} PROPERTIES INCLUDE_DIRECTORIES "${MPVanillaRendererIncludeDirectories}")
 set_target_properties(${MPVanillaRenderer} PROPERTIES PROJECT_LABEL "MP Vanilla Renderer")
-target_link_libraries(${MPVanillaRenderer} ${MPVanillaRendererLibraries})
+target_link_libraries(${MPVanillaRenderer} ${MPVanillaRendererLibraries} qlibm)

@@ -2065,7 +2065,7 @@ qboolean G_VoteNextmap( gentity_t *ent, int numArgs, const char *arg1, const cha
 }
 
 qboolean G_VoteTimelimit( gentity_t *ent, int numArgs, const char *arg1, const char *arg2 ) {
-	float tl = Com_Clamp( 0.0f, 35790.0f, atof( arg2 ) );
+	float tl = Com_Clamp( 0.0f, 35790.0f, Q_atof( arg2 ) );
 	if ( Q_isintegral( tl ) )
 		Com_sprintf( level.voteString, sizeof( level.voteString ), "%s %i", arg1, (int)tl );
 	else
@@ -2512,11 +2512,11 @@ void Cmd_SetViewpos_f( gentity_t *ent ) {
 	VectorClear( angles );
 	for ( i = 0 ; i < 3 ; i++ ) {
 		trap->Argv( i + 1, buffer, sizeof( buffer ) );
-		origin[i] = atof( buffer );
+		origin[i] = Q_atof( buffer );
 	}
 
 	trap->Argv( 4, buffer, sizeof( buffer ) );
-	angles[YAW] = atof( buffer );
+	angles[YAW] = Q_atof( buffer );
 
 	TeleportPlayer( ent, origin, angles );
 }

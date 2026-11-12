@@ -753,7 +753,7 @@ void SP_misc_skyportal (gentity_t *ent)
 	float	fov_x;
 
 	G_SpawnString ("fov", "80", &fov);
-	fov_x = atof (fov);
+	fov_x = Q_atof (fov);
 
 	isfog += G_SpawnVector ("fogcolor", "0 0 0", fogv);
 	isfog += G_SpawnInt ("fognear", "0", &fogn);
@@ -1207,7 +1207,7 @@ void InitShooter( gentity_t *ent, int weapon ) {
 	if ( !ent->random ) {
 		ent->random = 1.0;
 	}
-	ent->random = sin( M_PI * ent->random / 180 );
+	ent->random = Q_sinpif( ent->random / 180.0f );
 	// target might be a moving object, so we can't set movedir for it
 	if ( ent->target ) {
 		ent->think = InitShooter_Finish;

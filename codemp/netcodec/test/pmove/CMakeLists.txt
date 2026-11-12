@@ -16,9 +16,14 @@ set(netcodec_pmove_sources
 	"${netcodec_ojk}/codemp/game/bg_weapons.c"
 	"${netcodec_ojk}/codemp/qcommon/q_shared.c"
 	"${netcodec_ojk}/shared/qcommon/q_math.c"
+	"${netcodec_ojk}/shared/qcommon/q_libm.cpp"
 	"${netcodec_ojk}/shared/qcommon/q_string.c"
 	"${netcodec_ojk}/shared/qcommon/q_color.c"
 	pmove_det.c)
+# the math functions' entry point on LLVM libc, as OpenJK's qlibm target builds it (top-level CMakeLists.txt)
+set_source_files_properties("${netcodec_ojk}/shared/qcommon/q_libm.cpp" PROPERTIES
+	INCLUDE_DIRECTORIES "${netcodec_ojk}/lib/llvm-libc"
+	COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/std:c++17,-std=c++17>")
 
 foreach(side game cgame)
 	set(t netcodec_pmove_${side})
@@ -36,7 +41,8 @@ foreach(side game cgame)
 		target_compile_definitions(${t} PRIVATE NOMINMAX _CRT_NONSTDC_NO_DEPRECATE)
 	endif()
 	target_include_directories(${t} PRIVATE "${netcodec_ojk}/codemp" "${netcodec_ojk}/shared" include)
-	# OpenJK's settings for C (top-level CMakeLists.txt): SSE2 math on 32-bit x86, signed char, -O3 in Release
+	# OpenJK's settings for C (top-level CMakeLists.txt): SSE2 math on 32-bit x86, signed char, no contraction, -O3 in
+	# Release
 	if(MSVC)
 		target_compile_options(${t} PRIVATE /W0)   # /W0, not /w: CMake maps /W0 to the project's warning level (/w comes after MSBuild's default /W1: D9025)
 		if(CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -44,7 +50,7 @@ foreach(side game cgame)
 		endif()
 		target_compile_definitions(${t} PRIVATE _CRT_SECURE_NO_WARNINGS)
 	else()
-		target_compile_options(${t} PRIVATE -w -fsigned-char $<$<CONFIG:Release>:-O3>)
+		target_compile_options(${t} PRIVATE -w -fsigned-char -ffp-contract=off $<$<CONFIG:Release>:-O3>)
 		if(CMAKE_SIZEOF_VOID_P EQUAL 4)
 			target_compile_options(${t} PRIVATE -msse2 -mfpmath=sse -mstackrealign)
 		endif()

@@ -1573,7 +1573,7 @@ static void RB_IterateStagesGeneric( shaderCommands_t *input, const VertexArrays
 			vec4_t color;
 			color[0] =
 			color[1] =
-			color[2] = powf(2.0f, r_cameraExposure->value);
+			color[2] = Q_powf(2.0f, r_cameraExposure->value);
 			color[3] = 10.0f;
 			uniformDataWriter.SetUniformVec4(UNIFORM_COLOR, color);
 			uniformDataWriter.SetUniformVec2(UNIFORM_AUTOEXPOSUREMINMAX, tr.refdef.autoExposureMinMax);

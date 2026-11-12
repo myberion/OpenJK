@@ -189,3 +189,4 @@ set_target_properties(${MPCGame} PROPERTIES PROJECT_LABEL "MP Client Game Librar
 if(MPCGameLibraries)
 	target_link_libraries(${MPCGame} ${MPCGameLibraries})
 endif(MPCGameLibraries)
+target_link_libraries(${MPCGame} qlibm)

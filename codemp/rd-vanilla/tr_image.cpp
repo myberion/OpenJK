@@ -1185,7 +1185,7 @@ void R_InitFogTable( void ) {
 	exp = 0.5;
 
 	for ( i = 0 ; i < FOG_TABLE_SIZE ; i++ ) {
-		d = pow ( (float)i/(FOG_TABLE_SIZE-1), exp );
+		d = Q_pow ( (float)i/(FOG_TABLE_SIZE-1), exp );
 
 		tr.fogTable[i] = d;
 	}
@@ -1452,7 +1452,7 @@ void R_SetColorMappings( void ) {
 			if ( g == 1 ) {
 				inf = i;
 			} else {
-				inf = 255 * pow ( i/255.0f, 1.0f / g ) + 0.5f;
+				inf = 255 * Q_pow ( i/255.0f, 1.0f / g ) + 0.5f;
 			}
 			inf <<= shift;
 			if (inf < 0) {
@@ -1496,7 +1496,7 @@ void R_SetGammaCorrectionLUT()
 			}
 			else
 			{
-				inf = (int)(255.0f * pow((float)i / 63.0f, 1.0f / g) + 0.5f);
+				inf = (int)(255.0f * Q_pow((float)i / 63.0f, 1.0f / g) + 0.5f);
 			}
 
 			gammaCorrected[i] = Com_Clampi(0, 255, inf << shift);

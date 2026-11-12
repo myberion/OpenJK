@@ -185,10 +185,10 @@ void NormalToLatLong( const vec3_t normal, byte bytes[2] )
 	{
 		int	a, b;
 
-		a = (int)(RAD2DEG( (float)atan2( normal[1], normal[0] ) ) * (255.0f / 360.0f ));
+		a = (int)( Q_atan2degf( normal[1], normal[0] ) * ( 255.0f / 360.0f ) );
 		a &= 0xff;
 
-		b = (int)(RAD2DEG( (float)acos( normal[2] ) ) * ( 255.0f / 360.0f ));
+		b = (int)( Q_acosdegf( normal[2] ) * ( 255.0f / 360.0f ) );
 		b &= 0xff;
 
 		bytes[0] = b;	// longitude
@@ -281,7 +281,7 @@ float erandom( float mean )
 		r = Q_flrand(0.0f, 1.0f);
 	} while ( r == 0.0 );
 
-	return -mean * logf( r );
+	return -mean * Q_logf( r );
 }
 
 
@@ -360,93 +360,7 @@ float Com_AbsClamp( float min, float max, float value )
 }
 
 
-float Q_rsqrt( float number )
-{
-	byteAlias_t t;
-	float x2, y;
-	const float threehalfs = 1.5F;
-
-	x2 = number * 0.5F;
-	y  = number;
-	t.f  = number;
-	t.i  = 0x5f3759df - ( t.i >> 1 );               // what the fuck?
-	y  = t.f;
-	y  = y * ( threehalfs - ( x2 * y * y ) );   // 1st iteration
-												//	y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
-
-	assert( !Q_isnan(y) );
-	return y;
-}
-
-float Q_fabs( float f )
-{
-	byteAlias_t fi;
-	fi.f = f;
-	fi.i &= 0x7FFFFFFF;
-	return fi.f;
-}
-
-/*
-=====================
-Q_acos
-
-the msvc acos doesn't always return a value between -PI and PI:
-
-int i;
-i = 1065353246;
-acos(*(float*) &i) == -1.#IND0
-
-This should go in q_math but it is too late to add new traps
-to game and ui
-=====================
-*/
-float Q_acos(float c) {
-	float angle;
-
-	angle = acosf(c);
-
-	if (angle > M_PI) {
-		return (float)M_PI;
-	}
-	if (angle < -M_PI) {
-		return (float)M_PI;
-	}
-	return angle;
-}
-
-float Q_asin(float c)
-{
-	float angle;
-
-	angle = asinf(c);
-
-	if (angle > M_PI) {
-		return (float)M_PI;
-	}
-	if (angle < -M_PI) {
-		return (float)M_PI;
-	}
-	return angle;
-}
-
-float Q_powf ( float x, int y )
-{
-	float r = x;
-	for ( y--; y>0; y-- )
-		r *= x;
-	return r;
-}
-
-qboolean Q_isnan (float f)
-{
-#ifdef _MSC_VER
-	return (qboolean)(_isnan (f) != 0);
-#else
-	return (qboolean)(isnan (f) != 0);
-#endif
-}
-
-int Q_log2( int val )
+int Q_ilog2( int val )
 {
 	int answer;
 
@@ -483,7 +397,7 @@ float AngleSubtract( float a1, float a2 ) {
 	float	a;
 
 	a = a1 - a2;
-	a=fmodf(a,360);//chop it down quickly, then level it out
+	a=Q_fmodf(a,360);//chop it down quickly, then level it out
 	while ( a > 180 ) {
 		a -= 360;
 	}
@@ -580,9 +494,9 @@ void RotatePointAroundVector( vec3_t dst, const vec3_t dir, const vec3_t point, 
 	float   m[3][3];
 	float   c, s, t;
 
-	degrees = -DEG2RAD( degrees );
-	s = sinf( degrees );
-	c = cosf( degrees );
+	// the sine and cosine of -degrees through half turns: exact at multiples of 90 degrees
+	s = Q_sinpif( -degrees / 180.0f );
+	c = Q_cospif( -degrees / 180.0f );
 	t = 1 - c;
 
 	m[0][0] = t*dir[0]*dir[0] + c;
@@ -631,7 +545,7 @@ void vectoangles( const vec3_t value1, vec3_t angles ) {
 	}
 	else {
 		if ( value1[0] ) {
-			yaw = ( atan2f ( value1[1], value1[0] ) * 180 / M_PI );
+			yaw = Q_atan2degf( value1[1], value1[0] );
 		}
 		else if ( value1[1] > 0 ) {
 			yaw = 90;
@@ -643,8 +557,8 @@ void vectoangles( const vec3_t value1, vec3_t angles ) {
 			yaw += 360;
 		}
 
-		forward = sqrtf ( value1[0]*value1[0] + value1[1]*value1[1] );
-		pitch = ( atan2f(value1[2], forward) * 180 / M_PI );
+		forward = (float)Q_sqrt( (double)value1[0]*value1[0] + (double)value1[1]*value1[1] );
+		pitch = Q_atan2degf( value1[2], forward );
 		if ( pitch < 0 ) {
 			pitch += 360;
 		}
@@ -678,7 +592,7 @@ void ProjectPointOnPlane( vec3_t dst, const vec3_t p, const vec3_t normal )
 	float inv_denom;
 
 	inv_denom =  DotProduct( normal, normal );
-	assert( Q_fabs(inv_denom) != 0.0f );
+	assert( Q_fabsf(inv_denom) != 0.0f );
 	inv_denom = 1.0f / inv_denom;
 
 	d = DotProduct( normal, p ) * inv_denom;
@@ -763,7 +677,7 @@ qboolean G_FindClosestPointOnLineSegment( const vec3_t start, const vec3_t end, 
 
 						   //Get length of side from End2Result using sine of theta
 	distEnd2From = VectorLength( vecEnd2From );//c
-	cos_theta = cosf(DEG2RAD(theta));//cos(theta)
+	cos_theta = Q_cospif( theta / 180.0f );//cos(theta)
 	distEnd2Result = cos_theta * distEnd2From;//b
 
 											  //Extrapolate to find result
@@ -829,7 +743,7 @@ float G_PointDistFromLineSegment( const vec3_t start, const vec3_t end, const ve
 	theta = 90 * (1 - dot);//theta
 
 						   //Get length of side from End2Result using sine of theta
-	cos_theta = cosf(DEG2RAD(theta));//cos(theta)
+	cos_theta = Q_cospif( theta / 180.0f );//cos(theta)
 	distEnd2Result = cos_theta * distEnd2From;//b
 
 											  //Extrapolate to find result
@@ -873,8 +787,8 @@ float RadiusFromBounds( const vec3_t mins, const vec3_t maxs ) {
 	float	a, b;
 
 	for (i=0 ; i<3 ; i++) {
-		a = fabsf( mins[i] );
-		b = fabsf( maxs[i] );
+		a = Q_fabsf( mins[i] );
+		b = Q_fabsf( maxs[i] );
 		corner[i] = a > b ? a : b;
 	}
 
@@ -1119,14 +1033,15 @@ void VectorCopy( const vec3_t vecIn, vec3_t vecOut )
 	vecOut[2] = vecIn[2];
 }
 
+// lengths in double: the squares of floats are exact there, and the result is rounded to float once
 float VectorLength( const vec3_t vec )
 {
-	return (float)sqrt( vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2] );
+	return (float)Q_sqrt( (double)vec[0]*vec[0] + (double)vec[1]*vec[1] + (double)vec[2]*vec[2] );
 }
 
 float VectorLengthSquared( const vec3_t vec )
 {
-	return (vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
+	return (float)( (double)vec[0]*vec[0] + (double)vec[1]*vec[1] + (double)vec[2]*vec[2] );
 }
 
 float Distance( const vec3_t p1, const vec3_t p2 )
@@ -1142,56 +1057,47 @@ float DistanceSquared( const vec3_t p1, const vec3_t p2 )
 	vec3_t	v;
 
 	VectorSubtract( p2, p1, v );
-	return v[0]*v[0] + v[1]*v[1] + v[2]*v[2];
+	return VectorLengthSquared( v );
 }
 
-// fast vector normalize routine that does not check to make sure
-// that length != 0, nor does it return length, uses rsqrt approximation
+// vector normalize routine that does not check that length != 0, nor returns the length; computed in double as
+// VectorNormalize, each component rounded to float once
 void VectorNormalizeFast( vec3_t vec )
 {
-	float ilength;
+	const double length = Q_sqrt( (double)vec[0]*vec[0] + (double)vec[1]*vec[1] + (double)vec[2]*vec[2] );
 
-	ilength = Q_rsqrt( DotProduct( vec, vec ) );
-
-	vec[0] *= ilength;
-	vec[1] *= ilength;
-	vec[2] *= ilength;
+	vec[0] = (float)( vec[0] / length );
+	vec[1] = (float)( vec[1] / length );
+	vec[2] = (float)( vec[2] / length );
 }
 
+// in double: the length nearly exact, each component divided by it and rounded to float once
 float VectorNormalize( vec3_t vec )
 {
-	float	length, ilength;
-
-	length = vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2];
-	length = sqrtf( length );
+	const double length = Q_sqrt( (double)vec[0]*vec[0] + (double)vec[1]*vec[1] + (double)vec[2]*vec[2] );
 
 	if ( length ) {
-		ilength = 1/length;
-		vec[0] *= ilength;
-		vec[1] *= ilength;
-		vec[2] *= ilength;
+		vec[0] = (float)( vec[0] / length );
+		vec[1] = (float)( vec[1] / length );
+		vec[2] = (float)( vec[2] / length );
 	}
 
-	return length;
+	return (float)length;
 }
 
 float VectorNormalize2( const vec3_t vec, vec3_t vecOut )
 {
-	float	length, ilength;
-
-	length = vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2];
-	length = sqrtf( length );
+	const double length = Q_sqrt( (double)vec[0]*vec[0] + (double)vec[1]*vec[1] + (double)vec[2]*vec[2] );
 
 	if ( length ) {
-		ilength = 1/length;
-		vecOut[0] = vec[0]*ilength;
-		vecOut[1] = vec[1]*ilength;
-		vecOut[2] = vec[2]*ilength;
+		vecOut[0] = (float)( vec[0] / length );
+		vecOut[1] = (float)( vec[1] / length );
+		vecOut[2] = (float)( vec[2] / length );
 	}
 	else
 		VectorClear( vecOut );
 
-	return length;
+	return (float)length;
 }
 
 void VectorAdvance( const vec3_t veca, const float scale, const vec3_t vecb, vec3_t vecc)
@@ -1256,18 +1162,18 @@ void SnapVector( float *v )
 	_controlfp_s(&oldcontrol, 0, 0);
 	_controlfp_s(&newcontrol, _RC_NEAR, _MCW_RC);
 
-	v[0] = (float)lrintf(v[0]);
-	v[1] = (float)lrintf(v[1]);
-	v[2] = (float)lrintf(v[2]);
+	v[0] = (float)Q_lrintf(v[0]);
+	v[1] = (float)Q_lrintf(v[1]);
+	v[2] = (float)Q_lrintf(v[2]);
 
 	_controlfp_s(&newcontrol, oldcontrol, _MCW_RC);
 #else
 	int oldround = fegetround();
 	fesetround(FE_TONEAREST);
 
-	v[0] = (float)lrintf(v[0]);
-	v[1] = (float)lrintf(v[1]);
-	v[2] = (float)lrintf(v[2]);
+	v[0] = (float)Q_lrintf(v[0]);
+	v[1] = (float)Q_lrintf(v[1]);
+	v[2] = (float)Q_lrintf(v[2]);
 
 	fesetround(oldround);
 #endif
@@ -1281,7 +1187,7 @@ float DistanceHorizontal( const vec3_t p1, const vec3_t p2 )
 	vec3_t	v;
 
 	VectorSubtract( p2, p1, v );
-	return sqrtf( v[0]*v[0] + v[1]*v[1] ); //Leave off the z component
+	return Q_sqrtf( v[0]*v[0] + v[1]*v[1] ); //Leave off the z component
 }
 
 float DistanceHorizontalSquared( const vec3_t p1, const vec3_t p2 )
@@ -1327,15 +1233,16 @@ void AngleVectors( const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up)
 	static float		sr, sp, sy, cr, cp, cy;
 	// static to help MS compiler fp bugs
 
-	angle = angles[YAW] * (M_PI*2 / 360);
-	sy = sinf(angle);
-	cy = cosf(angle);
-	angle = angles[PITCH] * (M_PI*2 / 360);
-	sp = sinf(angle);
-	cp = cosf(angle);
-	angle = angles[ROLL] * (M_PI*2 / 360);
-	sr = sinf(angle);
-	cr = cosf(angle);
+	// through half turns (degrees / 180): exact at multiples of 90 degrees, one rounding fewer than radians
+	angle = angles[YAW] / 180.0f;
+	sy = Q_sinpif(angle);
+	cy = Q_cospif(angle);
+	angle = angles[PITCH] / 180.0f;
+	sp = Q_sinpif(angle);
+	cp = Q_cospif(angle);
+	angle = angles[ROLL] / 180.0f;
+	sr = Q_sinpif(angle);
+	cr = Q_cospif(angle);
 
 	if (forward)
 	{
@@ -1372,10 +1279,10 @@ void PerpendicularVector( vec3_t dst, const vec3_t src )
 	*/
 	for ( pos = 0, i = 0; i < 3; i++ )
 	{
-		if ( fabs( src[i] ) < minelem )
+		if ( Q_fabs( src[i] ) < minelem )
 		{
 			pos = i;
-			minelem = fabsf( src[i] );
+			minelem = Q_fabsf( src[i] );
 		}
 	}
 	tempvec[0] = tempvec[1] = tempvec[2] = 0.0F;

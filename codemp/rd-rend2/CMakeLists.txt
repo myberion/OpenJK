@@ -179,7 +179,7 @@ set_target_properties(${MPRend2} PROPERTIES COMPILE_DEFINITIONS "${SharedDefines
 set_property(TARGET ${MPRend2} APPEND PROPERTY COMPILE_OPTIONS ${OPENJK_VISIBILITY_FLAGS})
 set_target_properties(${MPRend2} PROPERTIES INCLUDE_DIRECTORIES "${MPRend2IncludeDirectories}")
 set_target_properties(${MPRend2} PROPERTIES PROJECT_LABEL "MP Rend2 Renderer")
-target_link_libraries(${MPRend2} ${MPRend2Libraries})
+target_link_libraries(${MPRend2} ${MPRend2Libraries} qlibm)
 target_include_directories(${MPRend2} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 # GLSL shader file generator

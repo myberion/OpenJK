@@ -77,7 +77,7 @@ void RB_ToneMap(FBO_t *hdrFbo, vec4i_t hdrBox, FBO_t *ldrFbo, vec4i_t ldrBox, in
 	// tonemap
 	color[0] =
 	color[1] =
-	color[2] = powf(2.0f, r_cameraExposure->value); //exp2(r_cameraExposure->value);
+	color[2] = Q_powf(2.0f, r_cameraExposure->value); //exp2(r_cameraExposure->value);
 	color[3] = 1.0f;
 
 	if (autoExposure)
@@ -223,7 +223,7 @@ static void RB_RadialBlur(FBO_t *srcFbo, FBO_t *dstFbo, int passes, float stretc
 	vec4i_t srcBox, dstBox;
 	vec4_t color;
 	const float inc = 1.f / passes;
-	const float mul = powf(stretch, inc);
+	const float mul = Q_powf(stretch, inc);
 	float scale;
 
 	{

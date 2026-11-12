@@ -907,7 +907,7 @@ static int G_CheckSpecialDeathAnim( gentity_t *self, vec3_t point, int damage, i
 	}
 	else if ( G_InKnockDown( &self->client->ps ) )
 	{//since these happen a lot, let's handle them case by case
-		int animLength = bgAllAnims[self->localAnimIndex].anims[self->client->ps.legsAnim].numFrames * fabs((float)(bgHumanoidAnimations[self->client->ps.legsAnim].frameLerp));
+		int animLength = bgAllAnims[self->localAnimIndex].anims[self->client->ps.legsAnim].numFrames * Q_fabs((float)(bgHumanoidAnimations[self->client->ps.legsAnim].frameLerp));
 		switch ( self->client->ps.legsAnim )
 		{
 		case BOTH_KNOCKDOWN1:
@@ -2956,7 +2956,7 @@ int CheckArmor (gentity_t *ent, int damage, int dflags)
 
 	if (dflags & DAMAGE_HALF_ABSORB)
 	{	// Half the damage gets absorbed by the shields, rather than 100%
-		save = ceil( damage * ARMOR_PROTECTION );
+		save = Q_ceil( damage * ARMOR_PROTECTION );
 	}
 	else
 	{	// All the damage gets absorbed by the shields.
@@ -3055,9 +3055,9 @@ int RaySphereIntersections( vec3_t origin, float radius, vec3_t point, vec3_t di
 
 	d = b * b - 4 * c;
 	if (d > 0) {
-		t = (- b + sqrt(d)) / 2;
+		t = (- b + Q_sqrt(d)) / 2;
 		VectorMA(point, t, dir, intersections[0]);
-		t = (- b - sqrt(d)) / 2;
+		t = (- b - Q_sqrt(d)) / 2;
 		VectorMA(point, t, dir, intersections[1]);
 		return 2;
 	}

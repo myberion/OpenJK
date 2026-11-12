@@ -408,7 +408,7 @@ void pitch_roll_for_slope( gentity_t *forwhom, vec3_t pass_slope )
 	if ( forwhom->client )
 	{
 		forwhom->client->ps.viewangles[PITCH] = dot * pitch;
-		forwhom->client->ps.viewangles[ROLL] = ((1-Q_fabs(dot)) * pitch * mod);
+		forwhom->client->ps.viewangles[ROLL] = ((1-Q_fabsf(dot)) * pitch * mod);
 		float oldmins2 = forwhom->mins[2];
 		forwhom->mins[2] = -24 + 12 * fabs(forwhom->client->ps.viewangles[PITCH])/180.0f;
 		//FIXME: if it gets bigger, move up
@@ -423,7 +423,7 @@ void pitch_roll_for_slope( gentity_t *forwhom, vec3_t pass_slope )
 	else
 	{
 		forwhom->currentAngles[PITCH] = dot * pitch;
-		forwhom->currentAngles[ROLL] = ((1-Q_fabs(dot)) * pitch * mod);
+		forwhom->currentAngles[ROLL] = ((1-Q_fabsf(dot)) * pitch * mod);
 	}
 }
 

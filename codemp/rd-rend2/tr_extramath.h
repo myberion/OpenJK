@@ -58,8 +58,8 @@ void Matrix16SimpleInverse( const matrix_t in, matrix_t out);
 #define ByteToFloat(a)          ((float)(a) * 1.0f/255.0f)
 #define FloatToByte(a)          (byte)((a) * 255.0f)
 
-#define RGBtosRGB(a)            (((a) < 0.0031308f) ? (12.92f * (a)) : (1.055f * pow((a), 0.41666f) - 0.055f))
-#define sRGBtoRGB(a)            (((a) <= 0.04045f)  ? ((a) / 12.92f) : (pow((((a) + 0.055f) / 1.055f), 2.4)) )
+#define RGBtosRGB(a)            (((a) < 0.0031308f) ? (12.92f * (a)) : (1.055f * Q_pow((a), 0.41666f) - 0.055f))
+#define sRGBtoRGB(a)            (((a) <= 0.04045f)  ? ((a) / 12.92f) : (Q_pow((((a) + 0.055f) / 1.055f), 2.4)) )
 
 QINLINE int VectorCompare4(const vec4_t v1, const vec4_t v2)
 {

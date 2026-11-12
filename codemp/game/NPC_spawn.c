@@ -2196,7 +2196,7 @@ void SP_NPC_Vehicle( gentity_t *self)
 	G_SpawnFloat( "dropTime", "0", &dropTime );
 	if ( dropTime )
 	{
-		self->fly_sound_debounce_time = ceil(dropTime*1000.0);
+		self->fly_sound_debounce_time = Q_ceil(dropTime*1000.0);
 	}
 
 	G_SpawnInt( "showhealth", "0", &t );

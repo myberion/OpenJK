@@ -689,8 +689,8 @@ qboolean G2_Set_Bone_Anim_Index(
 			{
 				if (animSpeed<0.0f)
 				{
-					blist[index].blendFrame = floor(currentFrame);
-					blist[index].blendLerpFrame = floor(currentFrame);
+					blist[index].blendFrame = Q_floor(currentFrame);
+					blist[index].blendLerpFrame = Q_floor(currentFrame);
 				}
 				else
 				{
@@ -1121,14 +1121,14 @@ void G2_Animate_Bone_List(CGhoul2Info_v &ghoul2, const int currentTime, const in
 							{
 								if (newFrame_g <= endFrame+1)
 								{
-									newFrame_g=endFrame+fmod(newFrame_g-endFrame,animSize)-animSize;
+									newFrame_g=endFrame+Q_fmod(newFrame_g-endFrame,animSize)-animSize;
 								}
 							}
 							else
 							{
 								if (newFrame_g >= endFrame)
 								{
-									newFrame_g=endFrame+fmod(newFrame_g-endFrame,animSize)-animSize;
+									newFrame_g=endFrame+Q_fmod(newFrame_g-endFrame,animSize)-animSize;
 								}
 							}
 							// figure out new start time
@@ -2022,7 +2022,7 @@ void G2_SetRagDollBullet(CGhoul2Info &ghoul2,const vec3_t rayStart,const vec3_t 
 					effect*=magicFactor13*effect; // this is cubed, one of them is absorbed by the next calc
 					bone.velocityEffector[0]=shotDir[0]*(effect+flrand(0.0f,0.05f));
 					bone.velocityEffector[1]=shotDir[1]*(effect+flrand(0.0f,0.05f));
-					bone.velocityEffector[2]=fabs(shotDir[2])*(effect+flrand(0.0f,0.05f));
+					bone.velocityEffector[2]=Q_fabs(shotDir[2])*(effect+flrand(0.0f,0.05f));
 //					bone.velocityEffector[0]=shotDir[0]*(effect+flrand(0.0f,0.05f))*flrand(-0.1f,3.0f);
 //					bone.velocityEffector[1]=shotDir[1]*(effect+flrand(0.0f,0.05f))*flrand(-0.1f,3.0f);
 //					bone.velocityEffector[2]=fabs(shotDir[2])*(effect+flrand(0.0f,0.05f))*flrand(-0.1f,3.0f);
@@ -2106,7 +2106,7 @@ static float G2_RagSetState(CGhoul2Info &ghoul2, boneInfo_t &bone,int frameNum,c
 			decay=1.0f;
 		}
 		float	magicFactor8=1.0f; // Power for decay
-		decay=pow(decay,magicFactor8);
+		decay=Q_pow(decay,magicFactor8);
 		ragState=ERS_SETTLING;
 		if (frameNum>bone.restTime+settleTime)
 		{
@@ -2909,7 +2909,7 @@ static bool G2_RagDollSettlePositionNumeroTrois(CGhoul2Info_v &ghoul2V, const ve
 				vertEffectorTraceFraction=tr.fraction;
 				if (params &&
 					vertEffectorTraceFraction < .95f &&
-					fabsf(tr.plane.normal[2]) < .707f)
+					Q_fabsf(tr.plane.normal[2]) < .707f)
 				{
 					//SRagDollEffectorCollision args(e.currentOrigin,tr);
 					//args.useTracePlane=true;
@@ -2992,7 +2992,7 @@ static bool G2_RagDollSettlePositionNumeroTrois(CGhoul2Info_v &ghoul2V, const ve
 				{
 
 					// roughly speaking this is a wall
-					if (fabsf(tr.plane.normal[2])<0.7f)
+					if (Q_fabsf(tr.plane.normal[2])<0.7f)
 					{
 						//SRagDollEffectorCollision args(e.currentOrigin,tr);
 						//args.useTracePlane=true;
@@ -3708,7 +3708,7 @@ static bool G2_RagDollSettlePositionNumeroTrois(CGhoul2Info_v &ghoul2V, const ve
 
 static float AngleNormZero(float theta)
 {
-	float ret=fmodf(theta,360.0f);
+	float ret=Q_fmodf(theta,360.0f);
 	if (ret<-180.0f)
 	{
 		ret+=360.0f;
@@ -3917,7 +3917,7 @@ static void G2_RagDollSolve(CGhoul2Info_v &ghoul2V,int g2Index,float decay,int f
 			float recip=0.0f;
 			if (numRagDep)
 			{
-				recip=sqrt(4.0f/float(numRagDep));
+				recip=Q_sqrt(4.0f/float(numRagDep));
 			}
 
 			if (allSolidCount > 32)
@@ -4165,7 +4165,7 @@ static void G2_IKSolve(CGhoul2Info_v &ghoul2V,int g2Index,float decay,int frameN
 			magicFactor1 = 0.40f;
 		}
 
-		recip = sqrt(4.0f/1.0f);
+		recip = Q_sqrt(4.0f/1.0f);
 
 		float fac = (decay*recip*magicFactor1);
 		assert(fac >= 0.0f);

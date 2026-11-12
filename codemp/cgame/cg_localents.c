@@ -696,7 +696,7 @@ void CG_AddScorePlum( localEntity_t *le ) {
 	CrossProduct(dir, up, vec);
 	VectorNormalize(vec);
 
-	VectorMA(origin, -10 + 20 * sin(c * 2 * M_PI), vec, origin);
+	VectorMA(origin, -10 + 20 * Q_sinpif( c * 2.0f ), vec, origin);
 
 	// if the view would be "inside" the sprite, kill the sprite
 	// so it doesn't add too much overdraw

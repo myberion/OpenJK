@@ -4594,9 +4594,9 @@ void SeekerDroneUpdate(gentity_t *self)
 		elevated[2] += 40;
 
 		angle = ((level.time / 12) & 255) * (M_PI * 2) / 255; //magical numbers make magic happen
-		dir[0] = cos(angle) * 20;
-		dir[1] = sin(angle) * 20;
-		dir[2] = cos(angle) * 5;
+		dir[0] = Q_cos(angle) * 20;
+		dir[1] = Q_sin(angle) * 20;
+		dir[2] = Q_cos(angle) * 5;
 		VectorAdd(elevated, dir, org);
 
 		a[ROLL] = 0;
@@ -4641,9 +4641,9 @@ void SeekerDroneUpdate(gentity_t *self)
 		elevated[2] -= 55-prefig;
 
 		angle = ((level.time / 12) & 255) * (M_PI * 2) / 255; //magical numbers make magic happen
-		dir[0] = cos(angle) * 20;
-		dir[1] = sin(angle) * 20;
-		dir[2] = cos(angle) * 5;
+		dir[0] = Q_cos(angle) * 20;
+		dir[1] = Q_sin(angle) * 20;
+		dir[2] = Q_cos(angle) * 5;
 		VectorAdd(elevated, dir, org);
 
 		a[ROLL] = 0;
@@ -4709,9 +4709,9 @@ void SeekerDroneUpdate(gentity_t *self)
 		elevated[2] += 40;
 
 		angle = ((level.time / 12) & 255) * (M_PI * 2) / 255; //magical numbers make magic happen
-		dir[0] = cos(angle) * 20;
-		dir[1] = sin(angle) * 20;
-		dir[2] = cos(angle) * 5;
+		dir[0] = Q_cos(angle) * 20;
+		dir[1] = Q_sin(angle) * 20;
+		dir[2] = Q_cos(angle) * 5;
 		VectorAdd(elevated, dir, org);
 
 		//org is now where the thing should be client-side because it uses the same time-based offset

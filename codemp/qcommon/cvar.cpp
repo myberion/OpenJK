@@ -243,7 +243,7 @@ static const char *Cvar_Validate( cvar_t *var, const char *value, qboolean warn 
 
 	if( Q_isanumber( value ) )
 	{
-		valuef = atof( value );
+		valuef = Q_atof( value );
 
 		if( var->integral )
 		{
@@ -262,7 +262,7 @@ static const char *Cvar_Validate( cvar_t *var, const char *value, qboolean warn 
 		if( warn )
 			Com_Printf( "WARNING: cvar '%s' must be numeric", var->name );
 
-		valuef = atof( var->resetString );
+		valuef = Q_atof( var->resetString );
 		changed = qtrue;
 	}
 
@@ -470,7 +470,7 @@ cvar_t *Cvar_Get( const char *var_name, const char *var_value, uint32_t flags, c
 		var->description = NULL;
 	var->modified = qtrue;
 	var->modificationCount = 1;
-	var->value = atof (var->string);
+	var->value = Q_atof (var->string);
 	var->integer = atoi(var->string);
 	var->resetString = CopyString( var_value );
 	var->validate = qfalse;
@@ -710,7 +710,7 @@ cvar_t *Cvar_Set2( const char *var_name, const char *value, uint32_t defaultFlag
 	Cvar_FreeString (var->string);	// free the old value string
 
 	var->string = CopyString(value);
-	var->value = atof (var->string);
+	var->value = Q_atof (var->string);
 	var->integer = atoi (var->string);
 
 	return var;
@@ -1105,19 +1105,19 @@ void Cvar_Math_f( void )
 
 	if ( !Q_stricmp( cmd, "cvarAdd" ) )
 	{
-		Cvar_User_SetValue( Cmd_Argv( 1 ), Cvar_VariableValue( Cmd_Argv( 1 ) ) + atof( Cmd_Argv( 2 ) ) );
+		Cvar_User_SetValue( Cmd_Argv( 1 ), Cvar_VariableValue( Cmd_Argv( 1 ) ) + Q_atof( Cmd_Argv( 2 ) ) );
 	}
 	else if ( !Q_stricmp( cmd, "cvarSub" ) )
 	{
-		Cvar_User_SetValue( Cmd_Argv( 1 ), Cvar_VariableValue( Cmd_Argv( 1 ) ) - atof( Cmd_Argv( 2 ) ) );
+		Cvar_User_SetValue( Cmd_Argv( 1 ), Cvar_VariableValue( Cmd_Argv( 1 ) ) - Q_atof( Cmd_Argv( 2 ) ) );
 	}
 	else if ( !Q_stricmp( cmd, "cvarMult" ) )
 	{
-		Cvar_User_SetValue( Cmd_Argv( 1 ), Cvar_VariableValue( Cmd_Argv( 1 ) ) * atof( Cmd_Argv( 2 ) ) );
+		Cvar_User_SetValue( Cmd_Argv( 1 ), Cvar_VariableValue( Cmd_Argv( 1 ) ) * Q_atof( Cmd_Argv( 2 ) ) );
 	}
 	else if ( !Q_stricmp( cmd, "cvarDiv" ) )
 	{
-		float value = atof( Cmd_Argv( 2 ) );
+		float value = Q_atof( Cmd_Argv( 2 ) );
 		if ( value != 0 )
 			Cvar_User_SetValue( Cmd_Argv( 1 ), Cvar_VariableValue( Cmd_Argv( 1 ) ) / value );
 		else

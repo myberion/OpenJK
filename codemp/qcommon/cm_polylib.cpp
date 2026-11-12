@@ -112,7 +112,7 @@ winding_t *BaseWindingForPlane (vec3_t normal, float dist)
 	x = -1;
 	for (i=0 ; i<3; i++)
 	{
-		v = fabs(normal[i]);
+		v = Q_fabs(normal[i]);
 		if (v > max)
 		{
 			x = i;
