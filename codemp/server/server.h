@@ -105,11 +105,12 @@ typedef struct clientSnapshot_s {
 	int				first_entity;		// into the circular sv_packet_entities[]
 										// the entities MUST be in increasing state number
 										// order, otherwise the delta compression will fail
-	int				messageSent;		// real time the message was transmitted (Sys_Milliseconds), for the ping
-	int				messageAcked;		// real time of the first packet that acknowledged it, when acked
-	qboolean		acked;				// a packet acknowledged the message
 	int				messageSize;		// used to rate drop packets
 } clientSnapshot_t;
+
+#define SV_PING_WINDOW	256		// messages the ping is measured over: the window of the client's 8-bit acknowledge
+								// (eng::kAckWindow), 2.56 s at the tick, valid up to that round trip (plan step 14; the
+								// 32 frames were 320 ms at 100 Hz, 1.6 s at 20 Hz)
 
 typedef enum {
 	CS_FREE,		// can be reused for a new connection
@@ -199,6 +200,11 @@ typedef struct client_s {
 	qboolean		rateDelayed;		// true if nextSnapshotTime was set based on SV_CLIENT_RATE instead of the server frame
 	int				timeoutCount;		// must timeout a few frames in a row so debugging doesn't break
 	clientSnapshot_t	frames[PACKET_BACKUP];	// updates can be delta'd from here
+	struct {
+		int			sent;				// real time the message was transmitted (Sys_Milliseconds)
+		int			acked;				// real time of the first packet that acknowledged it, when isAcked
+		qboolean	isAcked;
+	}				pingTimes[SV_PING_WINDOW];	// the last SV_PING_WINDOW messages, slot seq & (SV_PING_WINDOW - 1)
 	int				ping;
 	int				pureAuthentic;
 	qboolean		gotCP; // TTimo - additional flag to distinguish between a bad pure checksum, and no cp command at all

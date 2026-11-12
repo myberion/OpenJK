@@ -928,11 +928,11 @@ void SV_CalcPings( void ) {
 
 		total = 0;
 		count = 0;
-		for ( j = 0 ; j < PACKET_BACKUP ; j++ ) {
-			if ( !cl->frames[j].acked ) {
+		for ( j = 0 ; j < SV_PING_WINDOW ; j++ ) {
+			if ( !cl->pingTimes[j].isAcked ) {
 				continue;
 			}
-			delta = cl->frames[j].messageAcked - cl->frames[j].messageSent;
+			delta = cl->pingTimes[j].acked - cl->pingTimes[j].sent;
 			count++;
 			total += delta;
 		}

@@ -1265,13 +1265,13 @@ static void SV_UserMove( client_t *cl, const eng::ClientPacket &packet, qboolean
 		}
 	}
 
-	// save the real time of the first acknowledge of the message for the ping calculation, while its frame still holds
-	// it (a message being sent in fragments already took the slot PACKET_BACKUP messages back)
-	if ( cl->netchan.outgoingSequence - cl->messageAcknowledge < PACKET_BACKUP ) {
-		clientSnapshot_t *frame = &cl->frames[ cl->messageAcknowledge & PACKET_MASK ];
-		if ( !frame->acked ) {
-			frame->acked = qtrue;
-			frame->messageAcked = Sys_Milliseconds();
+	// save the real time of the first acknowledge of the message for the ping calculation, while its slot still holds
+	// it (a message being sent in fragments already took the slot SV_PING_WINDOW messages back)
+	if ( cl->netchan.outgoingSequence - cl->messageAcknowledge < SV_PING_WINDOW ) {
+		auto &ping = cl->pingTimes[cl->messageAcknowledge & ( SV_PING_WINDOW - 1 )];
+		if ( !ping.isAcked ) {
+			ping.isAcked = qtrue;
+			ping.acked = Sys_Milliseconds();
 		}
 	}
 

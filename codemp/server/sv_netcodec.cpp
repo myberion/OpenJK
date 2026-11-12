@@ -60,6 +60,7 @@ static eng::Frame s_frames[MAX_CLIENTS][PACKET_BACKUP];
 // (slot seq % kAckWindow). Reset only at connection: unlike the frames, a gamestate or a demo does not reset them, since
 // a packet may acknowledge a message sent before either.
 static eng::PacketBase s_packetBases[MAX_CLIENTS][eng::kAckWindow];
+static_assert( SV_PING_WINDOW == eng::kAckWindow, "the ping covers the messages the client can acknowledge" );
 
 static int ClientIndex( const client_t *client ) {
 	return (int)( client - svs.clients );

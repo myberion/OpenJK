@@ -101,10 +101,11 @@ Coding the first user command against the acknowledged snapshot needs both sides
 |---|---|---|
 | When a message was sent | `svs.time`, the server's frame clock (it moves once per frame: 50 ms steps at `sv_fps` 20) | the real time (`Sys_Milliseconds`) |
 | When it was acknowledged | `svs.time` again, written by every packet acknowledging it (a client sends about three packets per message, so the last one counted) | the real time of the first packet acknowledging it |
-| An acknowledge older than the frame history | could write into the frame of a newer message | ignored |
+| Messages measured | the last 32 (`PACKET_BACKUP`), in the frame history | the last 256 (`SV_PING_WINDOW`, the window of the client's 8-bit acknowledge), in a history of their own (plan step 14) |
+| An acknowledge older than the history | could write into the frame of a newer message | ignored |
 | "Not acknowledged yet" | a time of -1 (any time at or below 0 counted as none) | an explicit flag |
 
-The ping is still the average over the last 32 messages (`SV_CalcPings`). It is now the real round trip of a message, without the frame-clock steps and without the extra packet intervals. Measured on a server 15 ms away (network round trip): 24 ms, that is the round trip plus the wait for the client's next packet (8 ms on average at `cl_maxpackets` 63) plus processing.
+The ping is the average over the acknowledged messages among the last 256 (`SV_CalcPings`): 2.56 s at the 100 Hz tick, so it is measured up to a round trip of 2.56 s, where the last 32 messages held 320 ms at 100 Hz (1.6 s at OpenJK's 20 Hz; above that round trip no message was acknowledged within the history and the ping showed 999). It is now the real round trip of a message, without the frame-clock steps and without the extra packet intervals. Measured on a server 15 ms away (network round trip): 24 ms, that is the round trip plus the wait for the client's next packet (8 ms on average at `cl_maxpackets` 63) plus processing.
 
 ### Results
 
