@@ -1374,6 +1374,19 @@ static void SV_UserMove( client_t *cl, const eng::ClientPacket &packet, qboolean
 	}
 
 	Com_Memcpy( cmds, packet.userCmds, cmdCount * sizeof( usercmd_t ) );
+	for ( i = 0 ; i < cmdCount ; i++ ) {
+		// a client makes its moves -127 to 127 (ClampChar), but the server does not trust what it receives: a modified
+		// client's -128 would move 128 / 127 as fast (OpenJK's packet reader did the same)
+		if ( cmds[i].forwardmove == -128 ) {
+			cmds[i].forwardmove = -127;
+		}
+		if ( cmds[i].rightmove == -128 ) {
+			cmds[i].rightmove = -127;
+		}
+		if ( cmds[i].upmove == -128 ) {
+			cmds[i].upmove = -127;
+		}
+	}
 	if ( sv_legacyFixes->integer ) {
 		for ( i = 0 ; i < cmdCount ; i++ ) {
 			// block "charge jump" and other nonsense

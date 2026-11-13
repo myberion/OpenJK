@@ -209,10 +209,12 @@ void NormalToLatLong( const vec3_t normal, byte bytes[2] )
 //      MATH UTILITIES
 //
 ///////////////////////////////////////////////////////////////////////////
+// the bound of a user command's move (its only use): -127 to 127, symmetric, so that a player moves as fast backward,
+// left or down as forward, right or up (-128 gave 128 / 127 of the speed)
 signed char ClampChar( int i )
 {
-	if ( i < -128 ) {
-		return -128;
+	if ( i < -127 ) {
+		return -127;
 	}
 	if ( i > 127 ) {
 		return 127;
