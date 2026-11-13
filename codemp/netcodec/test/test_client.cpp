@@ -88,7 +88,7 @@ struct EngineRun {
 		engine::PacketBase &slot = bases[static_cast<size_t>(p.ack) % engine::kAckWindow];
 		if (h != nullptr) {
 			const engine::Frame frame{ .seq = static_cast<int32_t>(p.ack), .ps = ps.data(), .vps = nullptr, .firstEntity = 0,
-			                           .numEntities = 0,
+			                           .numEntities = 0, .index = nullptr,
 			                           .record = { .ack = h->ack, .cmdSeq = h->cmdSeq, .time = 0, .olderSeq = -1,
 			                                       .serverId = static_cast<int32_t>(h->serverId) } };
 			base = engine::PacketBaseOf(frame);

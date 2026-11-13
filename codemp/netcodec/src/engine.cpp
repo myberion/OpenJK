@@ -39,8 +39,11 @@ static_assert(sizeof(PacketBase) == 32, "the server keeps kAckWindow of them per
 	return Snapshot{ .ps = PlayerBytes(f.ps),
 	                 .vps = PlayerBytes(f.vps),
 	                 .entities = netcodec::EntityRing{ .ring = RingBytes(ring),
-	                                                   .first = static_cast<uint32_t>(f.firstEntity) % ring.count,
-	                                                   .count = f.numEntities } };
+	                                                   .first = static_cast<uint32_t>(f.firstEntity % int64_t{ ring.count }),
+	                                                   .count = f.numEntities,
+	                                                   .index = f.index != nullptr
+	                                                                ? std::span<const uint32_t>(f.index, f.numEntities)
+	                                                                : std::span<const uint32_t>() } };
 }
 
 [[nodiscard]] HeaderRecord Header(const Record &r, const Snapshot *older) noexcept {
@@ -105,7 +108,7 @@ struct ServerCodec::Impl {
 ServerCodec::ServerCodec() : impl_(std::make_unique<Impl>()) {}
 ServerCodec::~ServerCodec() = default;
 
-size_t ServerCodec::Encode(const ServerMessage &msg, const Frame *frames, const EntityRing &ring, int32_t nextEntity,
+size_t ServerCodec::Encode(const ServerMessage &msg, const Frame *frames, const EntityRing &ring, int64_t nextEntity,
                            const CommandRing &commands, const Baselines &baselines, uint8_t *out, size_t outSize,
                            uint32_t &delta, Record &record) {
 	const std::span<const Frame> fr(frames, kPacketBackup);
@@ -140,7 +143,7 @@ size_t ServerCodec::Encode(const ServerMessage &msg, const Frame *frames, const 
 
 	// the base and the base's own base: held, and on the server their entities still in the shared ring
 	const auto held = [&](const Frame &f, int32_t s) {
-		return f.seq == s && f.firstEntity > nextEntity - static_cast<int32_t>(ring.count);
+		return f.seq == s && f.firstEntity > nextEntity - int64_t{ ring.count };
 	};
 	Snapshot baseSnap, olderSnap;
 	HeaderRecord baseHeader;

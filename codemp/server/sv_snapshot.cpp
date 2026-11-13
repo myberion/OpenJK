@@ -74,14 +74,14 @@ static void SV_EmitPacketEntities( clientSnapshot_t *from, clientSnapshot_t *to,
 		if ( newindex >= to->num_entities ) {
 			newnum = 9999;
 		} else {
-			newent = &svs.snapshotEntities[(to->first_entity+newindex) % svs.numSnapshotEntities];
+			newent = &svs.snapshotEntities[to->entities[newindex]];
 			newnum = newent->number;
 		}
 
 		if ( oldindex >= from_num_entities ) {
 			oldnum = 9999;
 		} else {
-			oldent = &svs.snapshotEntities[(from->first_entity+oldindex) % svs.numSnapshotEntities];
+			oldent = &svs.snapshotEntities[from->entities[oldindex]];
 			oldnum = oldent->number;
 		}
 
@@ -526,6 +526,20 @@ static void SV_AddEntitiesVisibleFromPoint( vec3_t origin, clientSnapshot_t *fra
 	}
 }
 
+// SV_SendClientMessages is building the snapshots of every client: the entities' states are those of one tick
+static qboolean s_sendingAll;
+
+// the entities' states may have changed: each is compared with its last copy again
+static void SV_NewSnapshotTick( void ) {
+	svs.snapshotTick++;
+	svs.nextSnapshotEntities = (int64_t)svs.snapshotTick * MAX_GENTITIES;
+}
+
+// where the newest copy of an entity's state is in svs.snapshotEntities
+static uint32_t SV_SnapshotPlace( int num ) {
+	return ( svs.snapshotVersion[num] % SV_SNAPSHOT_TICKS ) * MAX_GENTITIES + num;
+}
+
 /*
 =============
 SV_BuildClientSnapshot
@@ -544,8 +558,6 @@ static void SV_BuildClientSnapshot( client_t *client ) {
 	clientSnapshot_t			*frame;
 	snapshotEntityNumbers_t		entityNumbers;
 	int							i;
-	sharedEntity_t				*ent;
-	entityState_t				*state;
 	svEntity_t					*svEnt;
 	sharedEntity_t				*clent;
 	playerState_t				*ps;
@@ -623,19 +635,27 @@ static void SV_BuildClientSnapshot( client_t *client ) {
 		((int *)frame->areabits)[i] = ((int *)frame->areabits)[i] ^ -1;
 	}
 
-	// copy the entity states out
+	// The entity states: one copy of a state while it does not change, shared by every snapshot that holds it
+	// (svs.snapshotEntities); the snapshot keeps where each one is, in the order of the numbers. A tick compares an
+	// entity's state with its last copy once, for the first client that sees it (the state is the same for all of
+	// them), and stores a new version if it differs. A snapshot built outside SV_SendClientMessages is a tick of its
+	// own: the states may have changed since the last one.
+	if ( !s_sendingAll ) {
+		SV_NewSnapshotTick();
+	}
 	frame->num_entities = 0;
 	frame->first_entity = svs.nextSnapshotEntities;
 	for ( i = 0 ; i < entityNumbers.numSnapshotEntities ; i++ ) {
-		ent = SV_GentityNum(entityNumbers.snapshotEntities[i]);
-		state = &svs.snapshotEntities[svs.nextSnapshotEntities % svs.numSnapshotEntities];
-		*state = ent->s;
-		svs.nextSnapshotEntities++;
-		// this should never hit, map should always be restarted first in SV_Frame
-		if ( svs.nextSnapshotEntities >= 0x7FFFFFFE ) {
-			Com_Error(ERR_FATAL, "svs.nextSnapshotEntities wrapped");
+		const int num = entityNumbers.snapshotEntities[i];
+		if ( svs.snapshotStoredTick[num] != svs.snapshotTick ) {
+			svs.snapshotStoredTick[num] = svs.snapshotTick;
+			const entityState_t *now = &SV_GentityNum( num )->s;
+			if ( memcmp( now, &svs.snapshotEntities[SV_SnapshotPlace( num )], sizeof( *now ) ) ) {
+				svs.snapshotVersion[num]++;
+				svs.snapshotEntities[SV_SnapshotPlace( num )] = *now;
+			}
 		}
-		frame->num_entities++;
+		frame->entities[frame->num_entities++] = SV_SnapshotPlace( num );
 	}
 }
 
@@ -778,6 +798,9 @@ void SV_SendClientMessages( void ) {
 	int			i;
 	client_t	*c;
 
+	SV_NewSnapshotTick();
+	s_sendingAll = qtrue;
+
 	// send a message to each connected client
 	for (i=0, c = svs.clients ; i < sv_maxclients->integer ; i++, c++) {
 		if (!c->state) {
@@ -800,5 +823,7 @@ void SV_SendClientMessages( void ) {
 		// generate and send a new message
 		SV_SendClientSnapshot( c );
 	}
+
+	s_sendingAll = qfalse;
 }
 

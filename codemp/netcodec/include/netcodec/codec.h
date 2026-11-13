@@ -44,13 +44,19 @@ inline void SetEntityNumber(std::span<uint8_t> state, uint32_t n) noexcept { std
 
 // A snapshot's entities in a ring of entity states (the engine's circular svs.snapshotEntities and
 // cl.parseEntities), sorted by number: entity i is state (first + i) mod (ring.size() / kEntityBytes). A plain array
-// is the ring of its own count of states, first 0.
+// is the ring of its own count of states, first 0. With an index, entity i is state index[i] of the ring instead: a
+// snapshot whose states are shared with other snapshots (the server keeps one copy of an entity's state while it does
+// not change, plan step 14); the numbers still increase with i. An entity that a snapshot and its base take from the
+// same state is unchanged, which the encoder reads from the index alone. Only the encoder takes an index: the
+// decoder's bases are runs.
 struct EntityRing {
-	std::span<const uint8_t> ring;   // whole entity states, one after the other
-	uint32_t first = 0;              // below the ring's state count
-	uint32_t count = 0;              // at most the ring's state count
+	std::span<const uint8_t> ring;     // whole entity states, one after the other
+	uint32_t first = 0;                // below the ring's state count
+	uint32_t count = 0;                // at most the ring's state count
+	std::span<const uint32_t> index;   // empty, or count state numbers of the ring
 
 	[[nodiscard]] std::span<const uint8_t> operator[](uint32_t i) const noexcept {
+		if (!index.empty()) return ring.subspan(size_t{ index[i] } * kEntityBytes, kEntityBytes);
 		const uint32_t size = ToU32(ring.size() / kEntityBytes);
 		const uint32_t k = first + i;
 		return ring.subspan((k < size ? k : k - size) * kEntityBytes, kEntityBytes);

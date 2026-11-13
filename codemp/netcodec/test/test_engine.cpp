@@ -27,6 +27,7 @@ namespace eng = netcodec::engine;
 namespace {
 
 constexpr uint32_t kRingStates = eng::kPacketBackup * eng::kMaxSnapshotEntities;
+constexpr uint32_t kServerStates = eng::kPacketBackup * kMaxEntities;   // the server's: every entity, kPacketBackup versions
 constexpr uint32_t kCommandBytes = 1024;      // MAX_STRING_CHARS
 constexpr size_t kServerBaselineStride = 600; // sizeof(svEntity_t) is larger than an entityState_t
 constexpr size_t kMaxMsgLen = 49152;          // MAX_MSGLEN
@@ -37,10 +38,14 @@ constexpr uint32_t kMaxConfigStrings = 1700;  // MAX_CONFIGSTRINGS
 // the engine-like storage of one side
 struct Side {
 	std::vector<eng::Frame> frames = std::vector<eng::Frame>(eng::kPacketBackup, eng::Frame{ .seq = -1, .ps = nullptr, .vps = nullptr,
-	                                                                                        .firstEntity = 0, .numEntities = 0, .record = {} });
+	                                                                                        .firstEntity = 0, .numEntities = 0, .index = nullptr,
+	                                                                                        .record = {} });
 	std::vector<PlayerState> ps = std::vector<PlayerState>(eng::kPacketBackup);
 	std::vector<PlayerState> vps = std::vector<PlayerState>(eng::kPacketBackup);
 	std::vector<EntityState> ring = std::vector<EntityState>(kRingStates);
+	// the server: where each entity of a slot's snapshot is in the ring
+	std::vector<std::array<uint32_t, eng::kMaxSnapshotEntities>> index =
+		std::vector<std::array<uint32_t, eng::kMaxSnapshotEntities>>(eng::kPacketBackup);
 	int32_t nextEntity = 0;
 	std::vector<char> commands = std::vector<char>(size_t{ eng::kMinCommands } * kCommandBytes);
 	int32_t lastCommand = 0;
@@ -86,6 +91,9 @@ struct Totals {
 
 void RoundTrip(const trace::DemoStream &s, const char *label, Totals &t) {
 	Side server, client;
+	std::vector<EntityState> serverStates(kServerStates);   // the versions of the entities' states, as the engine's server keeps them
+	std::vector<uint32_t> serverVersion(kMaxEntities);
+	int64_t serverTick = 0;
 	std::vector<uint8_t> serverBaselines(((kMaxEntities - 1) * kServerBaselineStride) + kEntityBytes);
 	trace::BaselineData clientBaselines;
 	eng::ServerCodec enc;
@@ -142,8 +150,21 @@ void RoundTrip(const trace::DemoStream &s, const char *label, Totals &t) {
 				std::ranges::copy(op.snap.ps, server.ps[slot].begin());
 				const bool vehicle = !op.snap.vps.empty();
 				if (vehicle) std::ranges::copy(op.snap.vps, server.vps[slot].begin());
-				for (uint32_t i = 0; i < op.snap.entities.count; i++)
-					std::ranges::copy(op.snap.entities[i], server.ring[static_cast<uint32_t>(server.nextEntity + static_cast<int32_t>(i)) % kRingStates].begin());
+				// the server reads its snapshots through an index and keeps one copy of a state while it does not change, as
+				// the engine's does: version v of entity n is state (v mod kPacketBackup) * kMaxEntities + n, written when
+				// the state differs from the entity's last copy, so an unchanged entity is the same state as in the base
+				const uint32_t count = op.snap.entities.count;
+				serverTick++;
+				for (uint32_t i = 0; i < count; i++) {
+					const std::span<const uint8_t> st = op.snap.entities[i];
+					const uint32_t num = EntityNumber(st);
+					const auto place = [&] { return ((serverVersion[num] % eng::kPacketBackup) * kMaxEntities) + num; };
+					if (!std::ranges::equal(st, serverStates[place()])) {
+						serverVersion[num]++;
+						std::ranges::copy(st, serverStates[place()].begin());
+					}
+					server.index[slot][i] = place();
+				}
 				sm.snapshot = true;
 				sm.delta = m.delta;
 				sm.time = static_cast<int32_t>(op.time);
@@ -152,8 +173,8 @@ void RoundTrip(const trace::DemoStream &s, const char *label, Totals &t) {
 				sm.areas = op.areas.data();
 				sm.numAreas = ToU32(op.areas.size());
 				sm.frame = eng::Frame{ .seq = seq, .ps = server.ps[slot].data(), .vps = vehicle ? server.vps[slot].data() : nullptr,
-				                       .firstEntity = server.nextEntity, .numEntities = op.snap.entities.count, .record = {} };
-				server.nextEntity += static_cast<int32_t>(op.snap.entities.count);
+				                       .firstEntity = serverTick * int64_t{ kMaxEntities }, .numEntities = count,
+				                       .index = server.index[slot].data(), .record = {} };
 				break;
 			}
 			case OpType::Download:
@@ -170,7 +191,8 @@ void RoundTrip(const trace::DemoStream &s, const char *label, Totals &t) {
 		}
 		uint32_t delta = 0;
 		eng::Record rec{};
-		const size_t n = enc.Encode(sm, server.frames.data(), server.Ring(), server.nextEntity, server.Commands(),
+		const size_t n = enc.Encode(sm, server.frames.data(), eng::EntityRing{ .states = serverStates.data(), .count = kServerStates },
+		                            serverTick * int64_t{ kMaxEntities }, server.Commands(),
 		                            eng::Baselines{ .bytes = serverBaselines.data(), .stride = kServerBaselineStride }, out.data(),
 		                            out.size(), delta, rec);
 		if (n == 0 || delta != m.delta) {
@@ -233,9 +255,10 @@ void RoundTrip(const trace::DemoStream &s, const char *label, Totals &t) {
 				                    .vps = cm.vehicle ? std::span<const uint8_t>(client.vps[slot]) : std::span<const uint8_t>(),
 				                    .entities = EntityRing{ .ring = trace::Bytes(client.ring),
 				                                            .first = static_cast<uint32_t>(client.nextEntity) % kRingStates,
-				                                            .count = cm.numEntities } };
+				                                            .count = cm.numEntities, .index = {} } };
 				cf = eng::Frame{ .seq = seq, .ps = client.ps[slot].data(), .vps = cm.vehicle ? client.vps[slot].data() : nullptr,
-				                 .firstEntity = client.nextEntity, .numEntities = cm.numEntities, .record = cm.record };
+				                 .firstEntity = client.nextEntity, .numEntities = cm.numEntities, .index = nullptr,
+				                 .record = cm.record };
 				client.nextEntity += static_cast<int32_t>(cm.numEntities);
 			}
 			if (cm.download) {

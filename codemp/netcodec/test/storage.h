@@ -28,7 +28,7 @@ struct SnapshotData {
 	[[nodiscard]] Snapshot View() const noexcept {
 		return Snapshot{ .ps = ps,
 		                 .vps = hasVehicle ? std::span<const uint8_t>(vps) : std::span<const uint8_t>(),
-		                 .entities = EntityRing{ .ring = Bytes(entities), .first = 0, .count = ToU32(entities.size()) } };
+		                 .entities = EntityRing{ .ring = Bytes(entities), .first = 0, .count = ToU32(entities.size()), .index = {} } };
 	}
 
 	void Assign(const Snapshot &s) {

@@ -103,6 +103,14 @@ uint32_t ClassOf(ImageView st) noexcept {
 // The entities of a list read one after the other, with the current one's number (kMaxEntities past the end): a
 // snapshot's ring (the offset wraps at the ring's end), or the baselines of a gamestate (the numbers whose state
 // holds its number, in increasing order).
+//
+// RingReader reads a run of the ring: the decoder's, whose snapshots are runs of the client's own ring.
+// SnapshotReader, the encoder's, reads through an index: the server's snapshots share the states of a tick
+// (EntityRing::index). A snapshot given to the encoder as a run (the tests, the tools, a client recording a demo)
+// gets the index of its run when its reader is made, so that each reader steps one way, without a test at every
+// entity (a reader of both forms cost the encoder 1 to 6 % on the three compilers, plan step 14, part 5).
+// The server keeps one copy of a state while it does not change: an entity that a snapshot and its base read from
+// the same place is unchanged, and PutEntities skips it without comparing the two states.
 class RingReader {
 public:
 	explicit RingReader(const EntityRing &r) noexcept
@@ -130,6 +138,53 @@ private:
 	uint32_t num_ = kMaxEntities;
 };
 
+class SnapshotReader {
+public:
+	// own_ is written only for a run, and never read otherwise: not cleared (4 KB per reader)
+	explicit SnapshotReader(const EntityRing &r) noexcept   // NOLINT(cppcoreguidelines-pro-type-member-init)
+		: begin_(r.ring.data()), index_(r.index.data()), left_(std::min(r.count, kMaxEntities)) {
+		if (r.index.empty() && left_ != 0) {
+			const uint32_t size = ToU32(r.ring.size() / kEntityBytes);
+			uint32_t k = r.first;
+			for (uint32_t i = 0; i < left_; i++) {
+				own_[i] = k;
+				if (++k == size) k = 0;
+			}
+			index_ = own_.data();
+		}
+		Load();
+	}
+	~SnapshotReader() = default;
+	SnapshotReader(const SnapshotReader &) = delete;   // index_ may point into own_
+	SnapshotReader &operator=(const SnapshotReader &) = delete;
+	SnapshotReader(SnapshotReader &&) = delete;
+	SnapshotReader &operator=(SnapshotReader &&) = delete;
+
+	[[nodiscard]] uint32_t Number() const noexcept { return num_; }
+	[[nodiscard]] ImageView State() const noexcept { return { p_, kEntityBytes }; }
+	void Next() noexcept {
+		left_--;
+		index_++;
+		Load();
+	}
+
+private:
+	void Load() noexcept {
+		num_ = kMaxEntities;
+		if (left_ != 0) {
+			p_ = begin_ + (size_t{ *index_ } * kEntityBytes);
+			std::memcpy(&num_, p_, 4);
+		}
+	}
+
+	const uint8_t *begin_;
+	const uint8_t *p_ = nullptr;
+	const uint32_t *index_;
+	uint32_t left_;
+	uint32_t num_ = kMaxEntities;
+	std::array<uint32_t, kMaxEntities> own_;
+};
+
 class TableReader {
 public:
 	explicit TableReader(const BaselineTable &t) noexcept : t_(t) {
@@ -149,7 +204,7 @@ private:
 };
 
 // entities of a snapshot looked up by increasing numbers: a forward cursor instead of a search per lookup
-class EntityCursor {
+template <class Reader> class EntityCursor {
 public:
 	explicit EntityCursor(const Snapshot *snap) noexcept : r_(snap != nullptr ? snap->entities : EntityRing{}) {}
 
@@ -160,7 +215,7 @@ public:
 	}
 
 private:
-	RingReader r_;
+	Reader r_;
 };
 
 // where GetEntities writes: a snapshot's ring, in number order (at most maxEntities), or the baseline table (by
@@ -176,7 +231,7 @@ public:
 		count_++;
 		return ring_.subspan(k * kEntityBytes, kEntityBytes);
 	}
-	[[nodiscard]] EntityRing View() const noexcept { return EntityRing{ .ring = ring_, .first = first_, .count = count_ }; }
+	[[nodiscard]] EntityRing View() const noexcept { return EntityRing{ .ring = ring_, .first = first_, .count = count_, .index = {} }; }
 
 private:
 	std::span<uint8_t> ring_;
@@ -251,11 +306,11 @@ void PutEntity(O &io, const PredCtx &c, ImageView nw, ImageView basest, std::spa
 }
 
 // entity operations: 0 changed, 1 new from its baseline, 2 removed, 3 new and equal to its baseline
-// nw: a RingReader or a TableReader; entity numbers below kMaxEntities
+// nw: a SnapshotReader or a TableReader; entity numbers below kMaxEntities
 template <class O, class R>
-void PutEntities(O &io, PredCtx &c, R nw, RingReader old, const BaselineTable &baselines, const Model &m) noexcept {
+void PutEntities(O &io, PredCtx &c, R &nw, SnapshotReader &old, const BaselineTable &baselines, const Model &m) noexcept {
 	ChangeList list{};
-	EntityCursor olderList(c.olderSnap);
+	EntityCursor<SnapshotReader> olderList(c.olderSnap);
 	int64_t prevnum = -1;
 	uint32_t prevop = 0;
 	for (;;) {
@@ -275,6 +330,7 @@ void PutEntities(O &io, PredCtx &c, R nw, RingReader old, const BaselineTable &b
 		uint32_t nch = 0;
 		ImageView basest;
 		if (!ne.empty() && !oe.empty()) {
+			if (ne.data() == oe.data()) continue;   // the base's own copy of the state: unchanged
 			nch = Changes(ne, oe, list);
 			if (nch == 0) continue;
 			op = 0;
@@ -317,7 +373,7 @@ NETCODEC_ALWAYS_INLINE bool GetEntities(In &io, PredCtx &c, RingReader old, cons
 	int64_t prevnum = -1;
 	uint32_t prevop = 0;
 	const FieldDesc &typeField = kEntityFields[kEntityTypeIndex];
-	EntityCursor olderList(c.olderSnap);
+	EntityCursor<RingReader> olderList(c.olderSnap);
 	for (;;) {
 		const uint32_t g = io.Symbol(Of(kEntGap));
 		if (g == kEntityListEnd) break;
@@ -555,7 +611,9 @@ void PutMessage(O &io, const Message &msg, const Base &base, const BaselineTable
 				pi = cs.index;
 				io.String(Of(kStrCs), cs.text);
 			}
-			PutEntities(io, c, TableReader(gs.baselines), RingReader(EntityRing{}), BaselineTable{}, m);
+			TableReader nw(gs.baselines);
+			SnapshotReader old(EntityRing{});
+			PutEntities(io, c, nw, old, BaselineTable{}, m);
 			io.Class(Of(kMClientNum), Zz(gs.clientNum));
 			io.Raw(static_cast<uint32_t>(gs.checksum), 32);
 			bl = &gs.baselines;
@@ -586,7 +644,9 @@ void PutMessage(O &io, const Message &msg, const Base &base, const BaselineTable
 				const ImageView ov = base.snap != nullptr && !base.snap->vps.empty() ? base.snap->vps : ImageView(ZeroPlayer());
 				PutPlayer(io, c, kVehicleFields, ctx::PlayerGap(2), nv, ov, OlderPlayer(c, true), m);
 			}
-			PutEntities(io, c, RingReader(sn.entities), RingReader(base.snap != nullptr ? base.snap->entities : EntityRing{}), *bl, m);
+			SnapshotReader nw(sn.entities);
+			SnapshotReader old(base.snap != nullptr ? base.snap->entities : EntityRing{});
+			PutEntities(io, c, nw, old, *bl, m);
 			break;
 		}
 		case OpType::Nop:
@@ -642,6 +702,10 @@ bool GetMessage(In &io, const BaseLookup &lookup, const CommandHistory &history,
 	const Snapshot *base = nullptr;
 	const HeaderRecord *bh = nullptr;
 	if (delta != 0 && !lookup.Find(delta, base, bh)) return false;
+	// the decoder reads its bases as runs of the ring (RingReader): an indexed snapshot is the encoder's only
+	if ((base != nullptr && !base->entities.index.empty()) ||
+	    (bh != nullptr && bh->older != nullptr && !bh->older->entities.index.empty()))
+		return false;
 	PredCtx c;
 	c.escaped = escaped;
 	c.btime = bh != nullptr ? bh->time : std::nullopt;

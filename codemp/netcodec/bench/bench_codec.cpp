@@ -83,6 +83,14 @@ public:
 	}
 };
 
+// The server's view of a recorded snapshot: the engine's server keeps one copy of an entity's state while it does not
+// change and a snapshot is a list of positions (plan step 14, part 5), so the encoder is timed reading its entities
+// through an index over a stream's pool of states, where a state is stored again only when it differs from the
+// entity's last copy: an unchanged entity is at the same position as in the base. The decoder's snapshots stay runs.
+struct ServerSnapshot {
+	std::vector<uint32_t> index;
+};
+
 // Legacy view of one message: pointers into the trace.
 struct LegacyInput {
 	std::vector<const uint8_t *> entityPtrs;
@@ -92,6 +100,7 @@ struct LegacyInput {
 
 struct Item {
 	const trace::CodecMessage *cm = nullptr;
+	const Message *serverMsg = nullptr;                 // cm->msg with its snapshot as the server holds it
 	Base base;                                          // netcodec, server side
 	std::vector<uint8_t> bytes;                         // netcodec
 	BaselineTable baselines;                            // not changed by the benchmarked messages (no gamestate)
@@ -104,12 +113,17 @@ struct Item {
 struct StreamRun {
 	std::vector<Item> items;                            // benchmarked messages
 	Store server, client;
+	std::vector<std::unique_ptr<Message>> serverMsgs;
+	std::vector<std::unique_ptr<ServerSnapshot>> serverSnaps;
 	trace::CommandLog serverHistory, clientHistory;
 	std::vector<std::unique_ptr<trace::BaselineData>> baselineSets;
 	std::vector<std::unique_ptr<std::vector<EntityState>>> legacyBaselineImages;
 	std::vector<std::unique_ptr<std::vector<const uint8_t *>>> legacyBaselinePtrs;
 	std::vector<std::unique_ptr<LegacyInput>> legacyInputs;
 	std::map<uint32_t, const LegacyInput *> legacyBySeq;
+	std::unique_ptr<EntityState[]> pool;                // the server's states
+	size_t poolSize = 0, poolUsed = 0;
+	std::vector<uint32_t> lastCopy = std::vector<uint32_t>(kMaxEntities, UINT32_MAX);   // per entity number, in the pool
 };
 
 void FillLegacyInput(const Message &m, int delta, LegacyInput &in) {
@@ -162,8 +176,13 @@ int main(int argc, char **argv) {
 	trace::DecodeTarget target;            // netcodec's decoded snapshot
 	trace::BaselineData gsScratch;         // netcodec's decoded gamestate baselines
 
+	// NETCODEC_BENCH_RUNS set: the encoder gets every snapshot's states as a run of its own copies, without the index
+	// and with nothing shared, as the server stored them before plan step 14 (a control, not the server's path)
+	const bool serverRuns = std::getenv("NETCODEC_BENCH_RUNS") != nullptr;
+	if (serverRuns) fprintf(stderr, "NETCODEC_BENCH_RUNS: the encoder's snapshots as runs, without the index\n");
 	std::vector<std::unique_ptr<StreamRun>> runs;
 	size_t nBench = 0, bytesNew = 0, bytesLegacy = 0, legacyBad = 0, newBad = 0;
+	size_t entities = 0, stored = 0;
 	for (const trace::CodecStream &s : streams) {
 		auto run = std::make_unique<StreamRun>();
 		const auto addBaselines = [&](const BaselineTable &bl) {
@@ -178,6 +197,11 @@ int main(int argc, char **argv) {
 			run->legacyBaselinePtrs.push_back(std::move(ptrs));
 		};
 		addBaselines({});
+		for (const trace::CodecMessage &cm : s)
+			for (const Op &op : cm.msg.ops)
+				if (op.type == OpType::Snapshot) run->poolSize += op.snap.entities.count;
+		run->pool = std::make_unique_for_overwrite<EntityState[]>(std::max<size_t>(run->poolSize, 1));
+		const std::span<const uint8_t> poolBytes(run->pool[0].data(), run->poolSize * kEntityBytes);
 		for (const trace::CodecMessage &cm : s) {
 			Item it;
 			it.cm = &cm;
@@ -193,9 +217,36 @@ int main(int argc, char **argv) {
 				it.legacyBase = lb != run->legacyBySeq.end() ? &lb->second->view.snap : nullptr;
 				bench = bench && it.legacyBase != nullptr;
 			}
+			// the message as the server holds it
+			auto smsg = std::make_unique<Message>(cm.msg);
+			const Snapshot *serverSnap = nullptr;
+			for (Op &op : smsg->ops) {
+				if (op.type != OpType::Snapshot) continue;
+				auto ss = std::make_unique<ServerSnapshot>();
+				const uint32_t n = op.snap.entities.count;
+				const uint32_t first = ToU32(run->poolUsed);
+				ss->index.resize(n);
+				for (uint32_t i = 0; i < n; i++) {
+					const std::span<const uint8_t> src = op.snap.entities[i];
+					uint32_t &last = run->lastCopy[EntityNumber(src)];
+					if (serverRuns || last == UINT32_MAX || !std::ranges::equal(src, run->pool[last])) {
+						last = ToU32(run->poolUsed++);
+						std::ranges::copy(src, run->pool[last].begin());
+						stored++;
+					}
+					ss->index[i] = last;
+				}
+				entities += n;
+				op.snap.entities = EntityRing{ .ring = poolBytes, .first = first, .count = n,
+				                               .index = serverRuns ? std::span<const uint32_t>() : std::span<const uint32_t>(ss->index) };
+				run->serverSnaps.push_back(std::move(ss));
+				serverSnap = &op.snap;
+			}
+			it.serverMsg = smsg.get();
+			run->serverMsgs.push_back(std::move(smsg));
 			// netcodec once: encodes, decodes to the same message
 			HeaderRecord rec, drec;
-			if (!enc.Encode(cm.msg, it.base, it.baselines, run->serverHistory, 1 << 20, out, rec)) newBad++;
+			if (!enc.Encode(*it.serverMsg, it.base, it.baselines, run->serverHistory, 1 << 20, out, rec)) newBad++;
 			it.bytes = out;
 			run->serverHistory.Add(cm.msg);
 			Message dm;
@@ -221,7 +272,7 @@ int main(int argc, char **argv) {
 				if (op.type == OpType::GameState) addBaselines(op.gameState.baselines);
 			it.legacyIn = in.get();
 			if (sop) {
-				run->server.bySeq[cm.seq] = Stored{ &sop->snap, rec };
+				run->server.bySeq[cm.seq] = Stored{ serverSnap, rec };
 				run->client.bySeq[cm.seq] = Stored{ &sop->snap, drec };
 				run->legacyBySeq[cm.seq] = in.get();
 			}
@@ -233,13 +284,15 @@ int main(int argc, char **argv) {
 	printf("messages benchmarked: %zu (commands and snapshots only); netcodec mismatches %zu, legacy round-trip failures %zu\n",
 	       nBench, newBad, legacyBad);
 
+	printf("the server's states: %zu stored for %zu entities in the snapshots (%.1f %%)\n", stored, entities,
+	       100.0 * static_cast<double>(stored) / static_cast<double>(std::max<size_t>(entities, 1)));
 	volatile size_t sink = 0;
 	const double tEncNew = Best(passes, [&] {
 		size_t acc = 0;
 		for (auto &r : runs)
 			for (const Item &it : r->items) {
 				HeaderRecord rec;
-				if (enc.Encode(it.cm->msg, it.base, it.baselines, r->serverHistory, 1 << 20, out, rec)) acc += out.size();
+				if (enc.Encode(*it.serverMsg, it.base, it.baselines, r->serverHistory, 1 << 20, out, rec)) acc += out.size();
 			}
 		sink = sink + acc;
 	});
@@ -297,7 +350,7 @@ int main(int argc, char **argv) {
 	};
 	const double wEncNew = warm([&](StreamRun &r, const Item &it) {
 		HeaderRecord rec;
-		if (enc.Encode(it.cm->msg, it.base, it.baselines, r.serverHistory, 1 << 20, out, rec)) sink = sink + out.size();
+		if (enc.Encode(*it.serverMsg, it.base, it.baselines, r.serverHistory, 1 << 20, out, rec)) sink = sink + out.size();
 	});
 	const double wEncLegacy = warm([&](StreamRun &, const Item &it) {
 		sink = sink + static_cast<size_t>(legacy::Encode(it.legacyIn->view, it.legacyBase, it.legacyBaselines, legacyOut.data(),

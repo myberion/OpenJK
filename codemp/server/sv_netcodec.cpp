@@ -286,19 +286,19 @@ static size_t SV_NetcodecEncode( client_t *client, const eng::ServerMessage &sm,
 
 // A snapshot message that does not fit in outSize bytes is coded again with only the entities nearest to the player,
 // as many as fit (a binary search over their count), instead of being sent empty; the others are absent from this
-// snapshot only (the next ones code them against their baseline again). The frame's entities, which only this message
-// uses, are rewritten in place in the ring. Returns the size (0: it does not fit even without entities) and how many
-// entities were left out.
+// snapshot only (the next ones code them against their baseline again). The frame's list of entities is rewritten;
+// their states, which the tick's other snapshots share, are not touched. Returns the size (0: it does not fit even
+// without entities) and how many entities were left out.
 static size_t SV_NetcodecFitSnapshot( client_t *client, eng::ServerMessage &sm, byte *out, size_t outSize, uint32_t &delta, eng::Record &record, int &left ) {
-	static entityState_t all[MAX_SNAPSHOT_ENTITIES];
+	uint32_t all[MAX_SNAPSHOT_ENTITIES];
 	clientSnapshot_t *frame = &client->frames[sm.seq & PACKET_MASK];
 	const int n = frame->num_entities;
 	int order[MAX_SNAPSHOT_ENTITIES];
 	float dist[MAX_SNAPSHOT_ENTITIES];
 
 	for ( int i = 0; i < n; i++ ) {
-		all[i] = svs.snapshotEntities[( frame->first_entity + i ) % svs.numSnapshotEntities];
-		dist[i] = DistanceSquared( all[i].pos.trBase, frame->ps.origin );
+		all[i] = frame->entities[i];
+		dist[i] = DistanceSquared( svs.snapshotEntities[all[i]].pos.trBase, frame->ps.origin );
 		order[i] = i;
 	}
 	std::sort( order, order + n, [&]( int a, int b ) { return dist[a] != dist[b] ? dist[a] < dist[b] : a < b; } );
@@ -312,7 +312,7 @@ static size_t SV_NetcodecFitSnapshot( client_t *client, eng::ServerMessage &sm, 
 		int m = 0;
 		for ( int i = 0; i < n; i++ ) {
 			if ( keep[i] ) {
-				svs.snapshotEntities[( frame->first_entity + m++ ) % svs.numSnapshotEntities] = all[i];
+				frame->entities[m++] = all[i];
 			}
 		}
 		frame->num_entities = k;
@@ -335,7 +335,7 @@ static size_t SV_NetcodecFitSnapshot( client_t *client, eng::ServerMessage &sm, 
 		}
 	}
 	left = n - fits;
-	return code( fits );	// the ring, delta and record of the last call must be those of the message sent
+	return code( fits );	// the list, delta and record of the last call must be those of the message sent
 }
 
 // codes the message, keeps its snapshot's Frame and sends it; false if it could not be coded (sent empty)
@@ -488,6 +488,7 @@ void SV_NetcodecSendSnapshot( client_t *client, const char *setGame ) {
 	sm.frame.vps = frame->ps.m_iVehicleNum ? &frame->vps : NULL;
 	sm.frame.firstEntity = frame->first_entity;
 	sm.frame.numEntities = (uint32_t)frame->num_entities;
+	sm.frame.index = frame->entities;
 
 	SV_NextDownloadBlock( client, &download );
 	if ( download.present ) {

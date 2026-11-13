@@ -270,14 +270,11 @@ void SV_Startup( void ) {
 	SV_BoundMaxClients( 1 );
 
 	svs.clients = (struct client_s *)Z_Malloc (sizeof(client_t) * sv_maxclients->integer, TAG_CLIENTS, qtrue );
+	svs.numSnapshotEntities = SV_SNAPSHOT_ENTITIES;
 	if ( com_dedicated->integer ) {
-		svs.numSnapshotEntities = sv_maxclients->integer * PACKET_BACKUP * MAX_SNAPSHOT_ENTITIES;
 		Cvar_Set( "r_ghoul2animsmooth", "0");
 		Cvar_Set( "r_ghoul2unsqashaftersmooth", "0");
 
-	} else {
-		// we don't need nearly as many when playing locally
-		svs.numSnapshotEntities = sv_maxclients->integer * 4 * MAX_SNAPSHOT_ENTITIES;
 	}
 	SV_ChallengeInit();
 	svs.initialized = qtrue;
@@ -362,12 +359,7 @@ void SV_ChangeMaxClients( void ) {
 	Hunk_FreeTempMemory( oldClients );
 
 	// allocate new snapshot entities
-	if ( com_dedicated->integer ) {
-		svs.numSnapshotEntities = sv_maxclients->integer * PACKET_BACKUP * MAX_SNAPSHOT_ENTITIES;
-	} else {
-		// we don't need nearly as many when playing locally
-		svs.numSnapshotEntities = sv_maxclients->integer * 4 * MAX_SNAPSHOT_ENTITIES;
-	}
+	svs.numSnapshotEntities = SV_SNAPSHOT_ENTITIES;
 }
 
 /*
@@ -545,7 +537,6 @@ Ghoul2 Insert Start
 */
 	// allocate the snapshot entities on the hunk
 //	svs.snapshotEntities = (struct entityState_s *)Hunk_Alloc( sizeof(entityState_t)*svs.numSnapshotEntities, h_high );
-	svs.nextSnapshotEntities = 0;
 
 	// allocate the snapshot entities
 	svs.snapshotEntities = new entityState_s[svs.numSnapshotEntities];

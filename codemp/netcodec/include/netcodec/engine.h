@@ -60,8 +60,13 @@ struct Frame {
 	int32_t seq;          // -1: the slot holds no usable snapshot
 	const void *ps;       // playerState_t
 	const void *vps;      // the vehicle's playerState_t, nullptr when ps.m_iVehicleNum is 0
-	int32_t firstEntity;  // absolute index in the ring
+	int64_t firstEntity;  // absolute index in the ring of the snapshot's first entity (the others follow it), or, with
+	                      // an index, the nextEntity of the time the snapshot was made (the server holds the snapshot's
+	                      // states while nextEntity is less than the ring's count past it)
 	uint32_t numEntities;
+	const uint32_t *index; // nullptr, or numEntities state numbers of the ring: entity i is state index[i] (the server
+	                       // keeps one copy of an entity's state while it does not change, shared by the snapshots that
+	                       // hold it: the same state number in a snapshot and in its base is an unchanged entity)
 	Record record;
 };
 
@@ -128,7 +133,7 @@ public:
 	// frames: the client's kPacketBackup slots; ring: svs.snapshotEntities, of which nextEntity is the next index
 	// the server will write (svs.nextSnapshotEntities); baselines: the current gamestate's. delta: the base used
 	// (msg.delta, or 0 when the codec had to code without a base); record: to keep in this message's Frame.
-	size_t Encode(const ServerMessage &msg, const Frame *frames, const EntityRing &ring, int32_t nextEntity,
+	size_t Encode(const ServerMessage &msg, const Frame *frames, const EntityRing &ring, int64_t nextEntity,
 	              const CommandRing &commands, const Baselines &baselines, uint8_t *out, size_t outSize, uint32_t &delta,
 	              Record &record);
 
