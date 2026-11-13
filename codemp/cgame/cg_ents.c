@@ -3082,13 +3082,12 @@ CG_CalcEntityLerpPositions
 void CG_CalcEntityLerpPositions( centity_t *cent ) {
 	qboolean goAway = qfalse;
 
-	// if this player does not want to see extrapolated players
-	if ( !cg_smoothClients.integer ) {
-		// make sure the clients use TR_INTERPOLATE
-		if ( (cent->currentState.number != cg.clientNum && cent->currentState.number < MAX_CLIENTS) || cent->currentState.eType == ET_NPC ) {
-			cent->currentState.pos.trType = TR_INTERPOLATE;
-			cent->nextState.pos.trType = TR_INTERPOLATE;
-		}
+	// The other players and the NPCs are drawn between the positions of two snapshots, never carried forward by the
+	// velocity the server sends with them (cg_smoothClients 0 of OpenJK, the cvar removed; plan step 14, part 6):
+	// while the next snapshot is missing they stay at their last position
+	if ( (cent->currentState.number != cg.clientNum && cent->currentState.number < MAX_CLIENTS) || cent->currentState.eType == ET_NPC ) {
+		cent->currentState.pos.trType = TR_INTERPOLATE;
+		cent->nextState.pos.trType = TR_INTERPOLATE;
 	}
 
 	if (cg.predictedPlayerState.m_iVehicleNum &&

@@ -3314,13 +3314,10 @@ void ClientThink_real( gentity_t *ent ) {
 	if ( ent->client->ps.eventSequence != oldEventSequence ) {
 		ent->eventTime = level.time;
 	}
-	if (g_smoothClients.integer) {
-		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
-		//rww - 12-03-02 - Don't snap the origin of players! It screws prediction all up.
-	}
-	else {
-		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, qfalse );
-	}
+	// the player's entity state carries its velocity and the time of its command (g_smoothClients 1 of OpenJK, the cvar
+	// removed: the form the message codec's position prediction and tables were made for; plan step 14, part 6)
+	BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
+	//rww - 12-03-02 - Don't snap the origin of players! It screws prediction all up.
 
 	if (isNPC)
 	{
@@ -3730,13 +3727,10 @@ void ClientEndFrame( gentity_t *ent ) {
 	G_SetClientSound (ent);
 
 	// set the latest infor
-	if (g_smoothClients.integer) {
-		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
-		//rww - 12-03-02 - Don't snap the origin of players! It screws prediction all up.
-	}
-	else {
-		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, qfalse );
-	}
+	// the player's entity state carries its velocity and the time of its command (g_smoothClients 1 of OpenJK, the cvar
+	// removed: the form the message codec's position prediction and tables were made for; plan step 14, part 6)
+	BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
+	//rww - 12-03-02 - Don't snap the origin of players! It screws prediction all up.
 
 	if (isNPC)
 	{
