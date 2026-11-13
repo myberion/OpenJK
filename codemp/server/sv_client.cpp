@@ -1226,11 +1226,15 @@ Runs, for every client in the game, the commands received whose time is up to `t
 (plan step 14): a player's commands run in the ticks, after the bots' and before the game frame, as the bots' do, rather
 than when their packet arrives. A client whose commands are behind the server's clock (stamped with the time it draws
 the world at) has all of them run at the next tick.
+
+The clients run in rising order of their numbers at one tick and in falling order at the next: within a tick the first
+to move takes a contested place and the first to shoot kills first, and of any two clients each is first every other tick.
 ==================
 */
 void SV_RunClientCommands( int time ) {
-	for ( int i = 0; i < sv_maxclients->integer; i++ ) {
-		client_t *cl = &svs.clients[i];
+	const int falling = ( time / TICK_MSEC ) & 1;
+	for ( int n = 0; n < sv_maxclients->integer; n++ ) {
+		client_t *cl = &svs.clients[falling ? sv_maxclients->integer - 1 - n : n];
 		while ( cl->state == CS_ACTIVE && cl->inputFirst != cl->inputLast
 			&& cl->inputCmds[cl->inputFirst & ( SV_INPUT_BUFFER - 1 )].serverTime <= time ) {
 			usercmd_t cmd = cl->inputCmds[cl->inputFirst & ( SV_INPUT_BUFFER - 1 )];
