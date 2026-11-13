@@ -135,8 +135,10 @@ static inline int Net_MarginFromWire( int w ) {
 	return w < 0 ? -msec : msec;
 }
 
-#define	PACKET_BACKUP	32	// number of old messages that must be kept on client and
-							// server for delta comrpession and ping estimation
+#define	PACKET_BACKUP	128	// number of old messages that must be kept on client and
+							// server for delta comrpession: a snapshot is coded against one the
+							// client holds up to 125 messages back, 1.25 s of round trip at a
+							// message per tick (32 in OpenJK; plan step 14, part 5)
 #define	PACKET_MASK		(PACKET_BACKUP-1)
 
 #define	MAX_PACKET_USERCMDS		32		// max number of usercmd_t in a packet

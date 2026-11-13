@@ -466,7 +466,7 @@ Ghoul2 Insert Start
  	// de allocate the snapshot entities
 	if (svs.snapshotEntities)
 	{
-		delete[] svs.snapshotEntities;
+		free( svs.snapshotEntities );
 		svs.snapshotEntities = NULL;
 	}
 /*
@@ -538,10 +538,12 @@ Ghoul2 Insert Start
 	// allocate the snapshot entities on the hunk
 //	svs.snapshotEntities = (struct entityState_s *)Hunk_Alloc( sizeof(entityState_t)*svs.numSnapshotEntities, h_high );
 
-	// allocate the snapshot entities
-	svs.snapshotEntities = new entityState_s[svs.numSnapshotEntities];
-	// we CAN afford to do this here, since we know the STL vectors in Ghoul2 are empty
-	memset(svs.snapshotEntities, 0, sizeof(entityState_t)*svs.numSnapshotEntities);
+	// allocate the snapshot entities, zeroed by the system: a place nothing was stored in yet is not memory in use
+	// (cleared by hand, the whole array was: 69.7 MB at a window of 128 messages; plan step 14, part 5)
+	svs.snapshotEntities = (entityState_t *)calloc( svs.numSnapshotEntities, sizeof( entityState_t ) );
+	if ( !svs.snapshotEntities ) {
+		Com_Error( ERR_FATAL, "SV_SpawnServer: no memory for the snapshot entities" );
+	}
 
 /*
 Ghoul2 Insert End
@@ -1074,7 +1076,7 @@ Ghoul2 Insert Start
  	// de allocate the snapshot entities
 	if (svs.snapshotEntities)
 	{
-		delete[] svs.snapshotEntities;
+		free( svs.snapshotEntities );
 		svs.snapshotEntities = NULL;
 	}
 

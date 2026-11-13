@@ -123,7 +123,7 @@ Further result (same module, `saber 64 medium idle`, one server per rate): 20 Hz
 - `gamestats.sh` (Linux) takes `SCENARIO=` as the Windows script does; its header no longer mentions the removed `g_debugSaberGrid`.
 - All scenarios again (10 saber, 6 force, 24 weapon cases): identical at 20 and 100 Hz (flechette primary: the known shard order), unchanged against the commit.
 
-**Status of every audit item (sections 4 and 5).**
+**Status of every audit item (sections 4 and 5).** The engine rows brought up to date on 14 November 2026, after parts 3, 4 and 5 of step 14 ([step-14-fixed-tick.md](step-14-fixed-tick.md) sections 10 to 12).
 
 | item | status |
 |---|---|
@@ -136,21 +136,30 @@ Further result (same module, `saber 64 medium idle`, one server per rate): 20 Hz
 | saber lock presses once per frame, respawn `+1700`, absorb and protect sound debounce | moot (logic clock) |
 | siege respawn wave, battlesuit event in lava, bots' AI every frame | done: on the 20 Hz instants |
 | bots one movement step per server frame | done: every command run, interleaved by time (`bot_debugClientRate`) |
-| CG5 `saberAttackChainCount` 16 sent as 0 | verified; 5-bit field with step 13 (above) |
+| CG5 `saberAttackChainCount` 16 sent as 0 | verified; 5-bit field with step 13 (above). The other prediction misses when crouching or jumping while attacking were not measured apart: with part 10 of step 14 (the prediction of the local player, the saber first) |
 | `Q_random(&pm->cmd.serverTime)` | verified, fixed |
 | NPC first think off the instants, mover `reached`, trigger `== level.time` tests, `g_object` hit time | moot (logic clock and instants) |
 | mover crush damage per tick | done: movers on the instants |
 | agent 5: per-tick effects on non-clients, `EV_SHIELD_HIT` per tick, proposals B and E | moot (no per-tick damage left) |
 | agent 5: no hit confirmation sound | not wanted |
 | staff and dual duplicate `EV_SABER_BLOCK` | kept (OpenJK's behaviour) |
-| B1 delta base refused above 29 messages (290 ms of round trip at 100 Hz) | part 5 (D3) |
-| B2 `svs.nextSnapshotEntities` wraps (about 2.3 h with 32 clients at 100 Hz) | part 5 (D3) |
-| B3 cgame drops snapshots after a 320 ms hitch; B4 client ping 999 above 256 ms | open, parts 4 and 9 |
+| B1 delta base refused above 29 messages (290 ms of round trip at 100 Hz) | done in part 5b: a window of 128 messages, a base up to 125 messages back (1.25 s); checked in game with 95 % of the messages dropped on the client |
+| B2 `svs.nextSnapshotEntities` wraps (about 2.3 h with 32 clients at 100 Hz) | done in part 5a (`6e3c0a645`): counted on 64 bits, the forced restart removed |
+| B3 cgame drops snapshots after a 320 ms hitch | follows part 5b: `CL_GetSnapshot` keeps `PACKET_BACKUP` snapshots, 1.28 s at 128; to test with a hitch in part 11 of step 14 |
+| B4 client ping 999 above 256 ms | done in part 4e (`2bef287fe`): the client's ping over its last 256 packets, in real time |
 | S2 (the step document's inventory: packets drained once per frame) | wrong: the server runs each packet on arrival (`NET_Sleep` returns from `select`, `NET_Event` runs it); the step document is corrected |
-| W1 catch-up frames send one snapshot, W2 whole-millisecond frame timing, W3 listen server ticks per client frame, W5 server command repeats, W6 `CMD_BACKUP` 64, W7 ping mean over 32 frames | open, part 3 (W5 is S5, W6 part 4) |
+| W1 catch-up frames send one snapshot | kept (part 3): the snapshot holds the newest state; one per catch-up tick would send up to 25 messages at once |
+| W2 whole-millisecond frame timing | overstated (part 3, measured): the loop carries the remainder, a frame starts 0.1 ms late on Linux and 0 to 0.5 ms on Windows; the Linux clock made monotonic |
+| W3 listen server ticks per client frame | kept (part 3): the dedicated server is the target |
+| W5 server command repeats | done (parts 3 and 4b): counted by cause, none without loss; the timeout is twice the ping plus a packet interval |
+| W6 `CMD_BACKUP` 64 | done (part 4b): 256 |
+| W7 ping mean over 32 frames | done (part 3): over the last 256 messages |
 | X1 busy wait | done (Linux dedicated server): an empty server at 100 Hz 9.7 % of a core before, 1.1 % after (VPS) |
-| X3 server CPU at 100 Hz, X5 demos 5 times larger, lagometer 48 columns | open: part 7, later, part 9 |
-| interpolation redesign (agent 6) and its 20 Hz bugs | part 4 |
+| X3 server CPU at 100 Hz | open: part 7 |
+| X5 demos 5 times larger | open: part 11 of step 14 |
+| lagometer 48 columns | open: part 9 |
+| interpolation redesign (agent 6) and its 20 Hz bugs | done in part 4e (`2bef287fe`): the drawing clock rewritten on the proposal |
+| dead code reported by the agents (the saber's old "silent stop" paths, `MISSILE_PRESTEP_TIME` unused) | reported only: part 11 of step 14 (the owner decides on the list) |
 
 **Found on the way, not fixed:** the Linux `Sys_Milliseconds` (`shared/sys/sys_unix.cpp`) uses `gettimeofday`, the wall clock: an NTP step moves the server's clock (frames run in a burst or stop). A monotonic clock (`clock_gettime(CLOCK_MONOTONIC)`) would fix it; to place in part 3 (tick loop).
 

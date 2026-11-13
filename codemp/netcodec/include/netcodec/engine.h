@@ -26,7 +26,7 @@
 namespace netcodec {   // NOLINT(modernize-concat-nested-namespaces): this header is C++11
 namespace engine {
 
-const uint32_t kPacketBackup = 32;          // PACKET_BACKUP: message slots kept by both sides
+const uint32_t kPacketBackup = 128;         // PACKET_BACKUP: message slots kept by both sides
 const uint32_t kMinCommands = 256;          // commands both sides keep at least (MAX_RELIABLE_COMMANDS)
 const uint32_t kCommandWindow = 127;        // a server command is coded against an earlier one at most this far back
 const uint32_t kMaxSnapshotEntities = 256;  // MAX_SNAPSHOT_ENTITIES

@@ -151,14 +151,14 @@ void RoundTrip(const trace::DemoStream &s, const char *label, Totals &t) {
 				const bool vehicle = !op.snap.vps.empty();
 				if (vehicle) std::ranges::copy(op.snap.vps, server.vps[slot].begin());
 				// the server reads its snapshots through an index and keeps one copy of a state while it does not change, as
-				// the engine's does: version v of entity n is state (v mod kPacketBackup) * kMaxEntities + n, written when
+				// the engine's does: version v of entity n is state n * kPacketBackup + v mod kPacketBackup, written when
 				// the state differs from the entity's last copy, so an unchanged entity is the same state as in the base
 				const uint32_t count = op.snap.entities.count;
 				serverTick++;
 				for (uint32_t i = 0; i < count; i++) {
 					const std::span<const uint8_t> st = op.snap.entities[i];
 					const uint32_t num = EntityNumber(st);
-					const auto place = [&] { return ((serverVersion[num] % eng::kPacketBackup) * kMaxEntities) + num; };
+					const auto place = [&] { return (num * eng::kPacketBackup) + (serverVersion[num] % eng::kPacketBackup); };
 					if (!std::ranges::equal(st, serverStates[place()])) {
 						serverVersion[num]++;
 						std::ranges::copy(st, serverStates[place()].begin());

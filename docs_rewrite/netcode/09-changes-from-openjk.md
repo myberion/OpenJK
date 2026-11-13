@@ -23,6 +23,7 @@ This page lists every change of the branch outside the study documents, grouped 
 | Rounding rule of `SnapVector` | differs between compilers | to nearest, ties to even, everywhere | a Windows client and a Linux server agree |
 | Server frame rate | `sv_fps` 40 | a fixed tick of 10 ms (`TICK_MSEC`), the game's logic on its 20 Hz instants | a snapshot every 10 ms; the game plays as at `sv_fps` 20 (section 7) |
 | Entity states the server keeps for its snapshots | a copy of every entity of every snapshot of every client (139.5 MB at 32 players), counted on 32 bits: the server restarted the map before the counter wrapped, after about 2.3 h on one map with many players | one copy of an entity's state while it does not change, shared by every snapshot that holds it (17.4 MB), counted on 64 bits (plan step 14, part 5) | less memory, no forced restart; the encoder skips an entity that did not change since the base without comparing the two states (warm encoding 8 to 14 % faster on the three compilers), the bytes sent are the same |
+| Snapshots both sides keep to code the next ones against (`PACKET_BACKUP`) | 32: a base at most 29 messages back, 290 ms at a message every 10 ms | 128: a base up to 125 messages back, 1.25 s (plan step 14, part 5) | a player with a long round trip, or in a long burst of loss, keeps small snapshots instead of whole ones in fragments; the client keeps 17.4 MB of entity states instead of 4.4; the server's entity states are zeroed by the system instead of cleared by hand and the versions of an entity are neighbours, so the memory in use is that of the entity numbers in use (a local Windows server with 16 bots: 42 to 48 MB against 57 at the window of 32) |
 | Network settings | `rate`, `snaps`, `cl_maxpackets`, `cl_packetdup`, `cl_timeNudge`, the server's rate and snapshot policies, timeouts | fixed: a snapshot every server frame, a client packet per tick (100 per second; 125 at most from step 11 to step 14 part 4a), the commands of 2 packets repeated, 30 s timeout in game; the interpolation delay computed from the measured jitter and loss (plan step 11) | nothing to set; section 8 |
 | Math functions | the C library's, different on every system | one entry point (`q_libm.h`) on LLVM libc's correctly rounded functions | the same bits on Windows and Linux, every compiler (section 7) |
 | Random numbers | Raven's 15-bit LCG and the C library's `rand()`, another sequence on each system | one entry point (`q_rand.h`), xoshiro128++ | the same numbers on every platform (section 7) |
@@ -69,7 +70,7 @@ Tested in game over UDP with simulated loss (5 % and 20 % of the server's messag
 ### What does not change
 
 - Connectionless messages (`getinfo`, `getstatus`, `connect`, the master server): the server browser works as before (one display defect fixed, section 9).
-- The choice of the base snapshot (the newest one the client acknowledged), `PACKET_BACKUP` (32), the rate and snapshot-rate rules, the netchan fragmentation.
+- The choice of the base snapshot (the newest one the client acknowledged), the rate and snapshot-rate rules, the netchan fragmentation; `PACKET_BACKUP` was 32 until plan step 14 part 5 (128 since, "At a glance").
 - The legacy writer is kept in the server, only to compare sizes (`sv_netcodecCompare`).
 
 ### What it implies

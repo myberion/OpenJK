@@ -537,7 +537,7 @@ static void SV_NewSnapshotTick( void ) {
 
 // where the newest copy of an entity's state is in svs.snapshotEntities
 static uint32_t SV_SnapshotPlace( int num ) {
-	return ( svs.snapshotVersion[num] % SV_SNAPSHOT_TICKS ) * MAX_GENTITIES + num;
+	return num * SV_SNAPSHOT_TICKS + svs.snapshotVersion[num] % SV_SNAPSHOT_TICKS;
 }
 
 /*

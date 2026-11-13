@@ -110,8 +110,8 @@ typedef struct clientSnapshot_s {
 	int				messageSize;		// used to rate drop packets
 } clientSnapshot_t;
 
-// the snapshots' entity states: SV_SNAPSHOT_TICKS copies of each of the MAX_GENTITIES entities (17 MB at 32); a power
-// of two, so that an entity's version count may wrap
+// the snapshots' entity states: SV_SNAPSHOT_TICKS copies of each of the MAX_GENTITIES entities (69.7 MB at 128, of
+// which only the copies written are memory in use); a power of two, so that an entity's version count may wrap
 #define	SV_SNAPSHOT_TICKS		PACKET_BACKUP
 #define	SV_SNAPSHOT_ENTITIES	( SV_SNAPSHOT_TICKS * MAX_GENTITIES )
 #define	SV_INPUT_REPEAT_MSEC	250	// a player whose commands stop coming has its last one run again this long, then
@@ -268,8 +268,10 @@ typedef struct serverStatic_s {
 	client_t	*clients;					// [sv_maxclients->integer];
 	// The entity states of the snapshots (plan step 14, part 5): one copy of an entity's state while it does not
 	// change, shared by every snapshot that holds it. The copies of entity n are its versions: version v is at place
-	// ( v % SV_SNAPSHOT_TICKS ) * MAX_GENTITIES + n, written when a tick finds the entity's state different from its
-	// last copy (SV_BuildClientSnapshot, once per entity and tick). An entity gets at most one version per tick, so a
+	// n * SV_SNAPSHOT_TICKS + v % SV_SNAPSHOT_TICKS, written when a tick finds the entity's state different from its
+	// last copy (SV_BuildClientSnapshot, once per entity and tick). The versions of an entity are neighbours: a state
+	// is next to the one it is compared with, and the memory in use is that of the entity numbers in use, whatever
+	// the size of the system's pages. An entity gets at most one version per tick, so a
 	// copy is overwritten SV_SNAPSHOT_TICKS ticks after it stops being the newest, at the earliest: the states of a
 	// snapshot are held that long. A client's snapshot is a list of places; an entity at the same place in a snapshot
 	// and in its base has not changed, which the message codec reads from the places, without comparing the states.

@@ -172,6 +172,7 @@ Depends on: steps 10 and 11, and the owner's answers in 07 section 7.7.
 
 - Decide on authenticated encryption and the connection model; evaluate an in-place AEAD layer, netcode + reliable, GameNetworkingSockets against the requirements of 07 section 7.3, on a prototype with the real codec payloads.
 - The legacy netchan obfuscation (`SV_Netchan_Encode` / `CL_Netchan_Decode`: the payload XORed with a key made of the challenge, the sequence and the last command texts) is removed from server-to-client messages in step 7 (owner, 8 November 2026: its key was chosen from the reliable acknowledge read in clear at the start of the message, which the codec now codes). The client-to-server direction loses it, and the user-command key, in step 8. Decide here whether to restore an equivalent, replace it with the encryption above, or leave it out.
+- UDP downloads (placed here on 14 November 2026): one block per message since step 7, about 3 times slower on a LAN than the legacy format; several blocks per message, or a download channel of their own, decided with the transport.
 - Check: the decision is recorded with measured overhead, CPU at 64 clients, behaviour under loss, and licence review.
 
 ### Step 13: live measurement and tuning (M)
@@ -181,6 +182,9 @@ Depends on: steps 7 to 12.
 - Playtest servers with the recorder: bytes per client per second, snapshots per second, prediction misses, CPU per client, escape rate.
 - Retrain the tables from the new recordings; size regression check.
 - With the retraining (owner's choice of 12 November 2026, done with this step): `saberAttackChainCount` on 5 bits instead of 4 (capped at 16, so 16 reached the client as 0: step 14 audit, CG5); its contexts change alphabet, so the schema and the tables are regenerated.
+- Also with the retraining, since the format and the tables change anyway (placed here on 14 November 2026): the shorter rANS final state (an estimated 15 % fewer bytes per client packet and 2 % per server message, both directions); the optional format items of step 6 part 2 B (B.3, B.5 to B.7); the symbol of the base's distance, trained on bases at most 29 messages back while the window is 128 since step 14 part 5.
+- Final performance pass, after the last format change (placed here on 14 November 2026): GCC 16.2 encoding about 9 % slower than GCC 12; MSVC decoding 2 % slower warm since step 14 part 4c, its origin not separated; the library built with clang-cl on Windows (MSVC cannot align code); 32-bit (MSVC Win32 encodes 2.1 times slower than x64): kept or dropped.
+- The analysis tools in C++ rather than Python (owner, 9 November 2026), with the recorder of this step.
 
 ### Step 14: beyond the codec (L)
 
@@ -197,6 +201,8 @@ The items as listed before the survey (05 section 5.7):
 - the prediction misses when crouching or jumping while attacking (seen during step 8, the base game's too);
 - the freeze when the scoreboard (Tab) first shows players whose models are not loaded yet (cgame loads them then; seen during step 11): load them earlier;
 - a fixed physics step (`pmove_*`, 04 section 4.10), a gameplay decision.
+
+Placed on 14 November 2026 (owner: every open point gets a place; the parts are in [progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md) section 5): the cost of the statistics commands with part 7 (server CPU); the prediction of the local player, the saber first, with the animation misses and the misses when crouching or jumping while attacking, as part 10; what the audits and the sessions left (the demos' size at 100 messages per second, the dead code reported, a long client hitch, the sound at 333 frames per second, priority and culling) as part 11, at the end of the step.
 
 ## 3. Order at a glance
 
