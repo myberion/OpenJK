@@ -1583,7 +1583,7 @@ void CL_WritePacket( void ) {
 	// we want to send all the usercmds that were generated in the last
 	// few packet, so even if a couple packets are dropped in a row,
 	// all the cmds will make it to the server
-	oldPacketNum = (clc.netchan.outgoingSequence - 1 - CL_PACKET_DUP) & PACKET_MASK;
+	oldPacketNum = (clc.netchan.outgoingSequence - 1 - CL_PACKET_DUP) & OUT_PACKET_MASK;
 	count = cl.cmdNumber - cl.outPackets[ oldPacketNum ].p_cmdNumber;
 	if ( count > MAX_PACKET_USERCMDS ) {
 		count = MAX_PACKET_USERCMDS;
@@ -1610,8 +1610,8 @@ void CL_WritePacket( void ) {
 	//
 	// deliver the message
 	//
-	packetNum = clc.netchan.outgoingSequence & PACKET_MASK;
-	cl.outPackets[ packetNum ].p_realtime = cls.realtime;
+	packetNum = clc.netchan.outgoingSequence & OUT_PACKET_MASK;
+	cl.outPackets[ packetNum ].p_realtime = Sys_Milliseconds();
 	cl.outPackets[ packetNum ].p_serverTime = count >= 1 ? cl.cmds[ cl.cmdNumber & CMD_MASK ].serverTime : 0;
 	cl.outPackets[ packetNum ].p_cmdNumber = cl.cmdNumber;
 	clc.lastPacketSentTime = cls.realtime;

@@ -82,10 +82,14 @@ void CL_ParseSnapshot( clSnapshot_t *newSnap ) {
 	cl.snap = *newSnap;
 	cl.snap.ping = 999;
 	// calculate ping time
-	for ( i = 0 ; i < PACKET_BACKUP ; i++ ) {
-		packetNum = ( clc.netchan.outgoingSequence - 1 - i ) & PACKET_MASK;
+	for ( i = 0 ; i < OUT_PACKET_BACKUP ; i++ ) {
+		packetNum = ( clc.netchan.outgoingSequence - 1 - i ) & OUT_PACKET_MASK;
+		if ( !cl.outPackets[ packetNum ].p_realtime ) {
+			break;	// never sent
+		}
 		if ( cl.snap.ps.commandTime >= cl.outPackets[ packetNum ].p_serverTime ) {
-			cl.snap.ping = cls.realtime - cl.outPackets[ packetNum ].p_realtime;
+			// in real time: cls.realtime is the last frame's, up to a frame before this message arrived
+			cl.snap.ping = Sys_Milliseconds() - cl.outPackets[ packetNum ].p_realtime;
 			break;
 		}
 	}
@@ -97,7 +101,6 @@ void CL_ParseSnapshot( clSnapshot_t *newSnap ) {
 		cl.snap.deltaNum, cl.snap.ping );
 	}
 
-	CL_InterpRecord();
 	cl.newSnapshots = qtrue;
 }
 

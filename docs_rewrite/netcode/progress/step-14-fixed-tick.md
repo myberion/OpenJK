@@ -371,6 +371,47 @@ Input margin options considered (Q1): A, a field in each snapshot (chosen; Overw
 
 4a ran the players' commands from client 0 to 31 at every tick, so within a tick a low client number always moved and shot first (OpenJK ran each command on arrival: no client number was favoured). `SV_RunClientCommands` now runs the clients in rising order at one tick and in falling order at the next: of any two players each is first every other tick, also on the 20 Hz instants (every fifth tick, so their parity alternates). Options not taken: shifting the first client by one per tick (client 0 would still run before client 1 at 31 ticks of 32), a random order per tick (the same fairness on average, more code), the order of arrival (with 4c it would favour the client with the largest input margin). No cost in CPU, bytes or memory. Not changed: the bots run before the players, in the order of their numbers (their commands do not go through the input buffer; the scenarios' two bots keep their order, `golden: SAME`), and the saber and the force powers run from client 0 to 31 on the 20 Hz instants (`G_RunFrame`, OpenJK's order, kept for the identity with `sv_fps` 20).
 
+### Order and decisions for 4c, 4d and 4e (owner, 13 November 2026)
+
+The owner's rule for the whole part: precision and reactivity first, every player on equal footing, the least delay; parts may be grouped when coherence needs it. After a survey of what recent games do ([../11-tick-and-lag-compensation-survey.md](../11-tick-and-lag-compensation-survey.md) section 11.11):
+
+- Order: 4e (the drawing clock), then 4c with the cgame audit of 4d (with the commands ahead, the predicted state is ahead of the drawn world by the round trip plus the interpolation delay plus the margin, so every comparison of a predicted time with `cg.time` must use the command clock at once), then the prediction cache of 4d. One commit each.
+- D1, the input margin: measured (as Counter-Strike 2, Valorant and Fusion; not Unity's 2 fixed ticks, 20 ms here). The server reports in each snapshot how early the command of the tick arrived, in milliseconds; the client keeps the margins of the last 2 s and aims a few milliseconds (2 to 5, set by measuring) above the second smallest, so loss raises the margin by itself. Delay of a key press to the server: about 5 ms of gathering, the trip, the margin (today: the same with 0 to 10 ms of wait for the tick instead of the margin).
+- D2, a command that comes after its tick: as Counter-Strike 2 (`sv_late_commands_allowed`, `sv_condense_late_buttons`), it gets no movement time and what it newly pressed (buttons, jump, the generic command) goes into the next command run. Not Rocket League's queue that shifts (its authors report minor desyncs).
+- D3, no command at the tick: the last command again for 250 ms (the default of `g_forceClientUpdateRate`, which goes), then an empty command every tick.
+- The command clock gains at most about 6 % and loses at most about 7 % (Counter-Strike 2's limits), and jumps beyond 100 ms of error.
+
+### 4e done (13 November 2026): the drawing clock
+
+`CL_AdjustTimeDelta` (`client/cl_cgame.cpp`) is rewritten on the audit's proposal. At every frame the client's time must not pass the newest snapshot's serverTime, so the largest `serverTimeDelta` a frame allows is that serverTime minus the frame's real time; each interval between two snapshot arrivals gives one sample, that value at the last frame drawn before the next snapshot came. A window (`clockWindow_t`, written to serve the command clock of 4c too) keeps the smallest sample of each of its last 64 slots of 32 ms; the target is the second smallest minus 2 ms (the smallest while fewer than 8 slots are filled). The time moves towards it every frame by at most 1 ms per 16 ms forward and 1 ms per 14 ms back (step 11: 1 ms forward or 2 back per frame that brought snapshots). An interval of more than 100 ms without a snapshot gives no sample. The separate loss rule (one more interval above 5 % of loss, which flapped on 0.64 s) is gone: a lost snapshot gives a sample one interval lower, so loss that comes more than once in 2 s raises the delay by itself. The client starts one interval behind its first snapshot (it started at no delay and extrapolated). The jump of the server's clock (`map_restart`) is followed as before. `snap.ping` is measured over the last 256 packets sent (`OUT_PACKET_BACKUP`; 32 before: 999 above 320 ms of round trip) with the real time at sending and at arrival (it used the last frame's time, up to a frame short).
+
+Simulated on the same synthetic arrivals (`../tools/clock/sim_clock.py`, 120 s per case, seed 1), delay behind the newest snapshot when it arrives and share of extrapolated frames, step 11's rule against the new one:
+
+| arrivals | 60 fps | 125 fps | 333 fps |
+|---|---|---|---|
+| no jitter | 13.1 to 5.1 ms | 13.0 to 7.0 ms | 11.0 to 10.0 ms |
+| jitter 0 to 3 ms | 13.4 to 5.4 | 14.3 to 8.3 | 12.0 to 11.0 |
+| jitter 0 to 8 ms | 17.1 to 9.4 | 15.6 to 10.4 | 14.3 to 13.5 |
+| jitter 0 to 3 ms, loss 2 % | 15.3 to 10.6 (0.03 to 1.10 % extrapolated) | 15.8 to 14.9 (0.18 to 0.33 %) | 13.5 to 19.2 (1.13 to 0.14 %) |
+| jitter 0 to 3 ms, loss 9 % | 27.9 to 16.0 (0.06 to 0.88 %) | 24.1 to 20.0 (0.16 to 0.44 %) | 21.8 to 24.3 (0.65 to 0.37 %) |
+
+The gain is the frame's length up to an interval: step 11 took a full interval off an offset measured at the frame that saw the snapshot. At 333 frames per second it was already within a frame of the limit.
+
+Measured in game (owner, 13 November 2026, `netstats`, about 55 to 80 s each; the VPS at a ping of about 19 ms, the loss by `net_dropsim` on the client), within 1 ms of the simulation:
+
+| | delay behind the newest snapshot | jitter | intervals extrapolated | server messages lost |
+|---|---|---|---|---|
+| local server, 125 fps | 7.8 ms | 2 ms | 0 of 7,320 | 0 |
+| local server, 333 fps | 10.5 ms | 1 ms | 0 of 7,948 | 0 |
+| VPS, 125 fps | 7.3 ms | 0 ms | 0 of 5,457 | 0 |
+| VPS, 333 fps | 11.4 ms | 1 ms | 0 of 8,110 | 0 |
+| VPS, 125 fps, `net_dropsim 2` | 14.5 ms | 8 ms | 28 of 6,943 (0.4 %) | 149 of 7,092 (2.1 %) |
+| VPS, 333 fps, `net_dropsim 2` | 18.5 ms | 9 ms | 15 of 7,794 (0.2 %) | 167 of 7,961 (2.1 %) |
+| VPS, 125 fps, `net_dropsim 9` | 19.5 ms | 16 ms | 38 of 7,321 (0.5 %) | 701 of 8,023 (8.7 %) |
+| VPS, 333 fps, `net_dropsim 9` | 23.9 ms | 20 ms | 40 of 7,534 (0.5 %) | 697 of 8,231 (8.5 %) |
+
+No message the client could not decode and no snapshot without a base in any of them; a `map_restart` on the VPS showed no interruption. Step 11 measured 53.0 ms at 20 Hz without loss and 102.8 ms with 9 % of loss.
+
 ### 4b (13 November 2026), with the partial step of 4d moved into it
 
 With one command per tick alone, the local player would be predicted up to the last tick only (moving in 10 ms steps above 100 frames per second), and cgame's prediction error check, which compares with the previous frame's final state, would go silent. So the partial step for display (D5) comes with 4b; the cache of predicted states stays in 4d.

@@ -81,7 +81,7 @@ new gamestate_t, potentially several times during an established connection
 typedef struct outPacket_s {
 	int		p_cmdNumber;		// cl.cmdNumber when packet was sent
 	int		p_serverTime;		// usercmd->serverTime when packet was sent
-	int		p_realtime;			// cls.realtime when packet was sent
+	int		p_realtime;			// Sys_Milliseconds() when packet was sent
 } outPacket_t;
 
 // the parseEntities array must be large enough to hold PACKET_BACKUP frames of
@@ -89,7 +89,25 @@ typedef struct outPacket_s {
 // it can be un-deltad from the original
 #define	MAX_PARSE_ENTITIES	( PACKET_BACKUP * MAX_SNAPSHOT_ENTITIES )
 
-#define	INTERP_WINDOW		64	// snapshots the interpolation delay is computed over (3.2 s at 20 per second)
+// the packets sent the client's ping is measured over (2.56 s of round trip at a packet per tick; plan step 14)
+#define	OUT_PACKET_BACKUP	256
+#define	OUT_PACKET_MASK		( OUT_PACKET_BACKUP - 1 )
+
+// The client's clocks (CL_AdjustTimeDelta, plan step 14, part 4e): a window keeps the smallest sample of each of
+// its last CLOCK_SLOTS slots of CLOCK_SLOT_MSEC of real time
+#define	CLOCK_SLOTS			64
+#define	CLOCK_SLOT_MSEC		32
+#define	CLOCK_MIN_SLOTS		8	// with fewer slots filled the target is the smallest sample, not the second
+#define	CLOCK_SAFETY_MSEC	2	// kept between the target and the second smallest sample
+#define	CLOCK_MAX_GAP_MSEC	100	// a longer interval without a snapshot is an interruption: no sample
+#define	CLOCK_SPEEDUP_MSEC	16	// a clock gains at most 1 ms per 16 ms of real time (about 6 %)
+#define	CLOCK_SLOWDOWN_MSEC	14	// and loses at most 1 ms per 14 ms (about 7 %)
+
+typedef struct clockWindow_s {
+	int			low[CLOCK_SLOTS];	// INT_MAX: no sample in the slot
+	int			slot;				// cls.realtime / CLOCK_SLOT_MSEC of the newest slot
+	qboolean	started;			// qfalse: empty, cleared at the next sample
+} clockWindow_t;
 
 extern int g_console_field_width;
 
@@ -108,19 +126,14 @@ typedef struct clientActive_s {
 									// (counted for netstats), cleared when CL_AdjustTimeDelta looks at it
 	qboolean	newSnapshots;		// set on parse of any valid packet
 
-	// The interpolation delay (plan step 11, CL_AdjustTimeDelta): for the last INTERP_WINDOW frames that brought
-	// snapshots, the offset between the newest one's serverTime and its arrival (cls.realtime), the snapshots read in
-	// that frame and the server messages lost before them
-	int			interpOffset[INTERP_WINDOW];
-	int			interpRead[INTERP_WINDOW];
-	int			interpLost[INTERP_WINDOW];
-	int			interpCount;		// entries recorded, up to INTERP_WINDOW
-	int			interpNext;			// slot of the next one
-	qboolean	interpParsed;		// a snapshot was read since the gamestate: interpLastMessage is valid
-	int			interpLastMessage;	// messageNum of the last snapshot read (CL_InterpRecord)
-	int			interpReadPending;	// snapshots read since the last entry
-	int			interpLostPending;	// server messages missing since the last entry
-	qboolean	interpLossMargin;	// one more interval of delay while many messages are lost
+	// The interpolation delay (CL_AdjustTimeDelta)
+	clockWindow_t	interpWindow;	// per interval between two snapshot arrivals, the largest serverTimeDelta its last
+									// frame allowed
+	int			interpPending;		// the sample of the interval in progress
+	qboolean	interpPendingValid;
+	int			interpArrival;		// cls.realtime of the frame that brought the newest snapshot
+	int			interpRealtime;		// cls.realtime of the last frame adjusted
+	int			interpCredit;		// real time not yet turned into a step of serverTimeDelta
 	qboolean	interpJumpPending;	// the newest snapshot showed a jump of the server's clock: measured on the next one
 
 	gameState_t	gameState;			// configstrings
@@ -151,7 +164,7 @@ typedef struct clientActive_s {
 	int			cmdNumber;			// incremented each frame, because multiple
 									// frames may need to be packed into a single packet
 
-	outPacket_t	outPackets[PACKET_BACKUP];	// information about each packet we have sent out
+	outPacket_t	outPackets[OUT_PACKET_BACKUP];	// information about each packet we have sent out
 
 	// the client maintains its own idea of view angles, which are
 	// sent to the server each frame.  It is cleared to 0 upon entering each level.
@@ -552,7 +565,6 @@ void CL_NetcodecParseServerMessage( msg_t *msg );
 qboolean CL_NetcodecRecordGameState( void );
 void CL_NetcodecStats_f( void );
 void CL_InterpStats( void );	// cl_cgame.cpp: the interpolation delay's line of netstats
-void CL_InterpRecord( void );	// cl_cgame.cpp: a snapshot accepted by the parser, for the interpolation delay
 qboolean CL_NetcodecWritePacket( msg_t *buf, int count, qboolean delta );
 
 //====================================================================
