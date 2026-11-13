@@ -1264,21 +1264,26 @@ void CG_PredictPlayerState( void ) {
 		cg.predictedVehicleState.commandTime = cg.predictedPlayerState.commandTime;
 	}
 
-	// run cmds
+	// run cmds; one more turn after the newest command only checks the prediction error. The check compares the state
+	// this frame computes for the last frame's newest tick with the last frame's, and it sat before each command: since
+	// the commands are made per tick (plan step 14), a frame that brings a snapshot without a new command had no turn
+	// for it, and its correction was neither printed by cg_showmiss nor smoothed (cg_errorDecay)
 	moved = qfalse;
-	for ( cmdNum = current - CMD_BACKUP + 1 ; cmdNum <= current ; cmdNum++ ) {
-		// get the command
-		trap->GetUserCmd( cmdNum, &cg_pmove.cmd );
+	for ( cmdNum = current - CMD_BACKUP + 1 ; cmdNum <= current + 1 ; cmdNum++ ) {
+		if ( cmdNum <= current ) {
+			// get the command
+			trap->GetUserCmd( cmdNum, &cg_pmove.cmd );
 
-		// don't do anything if the time is before the snapshot player time
-		if ( cg_pmove.cmd.serverTime <= cg.predictedPlayerState.commandTime )
-		{
-			continue;
-		}
+			// don't do anything if the time is before the snapshot player time
+			if ( cg_pmove.cmd.serverTime <= cg.predictedPlayerState.commandTime )
+			{
+				continue;
+			}
 
-		// don't do anything if the command was from a previous map_restart
-		if ( cg_pmove.cmd.serverTime > latestCmd.serverTime ) {
-			continue;
+			// don't do anything if the command was from a previous map_restart
+			if ( cg_pmove.cmd.serverTime > latestCmd.serverTime ) {
+				continue;
+			}
 		}
 
 		// check for a prediction error from last frame
@@ -1394,6 +1399,10 @@ void CG_PredictPlayerState( void ) {
 					cg.predictedErrorTime = cg.oldTime;
 				}
 			}
+		}
+
+		if ( cmdNum > current ) {
+			break;	// the turn of the check only
 		}
 
 		CG_PreparePmove( pEnt, ci );
