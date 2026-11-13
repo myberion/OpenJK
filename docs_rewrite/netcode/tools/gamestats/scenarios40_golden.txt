@@ -1,14 +1,14 @@
-saber_fast_idle:  96 saber swings; per swing: 1.250 wounds, 11.00 damage, 0.000 saber against saber (blocks), 0.000 body hits parried without the sabers touching, 0.0000 saber locks, 0.125 idle touches (wounds 120, damage 1056, saber against saber 0, parried 0, locks 0, touches 12); 0 missiles blocked by sabers, 0 force damage, 0 deaths, 132 saber hit effects on clients
+saber_fast_idle:  96 saber swings; per swing: 1.375 wounds, 11.62 damage, 0.000 saber against saber (blocks), 0.000 body hits parried without the sabers touching, 0.0000 saber locks, 0.000 idle touches (wounds 132, damage 1116, saber against saber 0, parried 0, locks 0, touches 0); 0 missiles blocked by sabers, 0 force damage, 0 deaths, 132 saber hit effects on clients
 saber_fast_idle: force statistics: starts, periodic events (drains, rage health losses, shots) and milliseconds held per power: grip 0 0 0, rage 0 0 0, protect 0 0 0, absorb 0 0 0, lightning 0 0 0, drain 0 0 0
 saber_fast_idle: event statistics: EV_SABER_HIT 132 EV_PAIN 60
-saber_fast_idle: damage statistics (health taken from clients and deaths, by cause): MOD_SABER 1080 0
+saber_fast_idle: damage statistics (health taken from clients and deaths, by cause): MOD_SABER 1140 0
 saber_fast_idle: shot statistics (primary and alternate fire, by weapon number):
 saber_fast_idle: saber style statistics (attacks started, moves bounced or deflected): fast 96 0
 saber_fast_idle:  0 saber swings; per swing: 0.000 wounds, 0.00 damage, 0.000 saber against saber (blocks), 0.000 body hits parried without the sabers touching, 0.0000 saber locks, 0.000 idle touches (wounds 0, damage 0, saber against saber 0, parried 0, locks 0, touches 0); 0 missiles blocked by sabers, 0 force damage, 0 deaths, 0 saber hit effects on clients
-saber_fast_attack:  180 saber swings; per swing: 0.600 wounds, 10.07 damage, 0.400 saber against saber (blocks), 0.000 body hits parried without the sabers touching, 0.0000 saber locks, 0.067 idle touches (wounds 108, damage 1812, saber against saber 72, parried 0, locks 0, touches 12); 0 missiles blocked by sabers, 0 force damage, 0 deaths, 120 saber hit effects on clients
+saber_fast_attack:  180 saber swings; per swing: 0.467 wounds, 8.07 damage, 0.467 saber against saber (blocks), 0.000 body hits parried without the sabers touching, 0.0000 saber locks, 0.067 idle touches (wounds 84, damage 1452, saber against saber 84, parried 0, locks 0, touches 12); 0 missiles blocked by sabers, 0 force damage, 0 deaths, 96 saber hit effects on clients
 saber_fast_attack: force statistics: starts, periodic events (drains, rage health losses, shots) and milliseconds held per power: grip 0 0 0, rage 0 0 0, protect 0 0 0, absorb 0 0 0, lightning 0 0 0, drain 0 0 0
-saber_fast_attack: event statistics: EV_SABER_HIT 120 EV_SABER_BLOCK 72 EV_GRENADE_BOUNCE 6 EV_PAIN 48
-saber_fast_attack: damage statistics (health taken from clients and deaths, by cause): MOD_SABER 1488 0
+saber_fast_attack: event statistics: EV_SABER_HIT 96 EV_SABER_BLOCK 84 EV_GRENADE_BOUNCE 6 EV_PAIN 36
+saber_fast_attack: damage statistics (health taken from clients and deaths, by cause): MOD_SABER 1152 0
 saber_fast_attack: shot statistics (primary and alternate fire, by weapon number):
 saber_fast_attack: saber style statistics (attacks started, moves bounced or deflected): fast 96 0 medium 84 0
 saber_fast_attack:  0 saber swings; per swing: 0.000 wounds, 0.00 damage, 0.000 saber against saber (blocks), 0.000 body hits parried without the sabers touching, 0.0000 saber locks, 0.000 idle touches (wounds 0, damage 0, saber against saber 0, parried 0, locks 0, touches 0); 0 missiles blocked by sabers, 0 force damage, 0 deaths, 0 saber hit effects on clients

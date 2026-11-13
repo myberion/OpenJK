@@ -9240,9 +9240,13 @@ void BG_G2PlayerAngles(void *ghoul2, int motionBolt, entityState_t *cent, int ti
 	velPos[1] = cent_lerpOrigin[1] + velocity[1];
 	velPos[2] = cent_lerpOrigin[2];// + velocity[2];
 
+	// below 1 unit per second on the ground the movement code itself takes the player as stopped (PM_Friction), and the
+	// velocity left by a push against a wall or a player (a few hundredths of a unit per second, sideways) is not a
+	// direction to turn the legs to; the velocity was rounded to whole units before plan step 7, which hid it
 	if ( cent->groundEntityNum == ENTITYNUM_NONE ||
 		 cent->forceFrame ||
-		 (cent->weapon == WP_EMPLACED_GUN && emplaced) )
+		 (cent->weapon == WP_EMPLACED_GUN && emplaced) ||
+		 cent->pos.trDelta[0] * cent->pos.trDelta[0] + cent->pos.trDelta[1] * cent->pos.trDelta[1] < 1.0f )
 	{ //off the ground, no direction-based leg angles (same if in saberlock)
 		VectorCopy(cent_lerpOrigin, velPos);
 	}
@@ -10535,7 +10539,10 @@ void PmoveSingle (pmove_t *pmove) {
 
 	// clear all pmove local vars
 	memset (&pml, 0, sizeof(pml));
-	Q_RandSeed( &pml.rand, (uint32_t)pmove->cmd.serverTime );
+	// the random numbers come from the command's tick (its time rounded up to TICK_MSEC; a command's time is a tick, except
+	// the commands a client makes every frame before it is in the game): a step that ends inside a tick takes that
+	// tick's draws (plan step 14)
+	Q_RandSeed( &pml.rand, (uint32_t)( ( pmove->cmd.serverTime + TICK_MSEC - 1 ) / TICK_MSEC * TICK_MSEC ) );
 
 	// determine the time
 	pml.msec = pmove->cmd.serverTime - pm->ps->commandTime;

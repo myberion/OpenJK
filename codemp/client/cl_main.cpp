@@ -2149,14 +2149,15 @@ void CL_Frame ( int msec ) {
 	// drop the connection
 	CL_CheckTimeout();
 
-	// send intentions now
-	CL_SendCmd();
-
 	// resend a connection request if necessary
 	CL_CheckForResend();
 
 	// decide on the serverTime to render
 	CL_SetCGameTime();
+
+	// send intentions now, once the time to render is decided: the command of the tick in progress then exists when cgame
+	// predicts the local player and draws it between the last two ticks (plan step 14)
+	CL_SendCmd();
 
 	// update the screen
 	SCR_UpdateScreen();

@@ -56,6 +56,11 @@ CL_GetUserCmd
 qboolean CL_GetUserCmd( int cmdNumber, usercmd_t *ucmd ) {
 	// cmds[cmdNumber] is the last properly generated command
 
+	// the view angles of now, for cgame's drawing of the local player (plan step 14: commands are made per tick)
+	if ( cmdNumber == cl.cmdNumber + 1 ) {
+		return CL_PendingCmd( ucmd );
+	}
+
 	// can't return anything that we haven't created yet
 	if ( cmdNumber > cl.cmdNumber ) {
 		Com_Error( ERR_DROP, "CL_GetUserCmd: %i >= %i", cmdNumber, cl.cmdNumber );

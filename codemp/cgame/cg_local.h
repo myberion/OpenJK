@@ -793,6 +793,7 @@ typedef struct cg_s {
 	// prediction state
 	qboolean	hyperspace;				// true if prediction has hit a trigger_teleport
 	playerState_t	predictedPlayerState;
+	playerState_t	predictedFullState;		// the predicted state at the newest tick, before the drawing's interpolation
 	playerState_t	predictedVehicleState;
 
 	//centity_t		predictedPlayerEntity;

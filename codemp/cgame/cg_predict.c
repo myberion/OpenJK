@@ -921,6 +921,170 @@ to ease the jerk.
 */
 extern void CG_Cube( vec3_t mins, vec3_t maxs, vec3_t color, float alpha );
 extern	vmCvar_t		cg_showVehBounds;
+
+// cg_showmiss: a legs or torso animation, or the crouch, shown A, then B, then A again in three successive frames, with the
+// command time each frame shows: the mark of a display that takes a decision its tick does not (plan step 14)
+typedef struct {
+	int		legs, torso, ducked;
+	int		time;
+} shown_t;
+
+static void CG_CheckShownFlicker( const playerState_t *ps ) {
+	static shown_t	shown[2];	// the last two frames, newest first
+	const shown_t	now = { ps->legsAnim | ( ps->legsFlip ? 0x10000 : 0 ), ps->torsoAnim | ( ps->torsoFlip ? 0x10000 : 0 ),
+		( ps->pm_flags & PMF_DUCKED ) ? 1 : 0, ps->commandTime };
+
+	if ( cg_showMiss.integer ) {
+		if ( now.legs == shown[1].legs && now.legs != shown[0].legs ) {
+			trap->Print( "shown flicker: legs anim %d, %d, %d at %d, %d, %d\n", shown[1].legs, shown[0].legs, now.legs,
+				shown[1].time, shown[0].time, now.time );
+		}
+		if ( now.torso == shown[1].torso && now.torso != shown[0].torso ) {
+			trap->Print( "shown flicker: torso anim %d, %d, %d at %d, %d, %d\n", shown[1].torso, shown[0].torso, now.torso,
+				shown[1].time, shown[0].time, now.time );
+		}
+		if ( now.ducked == shown[1].ducked && now.ducked != shown[0].ducked ) {
+			trap->Print( "shown flicker: crouch %d, %d, %d at %d, %d, %d\n", shown[1].ducked, shown[0].ducked, now.ducked,
+				shown[1].time, shown[0].time, now.time );
+		}
+	}
+	shown[1] = shown[0];
+	shown[0] = now;
+}
+
+// The predicted states of the last PREDICTED_STATES command times, the server's in place of the client's once a snapshot
+// holds them (plan step 14): the local player is drawn between the last two of them (CG_InterpolateTicks), and cg_showmiss
+// compares a snapshot's animations with those the client predicted for the same command time.
+#define PREDICTED_STATES	64
+static struct {
+	playerState_t	ps;
+	qboolean		valid;
+} cg_predicted[PREDICTED_STATES];
+
+static void CG_RecordPredicted( const playerState_t *ps ) {
+	const unsigned slot = (unsigned)ps->commandTime / TICK_MSEC % PREDICTED_STATES;
+	cg_predicted[slot].ps = *ps;
+	cg_predicted[slot].valid = qtrue;
+}
+
+// the state predicted for commandTime, NULL if it is no longer held
+static const playerState_t *CG_PredictedAt( int commandTime ) {
+	const unsigned slot = (unsigned)commandTime / TICK_MSEC % PREDICTED_STATES;
+	return ( cg_predicted[slot].valid && cg_predicted[slot].ps.commandTime == commandTime ) ? &cg_predicted[slot].ps : NULL;
+}
+
+static int CG_ShownAnim( int anim, qboolean flip ) {
+	return anim | ( flip ? 0x10000 : 0 );
+}
+
+// cg_showmiss: a difference means the server sets the animation outside the shared movement code (the idle animation, the
+// legs on a slope from the ghoul2 feet), or predicts it otherwise
+static void CG_CheckPredictedAnims( const playerState_t *base ) {
+	static int lastBase = -1;
+	const playerState_t *predicted;
+
+	if ( !cg_showMiss.integer || base->commandTime == lastBase ) {
+		return;
+	}
+	lastBase = base->commandTime;
+	predicted = CG_PredictedAt( base->commandTime );
+	if ( !predicted ) {
+		return;	// not predicted (the first snapshot, a gap)
+	}
+	if ( CG_ShownAnim( predicted->legsAnim, predicted->legsFlip ) != CG_ShownAnim( base->legsAnim, base->legsFlip ) ) {
+		trap->Print( "anim miss: legs predicted %d, server %d at %d\n", CG_ShownAnim( predicted->legsAnim, predicted->legsFlip ),
+			CG_ShownAnim( base->legsAnim, base->legsFlip ), base->commandTime );
+	}
+	if ( CG_ShownAnim( predicted->torsoAnim, predicted->torsoFlip ) != CG_ShownAnim( base->torsoAnim, base->torsoFlip ) ) {
+		trap->Print( "anim miss: torso predicted %d, server %d at %d\n", CG_ShownAnim( predicted->torsoAnim, predicted->torsoFlip ),
+			CG_ShownAnim( base->torsoAnim, base->torsoFlip ), base->commandTime );
+	}
+}
+
+// Option C of plan step 14 (owner, 13 November 2026): the commands are made one tick ahead (CL_CreateNewCommands), so the
+// tick in progress is already predicted. The local player is drawn between the last two ticks at the frame's time, its
+// position and velocity interpolated and its discrete state (animations, flags, events) the newest tick's, with the view
+// angles of now (the engine's command of the frame). Nothing is guessed: every state is a full tick of 10 ms, as the server
+// computes it (a partial step of the movement between two ticks, tried first, gave other collisions, landings and random
+// decisions than the tick that followed: the player shook against walls, animations flickered). Not interpolated across a
+// teleport or a respawn; a pilot is drawn at the newest tick.
+static void CG_InterpolateTicks( playerState_t *out, int current ) {
+	const playerState_t *prev = CG_PredictedAt( out->commandTime - TICK_MSEC );
+	usercmd_t now;
+	int i;
+
+	if ( prev && !CG_Piloting( out->m_iVehicleNum ) && cg.time >= prev->commandTime && cg.time < out->commandTime
+		&& !( ( prev->eFlags ^ out->eFlags ) & EF_TELEPORT_BIT )
+		&& prev->persistant[PERS_SPAWN_COUNT] == out->persistant[PERS_SPAWN_COUNT] ) {
+		const float f = (float)( cg.time - prev->commandTime ) / TICK_MSEC;
+
+		for ( i = 0; i < 3; i++ ) {
+			out->origin[i] = prev->origin[i] + f * ( out->origin[i] - prev->origin[i] );
+			out->velocity[i] = prev->velocity[i] + f * ( out->velocity[i] - prev->velocity[i] );
+		}
+	}
+	if ( trap->GetUserCmd( current + 1, &now ) ) {
+		// the view angles of the frame, except on an axis the movement set in the newest tick (a wall run, a lunge, a jump
+		// or back attack, a saber lock, the pitch limit: its delta_angles changed), which stays as the tick left it; else
+		// the view would follow the mouse until the next tick and step back there
+		// shortcut: a view held while the mouse is still is not seen as held, so the first tick of a mouse movement shows;
+		// a flag set by PM_SetPMViewAngle and kept with each predicted state would close it
+		vec3_t	held;
+		int		delta[3];
+
+		VectorCopy( out->viewangles, held );
+		for ( i = 0; i < 3; i++ ) {
+			delta[i] = out->delta_angles[i];
+		}
+		PM_UpdateViewAngles( out, &now );
+		for ( i = 0; prev && i < 3; i++ ) {
+			if ( delta[i] != prev->delta_angles[i] ) {
+				out->viewangles[i] = held[i];
+			}
+		}
+	}
+}
+
+// the pmove fields set before each command (cg_pmove.ps is the predicted player state)
+static void CG_PreparePmove( centity_t *pEnt, clientInfo_t *ci ) {
+	cg_pmove.animations = bgAllAnims[pEnt->localAnimIndex].anims;
+	cg_pmove.gametype = cgs.gametype;
+
+	cg_pmove.debugMelee = cgs.debugMelee;
+	cg_pmove.stepSlideFix = cgs.stepSlideFix;
+	cg_pmove.noSpecMove = cgs.noSpecMove;
+
+	cg_pmove.nonHumanoid = (pEnt->localAnimIndex > 0);
+
+	if (cg.snap && cg.snap->ps.saberLockTime > cg.time)
+	{
+		centity_t *blockOpp = &cg_entities[cg.snap->ps.saberLockEnemy];
+
+		if (blockOpp)
+		{
+			vec3_t lockDir, lockAng;
+
+			VectorSubtract( blockOpp->lerpOrigin, cg.snap->ps.origin, lockDir );
+			vectoangles(lockDir, lockAng);
+
+			VectorCopy(lockAng, cg_pmove.ps->viewangles);
+		}
+	}
+
+	//THIS is pretty much bad, but...
+	cg_pmove.ps->fd.saberAnimLevelBase = cg_pmove.ps->fd.saberAnimLevel;
+	if ( cg_pmove.ps->saberHolstered == 1 )
+	{
+		if ( ci->saber[0].numBlades > 0 )
+		{
+			cg_pmove.ps->fd.saberAnimLevelBase = SS_STAFF;
+		}
+		else if ( ci->saber[1].model[0] )
+		{
+			cg_pmove.ps->fd.saberAnimLevelBase = SS_DUAL;
+		}
+	}
+}
 pmove_t cg_vehPmove;
 qboolean cg_vehPmoveSet = qfalse;
 
@@ -942,6 +1106,7 @@ void CG_PredictPlayerState( void ) {
 	if ( !cg.validPPS ) {
 		cg.validPPS = qtrue;
 		cg.predictedPlayerState = cg.snap->ps;
+		cg.predictedFullState = cg.snap->ps;
 		if (CG_Piloting(cg.snap->ps.m_iVehicleNum))
 		{
 			cg.predictedVehicleState = cg.snap->vps;
@@ -1055,6 +1220,8 @@ void CG_PredictPlayerState( void ) {
 		}
 		cg.physicsTime = cg.snap->serverTime;
 	}
+	CG_CheckPredictedAnims( &cg.predictedPlayerState );
+	CG_RecordPredicted( &cg.predictedPlayerState );
 
 	for ( i = 0 ; i < MAX_GENTITIES ; i++ )
 	{
@@ -1171,7 +1338,7 @@ void CG_PredictPlayerState( void ) {
 			}
 		}
 		else if ( !oldPlayerState.m_iVehicleNum && //don't do pred err on ps while riding veh
-			cg.predictedPlayerState.commandTime == oldPlayerState.commandTime )
+			cg.predictedPlayerState.commandTime == cg.predictedFullState.commandTime )	// the last frame's full tick
 		{
 			vec3_t	delta;
 			float	len;
@@ -1189,11 +1356,11 @@ void CG_PredictPlayerState( void ) {
 					cg.predictedPlayerState.groundEntityNum, cg.physicsTime, cg.oldTime, adjusted );
 
 				if ( cg_showMiss.integer ) {
-					if (!VectorCompare( oldPlayerState.origin, adjusted )) {
+					if (!VectorCompare( cg.predictedFullState.origin, adjusted )) {
 						trap->Print("prediction error\n");
 					}
 				}
-				VectorSubtract( oldPlayerState.origin, adjusted, delta );
+				VectorSubtract( cg.predictedFullState.origin, adjusted, delta );
 				len = VectorLength( delta );
 				if ( len > 0.1 ) {
 					if ( cg_showMiss.integer ) {
@@ -1221,45 +1388,9 @@ void CG_PredictPlayerState( void ) {
 			}
 		}
 
-		cg_pmove.animations = bgAllAnims[pEnt->localAnimIndex].anims;
-		cg_pmove.gametype = cgs.gametype;
-
-		cg_pmove.debugMelee = cgs.debugMelee;
-		cg_pmove.stepSlideFix = cgs.stepSlideFix;
-		cg_pmove.noSpecMove = cgs.noSpecMove;
-
-		cg_pmove.nonHumanoid = (pEnt->localAnimIndex > 0);
-
-		if (cg.snap && cg.snap->ps.saberLockTime > cg.time)
-		{
-			centity_t *blockOpp = &cg_entities[cg.snap->ps.saberLockEnemy];
-
-			if (blockOpp)
-			{
-				vec3_t lockDir, lockAng;
-
-				VectorSubtract( blockOpp->lerpOrigin, cg.snap->ps.origin, lockDir );
-				vectoangles(lockDir, lockAng);
-
-				VectorCopy(lockAng, cg_pmove.ps->viewangles);
-			}
-		}
-
-		//THIS is pretty much bad, but...
-		cg_pmove.ps->fd.saberAnimLevelBase = cg_pmove.ps->fd.saberAnimLevel;
-		if ( cg_pmove.ps->saberHolstered == 1 )
-		{
-			if ( ci->saber[0].numBlades > 0 )
-			{
-				cg_pmove.ps->fd.saberAnimLevelBase = SS_STAFF;
-			}
-			else if ( ci->saber[1].model[0] )
-			{
-				cg_pmove.ps->fd.saberAnimLevelBase = SS_DUAL;
-			}
-		}
-
+		CG_PreparePmove( pEnt, ci );
 		Pmove (&cg_pmove);
+		CG_RecordPredicted( &cg.predictedPlayerState );
 
 		if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum) &&
 			cg.predictedPlayerState.pm_type != PM_INTERMISSION)
@@ -1373,12 +1504,19 @@ void CG_PredictPlayerState( void ) {
 		//CG_CheckChangedPredictableEvents(&cg.predictedPlayerState);
 	}
 
+	// the newest tick is the full state (the next frame measures the prediction error against it); the local player is
+	// drawn between the last two ticks (plan step 14, option C)
+	cg.predictedFullState = cg.predictedPlayerState;
+	CG_InterpolateTicks( &cg.predictedPlayerState, current );
+
 	if ( cg_showMiss.integer > 1 ) {
 		trap->Print( "[%i : %i] ", cg_pmove.cmd.serverTime, cg.time );
 	}
 
 	if ( !moved ) {
-		if ( cg_showMiss.integer ) {
+		// with the commands made one tick ahead, the server can run the newest before the next is made (a short round
+		// trip): drawn from the snapshot, interpolated as above
+		if ( cg_showMiss.integer > 1 ) {
 			trap->Print( "not moved\n" );
 		}
 		goto revertES;
@@ -1396,6 +1534,9 @@ void CG_PredictPlayerState( void ) {
 		CG_AdjustPositionForMover( cg.predictedPlayerState.origin,
 			cg.predictedPlayerState.groundEntityNum,
 			cg.physicsTime, cg.time, cg.predictedPlayerState.origin );
+		CG_AdjustPositionForMover( cg.predictedFullState.origin,
+			cg.predictedFullState.groundEntityNum,
+			cg.physicsTime, cg.time, cg.predictedFullState.origin );
 	}
 
 	if ( cg_showMiss.integer ) {
@@ -1406,6 +1547,7 @@ void CG_PredictPlayerState( void ) {
 
 	// fire events and other transition triggered things
 	CG_TransitionPlayerState( &cg.predictedPlayerState, &oldPlayerState );
+	CG_CheckShownFlicker( &cg.predictedPlayerState );
 
 	if ( cg_showMiss.integer ) {
 		if (cg.eventSequence > cg.predictedPlayerState.eventSequence) {

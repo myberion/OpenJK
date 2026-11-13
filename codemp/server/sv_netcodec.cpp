@@ -76,7 +76,9 @@ void SV_NetcodecResetClient( const client_t *client ) {
 // Server commands are not repeated while the message that carries them may still arrive (plan step 10). A message
 // sends the commands not yet acknowledged when there is a new one, or when the last message that sent them is known
 // lost (the client acknowledged it or a later message without acknowledging the commands) or still unacknowledged
-// after twice the ping; otherwise it sends none. A message that sends commands sends them all from the client's
+// after twice the ping and a client packet interval (the client sends a packet per tick, so its acknowledge can come up
+// to one interval after the round trip while the ping holds part of it: twice the ping alone repeated commands on a LAN,
+// plan step 14); otherwise it sends none. A message that sends commands sends them all from the client's
 // acknowledge on, as before, so the client receives them in order and the codec's record of the commands the client
 // holds stays true. Bots (their demos) and clients not yet in the game send every command until acknowledged, as
 // before (no ping measured yet).
@@ -226,7 +228,7 @@ static CommandsDue SV_NetcodecCommandsDue( const client_t *client, int seq ) {
 	const bool notInGame = client->state != CS_ACTIVE || client->netchan.remoteAddress.type == NA_BOT;
 	const bool lost = client->messageAcknowledge >= c.carrier;	// the carrier arrived without them
 	const bool fresh = client->reliableSequence > c.sent;			// a new command
-	const bool timeout = now - c.time > 2 * client->ping;			// no news of the carrier
+	const bool timeout = now - c.time > 2 * client->ping + 1000 / MAX_PACKET_RATE;	// no news of the carrier
 	const CommandsDue due = notInGame ? CommandsDue::kNotInGame : lost ? CommandsDue::kLost
 		: fresh && timeout ? CommandsDue::kNewAndTimeout : fresh ? CommandsDue::kNew
 		: timeout ? CommandsDue::kTimeout : CommandsDue::kNo;

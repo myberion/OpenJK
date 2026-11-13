@@ -524,7 +524,8 @@ void CL_ClearState (void);
 
 void CL_WritePacket( void );
 
-float CL_KeyState (kbutton_t *key);
+float CL_KeyState (kbutton_t *key, unsigned span);
+qboolean CL_PendingCmd( usercmd_t *cmd );
 const char *Key_KeynumToString( int keynum/*, qboolean bTranslate */ ); //note: translate is only called for menu display not configs
 
 //
