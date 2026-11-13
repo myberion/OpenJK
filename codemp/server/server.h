@@ -108,6 +108,9 @@ typedef struct clientSnapshot_s {
 	int				messageSize;		// used to rate drop packets
 } clientSnapshot_t;
 
+#define	SV_INPUT_REPEAT_MSEC	250	// a player whose commands stop coming has its last one run again this long, then
+									// empty ones (g_forceClientUpdateRate's default, removed)
+#define	SV_INPUT_AHEAD_MSEC		1000	// a command dated further ahead of the server's clock is not kept
 #define SV_INPUT_BUFFER	256		// user commands a client may have received and not yet run (plan step 14: they run in the
 								// tick of their time); a power of two
 #define SV_PING_WINDOW	256		// messages the ping is measured over: the window of the client's 8-bit acknowledge
@@ -158,6 +161,12 @@ typedef struct {
 	double		sendChangeSum;	// sum of the changes of (real send time - game time) between them, in microseconds
 	int			sendChangeMax;	// the largest change, in microseconds
 	int			sendChangesOver1ms;	// changes of 1 ms or more
+	int			cmdsOnTime;		// ticks run with the player's command of that tick (SV_RunClientCommands)
+	int			cmdsLate;		// commands that came after their tick
+	int			cmdsMissing;	// ticks run without a command of their own (the last one again, or an empty one)
+	int			margins;		// input margins measured
+	double		marginSum;		// their sum, in ms
+	int			marginMin;		// the lowest
 } netcodecStats_t;
 
 
@@ -179,7 +188,18 @@ typedef struct client_s {
 	usercmd_t		lastUsercmd;		// the last command run, which the game reads (GetUsercmd)
 	usercmd_t		inputCmds[SV_INPUT_BUFFER];	// commands received and not yet run, oldest first: slots inputFirst to
 	int				inputFirst;					// inputLast - 1, & ( SV_INPUT_BUFFER - 1 ); they run in the tick their
-	int				inputLast;					// time reaches (SV_RunClientCommands)
+	int				inputLast;					// time comes (SV_RunClientCommands)
+	int				inputArrival[SV_INPUT_BUFFER];	// Sys_Milliseconds() when each of them arrived
+	int				inputNewest;		// time of the newest command received (those of the repeated packets are at or below it)
+	qboolean		inputStarted;		// a command of the player ran since it entered the world: the ticks without one run
+										// the last command again
+	int				inputRepeats;		// ticks in a row run without a command of their own
+	int				inputMargin;		// how early the last command measured came before its tick ran, in ms (negative:
+										// after it)
+	qboolean		inputMarginNew;		// measured since the last snapshot: sent in the next one, once
+	int				lateButtons;		// what the commands that came after their tick newly pressed, for the next
+	int				lateUpmove;			// command run
+	int				lateGeneric;
 	int				lastMessageNum;		// for delta compression
 	int				lastClientCommand;	// reliable client message sequence
 	char			lastClientCommandString[MAX_STRING_CHARS];
@@ -386,7 +406,7 @@ void SV_DropClient( client_t *drop, const char *reason );
 
 void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK );
 void SV_ClientThink (client_t *cl, usercmd_t *cmd);
-void SV_RunClientCommands( int time );
+void SV_RunClientCommands( int time, int frameMsec );
 
 // the download block of the next message, if any (one per message): block 0 holds the file size, or -1 with the
 // error text as data (valid until the next call)

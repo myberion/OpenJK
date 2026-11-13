@@ -63,6 +63,9 @@ typedef struct clSnapshot_s {
 	int				numEntities;			// all of the entities that need to be presented
 	int				parseEntitiesNum;		// at the time of this snapshot
 
+	qboolean		inputMarginValid;		// the server measured an input margin since its last snapshot
+	int				inputMargin;			// how early it got the command of this snapshot's tick, in ms (negative: after
+											// the tick), which steers the command clock (CL_AdjustCmdDelta)
 	int				serverCommandNum;		// execute all commands up to this before
 											// making the snapshot current
 } clSnapshot_t;
@@ -102,6 +105,7 @@ typedef struct outPacket_s {
 #define	CLOCK_MAX_GAP_MSEC	100	// a longer interval without a snapshot is an interruption: no sample
 #define	CLOCK_SPEEDUP_MSEC	16	// a clock gains at most 1 ms per 16 ms of real time (about 6 %)
 #define	CLOCK_SLOWDOWN_MSEC	14	// and loses at most 1 ms per 14 ms (about 7 %)
+#define	CMD_MARGIN_MSEC		3	// the input margin the command clock keeps above the second smallest of its window
 
 typedef struct clockWindow_s {
 	int			low[CLOCK_SLOTS];	// INT_MAX: no sample in the slot
@@ -135,6 +139,20 @@ typedef struct clientActive_s {
 	int			interpRealtime;		// cls.realtime of the last frame adjusted
 	int			interpCredit;		// real time not yet turned into a step of serverTimeDelta
 	qboolean	interpJumpPending;	// the newest snapshot showed a jump of the server's clock: measured on the next one
+
+	// The command clock (plan step 14, part 4c): cl.cmdTime = cls.realtime + cl.cmdTimeDelta, ahead of the server's
+	// clock by the trip of a packet and the input margin, so that the command of a tick reaches the server just before
+	// that tick runs. The user commands are made on it (CL_CreateNewCommands) and cgame draws the local player at it.
+	int			cmdTime;
+	int			oldCmdTime;			// to prevent the command clock from flowing backwards
+	int			cmdTimeDelta;
+	int			cmdDeltaAt[CMD_BACKUP];	// cmdTimeDelta when each command of cl.cmds was made
+	clockWindow_t	cmdWindow;		// per snapshot, its input margin minus the cmdTimeDelta of the command it measured:
+									// the margin a cmdTimeDelta of 0 would have had
+	int			cmdCredit;			// real time not yet turned into a step of cmdTimeDelta
+	int			cmdMarginMessage;	// messageNum of the last snapshot whose margin was taken
+	int			cmdSettleTime;		// the clock was set at once: the margins of snapshots before this serverTime are
+									// about commands made on the old clock, and are not taken
 
 	gameState_t	gameState;			// configstrings
 	char		mapname[MAX_QPATH];	// extracted from CS_SERVERINFO
@@ -565,6 +583,7 @@ void CL_NetcodecParseServerMessage( msg_t *msg );
 qboolean CL_NetcodecRecordGameState( void );
 void CL_NetcodecStats_f( void );
 void CL_InterpStats( void );	// cl_cgame.cpp: the interpolation delay's line of netstats
+void CL_CmdClockStats( void );	// cl_cgame.cpp: the command clock's line of netstats
 qboolean CL_NetcodecWritePacket( msg_t *buf, int count, qboolean delta );
 
 //====================================================================

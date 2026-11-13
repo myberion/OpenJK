@@ -100,6 +100,8 @@ struct ServerMessage {
 	uint32_t delta;           // message seq - delta (0: no base; the codec may code it without a base)
 	int32_t time;
 	uint32_t flags;
+	int32_t inputMargin;      // how early the client's command of the snapshot's tick reached the server, in ms
+	                          // (negative: after its tick); sent as -128 to 127
 	const uint8_t *areas;
 	uint32_t numAreas;
 	Frame frame;              // seq, record: unused
@@ -190,6 +192,7 @@ struct ClientMessage {
 	bool snapshot;
 	int32_t time;
 	uint32_t flags;
+	int32_t inputMargin;
 	const uint8_t *areas;
 	uint32_t numAreas;
 	bool vehicle;                       // the vehicle player state was written

@@ -1002,7 +1002,8 @@ static void CG_CheckPredictedAnims( const playerState_t *base ) {
 }
 
 // Option C of plan step 14 (owner, 13 November 2026): the commands are made one tick ahead (CL_CreateNewCommands), so the
-// tick in progress is already predicted. The local player is drawn between the last two ticks at the frame's time, its
+// tick in progress is already predicted. The local player is drawn between the last two ticks at the command clock's
+// time (the engine's clock the commands are made on, ahead of the server's since part 4c; cg.cmdTime), its
 // position and velocity interpolated and its discrete state (animations, flags, events) the newest tick's, with the view
 // angles of now (the engine's command of the frame). Nothing is guessed: every state is a full tick of 10 ms, as the server
 // computes it (a partial step of the movement between two ticks, tried first, gave other collisions, landings and random
@@ -1013,17 +1014,23 @@ static void CG_InterpolateTicks( playerState_t *out, int current ) {
 	usercmd_t now;
 	int i;
 
-	if ( prev && !CG_Piloting( out->m_iVehicleNum ) && cg.time >= prev->commandTime && cg.time < out->commandTime
+	// the engine's command of the frame: the view angles of now, and the command clock as its time
+	const qboolean haveNow = trap->GetUserCmd( current + 1, &now );
+
+	if ( haveNow ) {
+		cg.cmdTime = now.serverTime;
+	}
+	if ( prev && !CG_Piloting( out->m_iVehicleNum ) && cg.cmdTime >= prev->commandTime && cg.cmdTime < out->commandTime
 		&& !( ( prev->eFlags ^ out->eFlags ) & EF_TELEPORT_BIT )
 		&& prev->persistant[PERS_SPAWN_COUNT] == out->persistant[PERS_SPAWN_COUNT] ) {
-		const float f = (float)( cg.time - prev->commandTime ) / TICK_MSEC;
+		const float f = (float)( cg.cmdTime - prev->commandTime ) / TICK_MSEC;
 
 		for ( i = 0; i < 3; i++ ) {
 			out->origin[i] = prev->origin[i] + f * ( out->origin[i] - prev->origin[i] );
 			out->velocity[i] = prev->velocity[i] + f * ( out->velocity[i] - prev->velocity[i] );
 		}
 	}
-	if ( trap->GetUserCmd( current + 1, &now ) ) {
+	if ( haveNow ) {
 		// the view angles of the frame, except on an axis the movement set in the newest tick (a wall run, a lunge, a jump
 		// or back attack, a saber lock, the pitch limit: its delta_angles changed), which stays as the tick left it; else
 		// the view would follow the mouse until the next tick and step back there
@@ -1056,7 +1063,7 @@ static void CG_PreparePmove( centity_t *pEnt, clientInfo_t *ci ) {
 
 	cg_pmove.nonHumanoid = (pEnt->localAnimIndex > 0);
 
-	if (cg.snap && cg.snap->ps.saberLockTime > cg.time)
+	if (cg.snap && cg.snap->ps.saberLockTime > cg_pmove.cmd.serverTime)	// as the movement code tests it
 	{
 		centity_t *blockOpp = &cg_entities[cg.snap->ps.saberLockEnemy];
 
@@ -1099,6 +1106,7 @@ void CG_PredictPlayerState( void ) {
 	clientInfo_t *ci;
 
 	cg.hyperspace = qfalse;	// will be set if touching a trigger_teleport
+	cg.cmdTime = cg.time;	// unless the player is predicted (CG_InterpolateTicks)
 
 	// if this is the first frame we must guarantee
 	// predictedPlayerState is valid even if there is some
@@ -1124,7 +1132,7 @@ void CG_PredictPlayerState( void ) {
 	}
 
 	// non-predicting local movement will grab the latest angles
-	if ( cg_noPredict.integer || g_synchronousClients.integer || CG_UsingEWeb() ) {
+	if ( cg_noPredict.integer || CG_UsingEWeb() ) {
 		CG_InterpolatePlayerState( qtrue );
 		if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum))
 		{

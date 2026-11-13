@@ -3582,14 +3582,9 @@ void ClientThink( int clientNum, usercmd_t *ucmd ) {
 		}
 	}
 */
-	if ( !g_synchronousClients.integer ) {
-		ClientThink_real( ent );	// the bots run every command as it arrives, as players do (plan step 14)
-	}
-	// vehicles are clients and when running synchronous they still need to think here
-	// so special case them.
-	else if ( clientNum >= MAX_CLIENTS ) {
-		ClientThink_real( ent );
-	}
+	// every command runs when the engine gives it: a player's at its tick (the last one again when none came, plan
+	// step 14, part 4c), a bot's as it is made
+	ClientThink_real( ent );
 
 /*	This was moved to clientthink_real, but since its sort of a risky change i left it here for
     now as a more concrete reference - BSD
@@ -3609,30 +3604,6 @@ void ClientThink( int clientNum, usercmd_t *ucmd ) {
 		}
 	}
 */
-}
-
-
-void G_RunClient( gentity_t *ent ) {
-	// force client updates if they're not sending packets at roughly 4hz
-	if ( !(ent->r.svFlags & SVF_BOT) && g_forceClientUpdateRate.integer && ent->client->lastCmdTime < level.time - g_forceClientUpdateRate.integer ) {
-		trap->GetUsercmd( ent-g_entities, &ent->client->pers.cmd );
-
-		ent->client->lastCmdTime = level.time;
-
-		// fill with seemingly valid data
-		ent->client->pers.cmd.serverTime = level.tickTime;
-		ent->client->pers.cmd.buttons = 0;
-		ent->client->pers.cmd.forwardmove = ent->client->pers.cmd.rightmove = ent->client->pers.cmd.upmove = 0;
-
-		ClientThink_real( ent );
-		return;
-	}
-
-	if ( !g_synchronousClients.integer ) {
-		return;
-	}
-	ent->client->pers.cmd.serverTime = level.tickTime;
-	ClientThink_real( ent );
 }
 
 

@@ -552,6 +552,13 @@ void SV_ClientEnterWorld( client_t *client, usercmd_t *cmd ) {
 	client->nextSnapshotTime = svs.time;	// generate a snapshot immediately
 
 	client->inputFirst = client->inputLast = 0;	// commands of before (a map_restart) are not run
+	client->inputNewest = sv.time;	// the commands made before the client was in this world (its time does not run until
+										// its first snapshot) are neither run nor measured
+	client->inputStarted = qfalse;
+	client->inputRepeats = 0;
+	client->inputMargin = 0;
+	client->inputMarginNew = qfalse;
+	client->lateButtons = client->lateUpmove = client->lateGeneric = 0;
 	if(cmd)
 		memcpy(&client->lastUsercmd, cmd, sizeof(client->lastUsercmd));
 	else
@@ -1222,25 +1229,112 @@ void SV_ClientThink (client_t *cl, usercmd_t *cmd) {
 ==================
 SV_RunClientCommands
 
-Runs, for every client in the game, the commands received whose time is up to `time`, the coming tick's, in their order
-(plan step 14): a player's commands run in the ticks, after the bots' and before the game frame, as the bots' do, rather
-than when their packet arrives. A client whose commands are behind the server's clock (stamped with the time it draws
-the world at) has all of them run at the next tick.
+Runs, for every player in the game, one command at the coming tick, whose time is `time` (plan step 14, part 4c): every
+player's state at a tick is the result of its command of that tick, after the bots' commands and before the game frame.
+
+- The command of the tick is the one whose time is in the tick (above time - frameMsec, up to time). How early it
+  arrived is the player's input margin, sent in the next snapshot: the client keeps its command clock just far enough
+  ahead for its commands to arrive before their tick.
+- A command that comes after its tick gets no movement time, and what it newly pressed (buttons, a jump, the generic
+  command) goes into the next command run: a short press acts a tick late instead of being lost (as Counter-Strike 2;
+  docs_rewrite/netcode/11-tick-and-lag-compensation-survey.md, 11.11). Its margin is negative.
+- A tick without a command runs the last one again, for SV_INPUT_REPEAT_MSEC, then an empty one (no movement, no
+  button): a lost packet does not stop the player, a lost connection does.
 
 The clients run in rising order of their numbers at one tick and in falling order at the next: within a tick the first
 to move takes a contested place and the first to shoot kills first, and of any two clients each is first every other tick.
 ==================
 */
-void SV_RunClientCommands( int time ) {
+static void SV_FoldLateCommand( client_t *cl, const usercmd_t *late ) {
+	cl->lateButtons |= late->buttons & ~cl->lastUsercmd.buttons;
+	if ( late->upmove > 0 && cl->lastUsercmd.upmove <= 0 ) {
+		cl->lateUpmove = late->upmove;
+	}
+	if ( late->generic_cmd ) {
+		cl->lateGeneric = late->generic_cmd;
+	}
+}
+
+void SV_RunClientCommands( int time, int frameMsec ) {
+	const int now = Sys_Milliseconds();
 	const int falling = ( time / TICK_MSEC ) & 1;
+
 	for ( int n = 0; n < sv_maxclients->integer; n++ ) {
 		client_t *cl = &svs.clients[falling ? sv_maxclients->integer - 1 - n : n];
-		while ( cl->state == CS_ACTIVE && cl->inputFirst != cl->inputLast
-			&& cl->inputCmds[cl->inputFirst & ( SV_INPUT_BUFFER - 1 )].serverTime <= time ) {
-			usercmd_t cmd = cl->inputCmds[cl->inputFirst & ( SV_INPUT_BUFFER - 1 )];
-			cl->inputFirst++;
-			SV_ClientThink( cl, &cmd );
+		if ( cl->state != CS_ACTIVE || cl->netchan.remoteAddress.type == NA_BOT ) {
+			continue;	// a bot's commands come from the game (SV_BotFrame)
 		}
+
+		netcodecStats_t &st = cl->netcodecStats;
+		usercmd_t cmd;
+		qboolean own = qfalse, measured = qfalse;
+		int margin = 0;
+
+		while ( cl->inputFirst != cl->inputLast ) {
+			const int slot = cl->inputFirst & ( SV_INPUT_BUFFER - 1 );
+			const usercmd_t &c = cl->inputCmds[slot];
+			if ( c.serverTime > time ) {
+				break;	// waits for its tick
+			}
+			cl->inputFirst++;
+			int m;
+			if ( c.serverTime > time - frameMsec ) {
+				if ( own ) {
+					SV_FoldLateCommand( cl, &cmd );	// two commands in one tick (times off the ticks): the last one runs
+				}
+				cmd = c;
+				own = qtrue;
+				m = now - cl->inputArrival[slot];
+			} else {
+				// its tick ran a whole number of ticks before this one
+				SV_FoldLateCommand( cl, &c );
+				st.cmdsLate++;
+				m = Q_min( now - ( time - c.serverTime ) / frameMsec * frameMsec - cl->inputArrival[slot], -1 );
+			}
+			margin = measured ? Q_min( margin, m ) : m;
+			measured = qtrue;
+		}
+		if ( measured ) {
+			cl->inputMargin = margin;
+			cl->inputMarginNew = qtrue;
+			st.marginMin = st.margins ? Q_min( st.marginMin, margin ) : margin;
+			st.margins++;
+			st.marginSum += margin;
+		}
+
+		if ( own ) {
+			cl->inputStarted = qtrue;
+			cl->inputRepeats = 0;
+			st.cmdsOnTime++;
+		} else {
+			if ( !cl->inputStarted ) {
+				continue;	// no command of the player ran yet in this world: nothing to run again
+			}
+			cmd = cl->lastUsercmd;
+			cmd.generic_cmd = 0;	// a one-off command is not run twice
+			if ( ++cl->inputRepeats > SV_INPUT_REPEAT_MSEC / TICK_MSEC ) {
+				cmd.forwardmove = cmd.rightmove = cmd.upmove = 0;
+				cmd.buttons = 0;
+			}
+			st.cmdsMissing++;
+		}
+
+		// what the next tick without a command runs again: the command as the player sent it, not what a late one adds
+		usercmd_t held = cmd;
+		held.serverTime = time;
+
+		cmd.serverTime = time;
+		cmd.buttons |= cl->lateButtons;
+		if ( cmd.upmove <= 0 && cl->lateUpmove > 0 ) {
+			cmd.upmove = (signed char)cl->lateUpmove;
+		}
+		if ( !cmd.generic_cmd ) {
+			cmd.generic_cmd = (byte)cl->lateGeneric;
+		}
+		cl->lateButtons = cl->lateUpmove = cl->lateGeneric = 0;
+
+		SV_ClientThink( cl, &cmd );
+		cl->lastUsercmd = held;
 	}
 }
 
@@ -1334,6 +1428,8 @@ static void SV_UserMove( client_t *cl, const eng::ClientPacket &packet, qboolean
 		return;
 	}
 
+	const int arrival = Sys_Milliseconds();
+
 	// usually, the first couple commands will be duplicates
 	// of ones we have previously received, but the servertimes
 	// in the commands will cause them to be immediately discarded
@@ -1346,17 +1442,22 @@ static void SV_UserMove( client_t *cl, const eng::ClientPacket &packet, qboolean
 		//if ( cmds[i].serverTime > svs.time + 3000 ) {
 		//	continue;
 		//}
-		// don't keep a cmd already received, run or waiting for its tick
-		// these old cmds are included by CL_PACKET_DUP
-		const int newest = cl->inputLast != cl->inputFirst
-			? cl->inputCmds[( cl->inputLast - 1 ) & ( SV_INPUT_BUFFER - 1 )].serverTime : cl->lastUsercmd.serverTime;
-		if ( cmds[i].serverTime <= newest ) {
+		// don't keep a cmd already received: these old cmds are included by CL_PACKET_DUP
+		if ( cmds[i].serverTime <= cl->inputNewest ) {
+			continue;
+		}
+		// a client's clock that lost its way: the margin tells it how far ahead it is
+		if ( cmds[i].serverTime > sv.time + SV_INPUT_AHEAD_MSEC ) {
+			cl->inputMargin = cmds[i].serverTime - sv.time;
+			cl->inputMarginNew = qtrue;
 			continue;
 		}
 		if ( cl->inputLast - cl->inputFirst == SV_INPUT_BUFFER ) {
 			break;	// a client SV_INPUT_BUFFER commands ahead of the ticks: the rest waits for its next packets
 		}
 		cl->inputCmds[cl->inputLast & ( SV_INPUT_BUFFER - 1 )] = cmds[i];
+		cl->inputArrival[cl->inputLast & ( SV_INPUT_BUFFER - 1 )] = arrival;
+		cl->inputNewest = cmds[i].serverTime;
 		cl->inputLast++;
 	}
 }

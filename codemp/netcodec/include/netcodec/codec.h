@@ -104,6 +104,7 @@ struct Op {
 	std::vector<uint8_t> data;     // Download
 	int64_t time = 0;              // Snapshot: server time
 	uint32_t flags = 0;            // Snapshot
+	int32_t inputMargin = 0;       // Snapshot: how early the client's command arrived, in ms (-128 to 127)
 	std::vector<uint8_t> areas;    // Snapshot
 	Snapshot snap;                 // Snapshot
 };

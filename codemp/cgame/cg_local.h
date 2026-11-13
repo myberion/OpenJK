@@ -782,6 +782,10 @@ typedef struct cg_s {
 	int			oldTime;		// time at last frame, used for missile trails and prediction checking
 
 	int			physicsTime;	// either cg.snap->time or cg.nextSnap->time
+	int			cmdTime;		// the time the local player's state is drawn at (plan step 14, part 4c): the engine's
+								// command clock, ahead of cg.time by the round trip and the interpolation delay, when the
+								// player is predicted; cg.time otherwise. The times the movement code puts in the player
+								// state (the weapon charge, the zoom, the rocket lock) are compared with it
 
 	int			timelimitWarnings;	// 5 min, 1 min, overtime
 	int			fraglimitWarnings;

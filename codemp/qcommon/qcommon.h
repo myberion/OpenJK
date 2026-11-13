@@ -114,6 +114,27 @@ NET
 
 #define NET_ENABLEV4		0x01
 
+// The input margin of a snapshot (plan step 14, part 4c): how early the client's command of the snapshot's tick reached
+// the server, in ms (negative: after its tick). It travels as a byte: to the millisecond up to INPUT_MARGIN_FINE
+// either way, in steps of INPUT_MARGIN_STEP beyond (up to 568 ms), so that a client sets its command clock in one
+// round trip after a connection or a hitch.
+#define	INPUT_MARGIN_NONE	( -128 )	// on the wire: the server measured no margin since its last snapshot
+#define	INPUT_MARGIN_FINE	64
+#define	INPUT_MARGIN_STEP	8
+static inline int Net_MarginToWire( int msec ) {
+	const int a = msec < 0 ? -msec : msec;
+	int w = a <= INPUT_MARGIN_FINE ? a : INPUT_MARGIN_FINE + ( a - INPUT_MARGIN_FINE + INPUT_MARGIN_STEP / 2 ) / INPUT_MARGIN_STEP;
+	if ( w > 127 ) {
+		w = 127;
+	}
+	return msec < 0 ? -w : w;
+}
+static inline int Net_MarginFromWire( int w ) {
+	const int a = w < 0 ? -w : w;
+	const int msec = a <= INPUT_MARGIN_FINE ? a : INPUT_MARGIN_FINE + ( a - INPUT_MARGIN_FINE ) * INPUT_MARGIN_STEP;
+	return w < 0 ? -msec : msec;
+}
+
 #define	PACKET_BACKUP	32	// number of old messages that must be kept on client and
 							// server for delta comrpession and ping estimation
 #define	PACKET_MASK		(PACKET_BACKUP-1)

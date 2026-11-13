@@ -1173,7 +1173,7 @@ void SV_Frame( int msec ) {
 		SV_BotFrame( sv.time );
 		SV_CostAdd( SV_COST_BOTS, botStart );
 		const long long commandsStart = SV_Microseconds();
-		SV_RunClientCommands( sv.time + frameMsec );
+		SV_RunClientCommands( sv.time + frameMsec, frameMsec );
 		SV_CostAdd( SV_COST_COMMANDS, commandsStart );
 
 		sv.timeResidual -= frameMsec;

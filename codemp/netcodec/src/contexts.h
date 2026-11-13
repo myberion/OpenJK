@@ -11,7 +11,8 @@
 //  - the message's serverId unchanged from the base;
 //  - client packets (client to server, plan step 8): their scalars (enum ClientScalar), the user-command time step
 //    given the previous step, the view angle differences per axis and context, the byte fields given the previous
-//    value (separately for the packet's first command, which has no previous command).
+//    value (separately for the packet's first command, which has no previous command);
+//  - the snapshot's input margin (-128 to 127 ms as 0 to 255).
 #pragma once
 
 #include "schema.h"
@@ -78,7 +79,10 @@ inline constexpr uint32_t kClientScalar = kServerIdSame + 1;
 inline constexpr uint32_t kClientStep = kClientScalar + static_cast<uint32_t>(ClientScalar::kCount);
 inline constexpr uint32_t kClientAngle = kClientStep + kStepContexts;
 inline constexpr uint32_t kClientField = kClientAngle + (3 * kAngleContexts);
-inline constexpr uint32_t kCount = kClientField + (kUserCmdFields * 2 * 256);
+// server messages again: the snapshot's input margin (plan step 14), after the client packets' contexts so that
+// the trained tables keep their context numbers
+inline constexpr uint32_t kInputMargin = kClientField + (kUserCmdFields * 2 * 256);
+inline constexpr uint32_t kCount = kInputMargin + 1;
 
 // The contexts of one field: row[kind] is the context of that kind.
 struct Row {

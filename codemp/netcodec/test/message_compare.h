@@ -37,7 +37,7 @@ namespace netcodec::trace {
 		return true;
 	}
 	case OpType::Download: return a.block == b.block && a.fileSize == b.fileSize && a.data == b.data;
-	case OpType::Snapshot: return a.time == b.time && a.flags == b.flags && a.areas == b.areas && SameSnapshot(a.snap, b.snap);
+	case OpType::Snapshot: return a.time == b.time && a.flags == b.flags && a.inputMargin == b.inputMargin && a.areas == b.areas && SameSnapshot(a.snap, b.snap);
 	default: return true;
 	}
 }

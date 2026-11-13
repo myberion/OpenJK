@@ -1461,14 +1461,15 @@ void CL_CreateNewCommands( void ) {
 		return;
 	}
 
-	// the end of the tick in progress; after the first command, a jump of the clock (back, or forward by more than 200 ms:
-	// a map_restart, a hitch) gives one command at the new time, as one frame's command did
-	const int tick = cl.serverTime - cl.serverTime % TICK_MSEC + TICK_MSEC;
+	// the end of the tick in progress on the command clock (plan step 14, part 4c: ahead of the server's clock, so that
+	// the command reaches the server just before that tick runs); after the first command, a jump of the clock (by more
+	// than 200 ms either way: a map_restart, a hitch) gives one command at the new time, as one frame's command did
+	const int tick = cl.cmdTime - cl.cmdTime % TICK_MSEC + TICK_MSEC;
 	int last = cl.cmds[cl.cmdNumber & CMD_MASK].serverTime;
-	if ( cl.cmdNumber == 0 || last > tick || tick - last > 200 ) {
+	if ( cl.cmdNumber == 0 || abs( tick - last ) > 200 ) {
 		last = tick - TICK_MSEC;
 	}
-	if ( last == tick ) {
+	if ( last >= tick ) {
 		return;	// the gathered input waits for the next tick
 	}
 
@@ -1479,6 +1480,7 @@ void CL_CreateNewCommands( void ) {
 		cmd.serverTime = t;
 		cl.cmdNumber++;
 		cl.cmds[cl.cmdNumber & CMD_MASK] = cmd;
+		cl.cmdDeltaAt[cl.cmdNumber & CMD_MASK] = cl.cmdTimeDelta;
 		cmd.generic_cmd = 0;	// a one-off command (a style change, a force power): in the first tick only
 	}
 }
@@ -1487,9 +1489,10 @@ void CL_CreateNewCommands( void ) {
 =================
 CL_PendingCmd
 
-The view angles of now, for cgame's drawing of the local player (plan step 14: the
-commands are made per tick, the view turns every frame): the last command with the
-view angles of the frame, never sent. qfalse before the first command.
+The view angles and the command clock of now, for cgame's drawing of the local player
+(plan step 14: the commands are made per tick, the view turns every frame): the last
+command with the view angles of the frame and the command clock as its time, never
+sent. qfalse before the first command.
 =================
 */
 qboolean CL_PendingCmd( usercmd_t *cmd ) {
@@ -1497,6 +1500,7 @@ qboolean CL_PendingCmd( usercmd_t *cmd ) {
 		return qfalse;
 	}
 	*cmd = cl.cmds[cl.cmdNumber & CMD_MASK];
+	cmd->serverTime = cl.cmdTime;
 	for ( int i = 0; i < 3; i++ ) {
 		cmd->angles[i] = ANGLE2SHORT( cl.viewangles[i] );
 	}

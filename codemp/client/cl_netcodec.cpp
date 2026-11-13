@@ -170,6 +170,7 @@ static void CL_NetcodecDemoRecord( const eng::ClientMessage &cm, int seq, int fi
 		sm.delta = seq - baseSeq > 0 && seq - baseSeq < PACKET_BACKUP ? (uint32_t)( seq - baseSeq ) : 0;
 		sm.time = cm.time;
 		sm.flags = cm.flags;
+		sm.inputMargin = cm.inputMargin;
 		sm.areas = cm.areas;
 		sm.numAreas = cm.numAreas;
 		sm.frame = s_frames[seq % PACKET_BACKUP];	// the player states and entities the message was decoded into
@@ -216,6 +217,7 @@ void CL_NetcodecStats_f( void ) {
 			s_stats.noBase, s_stats.baseAge[0], s_stats.baseAge[1], s_stats.baseAge[2], s_stats.baseAge[3], s_stats.baseAge[4],
 			s_stats.baseAge[5] );
 		CL_InterpStats();
+		CL_CmdClockStats();
 	}
 	if ( s_stats.packets ) {
 		Com_Printf( "%d client packets, %.1f bytes per packet, %d without a base\n", s_stats.packets,
@@ -344,6 +346,8 @@ void CL_NetcodecParseServerMessage( msg_t *msg ) {
 		newSnap.messageNum = seq;
 		newSnap.deltaNum = cm.delta ? seq - (int)cm.delta : -1;
 		newSnap.snapFlags = (int)cm.flags;
+		newSnap.inputMarginValid = cm.inputMargin != INPUT_MARGIN_NONE ? qtrue : qfalse;
+		newSnap.inputMargin = newSnap.inputMarginValid ? Net_MarginFromWire( cm.inputMargin ) : 0;
 		Com_Memcpy( newSnap.areamask, cm.areas, cm.numAreas );
 		newSnap.parseEntitiesNum = cl.parseEntitiesNum;
 		newSnap.numEntities = (int)cm.numEntities;

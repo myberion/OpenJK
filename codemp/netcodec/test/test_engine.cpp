@@ -148,6 +148,7 @@ void RoundTrip(const trace::DemoStream &s, const char *label, Totals &t) {
 				sm.delta = m.delta;
 				sm.time = static_cast<int32_t>(op.time);
 				sm.flags = op.flags;
+				sm.inputMargin = op.inputMargin;
 				sm.areas = op.areas.data();
 				sm.numAreas = ToU32(op.areas.size());
 				sm.frame = eng::Frame{ .seq = seq, .ps = server.ps[slot].data(), .vps = vehicle ? server.vps[slot].data() : nullptr,
@@ -225,6 +226,7 @@ void RoundTrip(const trace::DemoStream &s, const char *label, Totals &t) {
 				op.type = OpType::Snapshot;
 				op.time = cm.time;
 				op.flags = cm.flags;
+				op.inputMargin = cm.inputMargin;
 				const std::span<const uint8_t> areas(cm.areas, cm.numAreas);
 				op.areas.assign(areas.begin(), areas.end());
 				op.snap = Snapshot{ .ps = client.ps[slot],

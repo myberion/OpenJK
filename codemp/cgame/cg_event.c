@@ -1481,7 +1481,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 		}
 		// if we are interpolating, we don't need to smooth steps
 		if ( cg.demoPlayback || (cg.snap->ps.pm_flags & PMF_FOLLOW) ||
-			cg_noPredict.integer || g_synchronousClients.integer ) {
+			cg_noPredict.integer ) {
 			break;
 		}
 		// check for stepping up before a previous step is completed

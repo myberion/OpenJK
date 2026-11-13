@@ -150,6 +150,7 @@ size_t ServerCodec::Encode(const ServerMessage &msg, const Frame *frames, const 
 		Op &op = Next(m, used, OpType::Snapshot);
 		op.time = msg.time;
 		op.flags = msg.flags;
+		op.inputMargin = std::clamp(msg.inputMargin, -128, 127);
 		const std::span<const uint8_t> areas(msg.areas, msg.numAreas);
 		op.areas.assign(areas.begin(), areas.end());
 		op.snap = View(msg.frame, ring);
@@ -333,6 +334,7 @@ bool ClientCodec::Decode(const uint8_t *bytes, size_t size, int32_t seq, const F
 			msg.snapshot = true;
 			msg.time = static_cast<int32_t>(op.time);
 			msg.flags = op.flags;
+			msg.inputMargin = op.inputMargin;
 			msg.areas = op.areas.data();
 			msg.numAreas = ToU32(op.areas.size());
 			msg.vehicle = !op.snap.vps.empty();

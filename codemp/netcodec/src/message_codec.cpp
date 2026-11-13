@@ -304,8 +304,10 @@ void PutEntities(O &io, PredCtx &c, R nw, RingReader old, const BaselineTable &b
 }
 
 // out: a RingSink or a TableSink
+// forced inline: once GetMessage grew (plan step 14, part 4c), GCC 12 left the snapshot's entity decoder out of line
+// and decoded about 3 % slower
 template <class Sink>
-bool GetEntities(In &io, PredCtx &c, RingReader old, const BaselineTable &baselines, Sink &out, const Model &m) {
+NETCODEC_ALWAYS_INLINE bool GetEntities(In &io, PredCtx &c, RingReader old, const BaselineTable &baselines, Sink &out, const Model &m) {
 	const auto keep = [&](ImageView src) {   // an unchanged entity of the base
 		const ImageRef d = out.Slot(EntityNumber(src));
 		if (d.empty()) return false;
@@ -570,6 +572,7 @@ void PutMessage(O &io, const Message &msg, const Base &base, const BaselineTable
 			c.time = op.time;
 			io.Class(Of(kHTime), Zz(op.time - (bh != nullptr && bh->time ? *bh->time : 0)));
 			io.Symbol(Of(kHFlags), op.flags);
+			io.Symbol(ctx::kInputMargin, static_cast<uint32_t>(op.inputMargin + 128));
 			io.Symbol(Of(kHArea), op.areas.size());
 			for (const uint8_t a : op.areas) io.Symbol(Of(kHArea), a);
 			const Snapshot &sn = op.snap;
@@ -624,6 +627,7 @@ Op &NextOp(Message &msg, size_t &used) {
 	op.data.clear();
 	op.time = 0;
 	op.flags = 0;
+	op.inputMargin = 0;
 	op.areas.clear();
 	op.snap = {};
 	return op;
@@ -703,6 +707,7 @@ bool GetMessage(In &io, const BaseLookup &lookup, const CommandHistory &history,
 			time = op.time;
 			c.time = op.time;
 			op.flags = io.Symbol(Of(kHFlags));
+			op.inputMargin = static_cast<int32_t>(io.Symbol(ctx::kInputMargin)) - 128;
 			op.areas.resize(io.Symbol(Of(kHArea)));
 			for (uint8_t &a : op.areas) a = static_cast<uint8_t>(io.Symbol(Of(kHArea)));
 			Snapshot &sn = op.snap;
@@ -712,6 +717,9 @@ bool GetMessage(In &io, const BaseLookup &lookup, const CommandHistory &history,
 			const bool okPs = pilot ? GetPlayer(io, c, kPilotFields, ctx::PlayerGap(1), basePs, ps, OlderPlayer(c, false), m)
 			                        : GetPlayer(io, c, kPlayerFields, ctx::PlayerGap(0), basePs, ps, OlderPlayer(c, false), m);
 			if (!okPs) return false;
+			// the encoder derives the flag from the state: a message whose flag and state disagree is malformed (it would
+			// decode fields its own re-encoding does not send)
+			if (IsPilot(ps) != pilot) return false;
 			sn.ps = ps;
 			if (VehicleNum(ps) != 0) {
 				const ImageView ov = base != nullptr && !base->vps.empty() ? base->vps : ImageView(ZeroPlayer());

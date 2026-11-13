@@ -131,7 +131,9 @@ int main(int argc, char **argv) {
 	if (!Count(argv[1], counts, messages)) return 1;
 	const tools::TablesFile file{ .tool = "netcodec_train", .what = "Trained tables of the JKA codec", .unit = "messages",
 		                          .prefix = "kTrained" };
-	if (!tools::WriteTables(argv[2], counts, messages, file, 0, detail::ctx::kCount)) return 1;
+	// the server messages' contexts; the input margin (ctx::kInputMargin) keeps its uniform table until recordings
+	// carry real margins (plan step 13): the demos have none
+	if (!tools::WriteTables(argv[2], counts, messages, file, 0, detail::ctx::kClientScalar)) return 1;
 	if (argc < 4) return 0;
 	SymbolCounts report = NewSymbolCounts();
 	size_t reportMessages = 0;

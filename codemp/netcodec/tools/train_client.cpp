@@ -33,5 +33,5 @@ int main(int argc, char **argv) {
 	if (refused != 0) return 1;
 	const tools::TablesFile file{ .tool = "netcodec_train_client", .what = "Trained tables of the client packets",
 		                          .unit = "packets", .prefix = "kClientTrained" };
-	return tools::WriteTables(argv[1], counts, packets, file, detail::ctx::kClientScalar, detail::ctx::kCount) ? 0 : 1;
+	return tools::WriteTables(argv[1], counts, packets, file, detail::ctx::kClientScalar, detail::ctx::kInputMargin) ? 0 : 1;
 }

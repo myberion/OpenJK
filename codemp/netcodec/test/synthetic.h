@@ -265,6 +265,7 @@ public:
 			op.type = OpType::Snapshot;
 			op.time = r.Range(0, 10000000);
 			op.flags = static_cast<uint32_t>(r.Below(256));
+			op.inputMargin = static_cast<int32_t>(r.Below(256)) - 128;
 			op.areas.resize(r.PerMille(10) ? r.Index(33) : r.Index(7));
 			for (uint8_t &a : op.areas) a = static_cast<uint8_t>(r.Below(256));
 			c.snap = std::make_unique<trace::SnapshotData>(NextSnapshot(r, base, bl));

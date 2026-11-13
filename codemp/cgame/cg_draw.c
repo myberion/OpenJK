@@ -407,7 +407,7 @@ static void CG_DrawZoomMask( void )
 			trap->R_SetColor( colorTable[CT_WHITE] );
 
 			// draw the charge level
-			max = ( cg.time - cg.predictedPlayerState.weaponChargeTime ) / ( 50.0f * 30.0f ); // bad hardcodedness 50 is disruptor charge unit and 30 is max charge units allowed.
+			max = ( cg.cmdTime - cg.predictedPlayerState.weaponChargeTime ) / ( 50.0f * 30.0f ); // bad hardcodedness 50 is disruptor charge unit and 30 is max charge units allowed.
 
 			if ( max > 1.0f )
 			{
@@ -4388,7 +4388,7 @@ static void CG_DrawLagometer( void ) {
 
 	trap->R_SetColor( NULL );
 
-	if ( cg_noPredict.integer || g_synchronousClients.integer ) {
+	if ( cg_noPredict.integer ) {
 		CG_DrawBigString( ax, ay, "snc", 1.0 );
 	}
 
@@ -5770,7 +5770,7 @@ static void CG_DrawRocketLocking( int lockEntNum, int lockTime )
 	vec4_t color={0.0f,0.0f,0.0f,0.0f};
 	float lockTimeInterval = ((cgs.gametype==GT_SIEGE)?2400.0f:1200.0f)/16.0f;
 	//FIXME: if in a vehicle, use the vehicle's lockOnTime...
-	int dif = (cg.time - cg.snap->ps.rocketLockTime)/lockTimeInterval;
+	int dif = (cg.cmdTime - cg.snap->ps.rocketLockTime)/lockTimeInterval;
 	int i;
 
 	if (!cg.snap->ps.rocketLockTime)
@@ -5814,7 +5814,7 @@ static void CG_DrawRocketLocking( int lockEntNum, int lockTime )
 				else
 				{//use the custom vehicle lockOnTime
 					lockTimeInterval = (vehWeapon->iLockOnTime/16.0f);
-					dif = (cg.time - cg.snap->ps.rocketLockTime)/lockTimeInterval;
+					dif = (cg.cmdTime - cg.snap->ps.rocketLockTime)/lockTimeInterval;
 				}
 			}
 		}
@@ -7836,7 +7836,7 @@ static void CG_Draw2DScreenTints( void )
 			}
 		}
 
-		if (cg.snap->ps.rocketLockIndex != ENTITYNUM_NONE && (cg.time - cg.snap->ps.rocketLockTime) > 0)
+		if (cg.snap->ps.rocketLockIndex != ENTITYNUM_NONE && (cg.cmdTime - cg.snap->ps.rocketLockTime) > 0)
 		{
 			CG_DrawRocketLocking( cg.snap->ps.rocketLockIndex, cg.snap->ps.rocketLockTime );
 		}
@@ -7992,7 +7992,7 @@ static void CG_Draw2D( void ) {
 
 	CG_Draw2DScreenTints();
 
-	if (cg.snap->ps.rocketLockIndex != ENTITYNUM_NONE && (cg.time - cg.snap->ps.rocketLockTime) > 0)
+	if (cg.snap->ps.rocketLockIndex != ENTITYNUM_NONE && (cg.cmdTime - cg.snap->ps.rocketLockTime) > 0)
 	{
 		CG_DrawRocketLocking( cg.snap->ps.rocketLockIndex, cg.snap->ps.rocketLockTime );
 	}

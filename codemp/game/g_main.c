@@ -3344,7 +3344,6 @@ void G_RunFrame( int levelTime ) {
 
 			trap->ICARUS_MaintainTaskManager(ent->s.number);
 
-			G_RunClient( ent );
 			continue;
 		}
 		else if (ent->s.eType == ET_NPC)

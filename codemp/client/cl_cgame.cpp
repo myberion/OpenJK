@@ -668,16 +668,18 @@ static void CL_ClockPush( clockWindow_t *w, int sample ) {
 	w->low[slot % CLOCK_SLOTS] = Q_min( w->low[slot % CLOCK_SLOTS], sample );
 }
 
-// the slots' smallest samples in rising order; returns how many slots hold one
+// the smallest samples of the slots of the last CLOCK_SLOTS * CLOCK_SLOT_MSEC, in rising order; returns how many
+// slots hold one (the older slots have expired, also when no sample came since)
 static int CL_ClockSorted( const clockWindow_t *w, int *sorted ) {
+	const int now = cls.realtime / CLOCK_SLOT_MSEC;
 	int count = 0;
 
-	if ( !w->started ) {
+	if ( !w->started || now < w->slot ) {
 		return 0;
 	}
-	for ( int i = 0; i < CLOCK_SLOTS; i++ ) {
-		if ( w->low[i] != INT_MAX ) {
-			sorted[count++] = w->low[i];
+	for ( int s = Q_max( w->slot, now ) - CLOCK_SLOTS + 1; s <= w->slot; s++ ) {
+		if ( s >= 0 && w->low[s % CLOCK_SLOTS] != INT_MAX ) {
+			sorted[count++] = w->low[s % CLOCK_SLOTS];
 		}
 	}
 	std::sort( sorted, sorted + count );
@@ -709,6 +711,110 @@ static void CL_ClockSlew( int *delta, int target, int *credit, int msec ) {
 	}
 }
 
+/*
+=================
+CL_AdjustCmdDelta
+
+The command clock (plan step 14, part 4c). The server reports in each snapshot the input margin: how early the command
+of the snapshot's tick reached it, in ms (negative: after its tick; SV_RunClientCommands). A command made with a larger
+cmdTimeDelta is made earlier, so its margin is larger by as much: each snapshot gives one sample, its margin minus the
+cmdTimeDelta its command was made with, the margin a cmdTimeDelta of 0 would have had. The window keeps the smallest
+sample of each of its last CLOCK_SLOTS slots, and cmdTimeDelta moves, at the clocks' bounded speed, to where the second
+smallest of them becomes CMD_MARGIN_MSEC: one late command in the window does not move the clock, two do, and so does
+loss (a command that arrives with the next packet is a tick late). The delay of a key press to the server is then the
+trip of a packet plus that margin and the jitter of the client's own packets, for every player alike.
+
+Until the window has CLOCK_MIN_SLOTS slots (a connection) and the target is more than a tick away, or when it is more
+than 100 ms away, the clock is set at once; the margins of the commands made before are then left out.
+=================
+*/
+static struct {
+	int		snapshots;		// input margins received
+	double	marginSum;
+	int		marginMin;
+	int		late;			// of them, negative ones
+} s_cmdStats;
+
+void CL_CmdClockStats( void ) {
+	if ( !s_cmdStats.snapshots ) {
+		return;
+	}
+	Com_Printf( "command clock: %d ms ahead of the drawn time; input margin on the server: mean %.1f ms, lowest %d ms, "
+		"%d of %d after their tick\n", cl.cmdTimeDelta - cl.serverTimeDelta, s_cmdStats.marginSum / s_cmdStats.snapshots,
+		s_cmdStats.marginMin, s_cmdStats.late, s_cmdStats.snapshots );
+	Com_Memset( &s_cmdStats, 0, sizeof( s_cmdStats ) );
+}
+
+// the server's clock jumped by `jump` ms (a map_restart): the command clock follows, its samples with it
+static void CL_CmdClockJump( int jump ) {
+	cl.cmdTimeDelta += jump;
+	CL_ClockShift( &cl.cmdWindow, -jump );
+}
+
+// the client's time was reset: the command clock starts again from the drawn time, as at the first snapshot
+static void CL_CmdClockReset( void ) {
+	cl.cmdTimeDelta = cl.serverTimeDelta;
+	cl.cmdWindow.started = qfalse;
+	cl.cmdCredit = 0;
+	cl.oldCmdTime = 0;
+	cl.cmdSettleTime = 0;
+}
+
+static void CL_AdjustCmdDelta( int msec ) {
+	int		sorted[CLOCK_SLOTS];
+	int		count;
+
+	if ( clc.demoplaying ) {
+		return;
+	}
+
+	if ( cl.snap.messageNum != cl.cmdMarginMessage ) {
+		cl.cmdMarginMessage = cl.snap.messageNum;
+
+		// A margin is a sample only once (the server sends each measure in one snapshot), and only when it is about a
+		// command made on the present clock: after the clock was set at once, the commands made before keep arriving
+		// with the old clock's margins until the server's time reaches the first command made after.
+		if ( cl.snap.inputMarginValid && cl.snap.serverTime >= cl.cmdSettleTime ) {
+			// the command the margin is about: the newest one up to the snapshot's tick
+			for ( int i = 0; i < CMD_BACKUP && i < cl.cmdNumber; i++ ) {
+				const int n = ( cl.cmdNumber - i ) & CMD_MASK;
+				if ( cl.cmds[n].serverTime > cl.snap.serverTime ) {
+					continue;
+				}
+				const int sample = cl.snap.inputMargin - cl.cmdDeltaAt[n];
+
+				// a command later than the window's by more than CLOCK_MAX_GAP_MSEC is an interruption, not jitter: no
+				// margin covers it, and it is no sample (if the link itself changed, the window empties in its length and
+				// the clock is set again)
+				count = CL_ClockSorted( &cl.cmdWindow, sorted );
+				if ( count < CLOCK_MIN_SLOTS || sample >= sorted[count / 2] - CLOCK_MAX_GAP_MSEC ) {
+					CL_ClockPush( &cl.cmdWindow, sample );
+				}
+				break;
+			}
+			s_cmdStats.marginMin = s_cmdStats.snapshots ? Q_min( s_cmdStats.marginMin, cl.snap.inputMargin ) : cl.snap.inputMargin;
+			s_cmdStats.snapshots++;
+			s_cmdStats.marginSum += cl.snap.inputMargin;
+			s_cmdStats.late += cl.snap.inputMargin < 0 ? 1 : 0;
+		}
+	}
+
+	count = CL_ClockSorted( &cl.cmdWindow, sorted );
+	if ( !count ) {
+		return;
+	}
+	const int target = CMD_MARGIN_MSEC - sorted[count >= CLOCK_MIN_SLOTS ? 1 : 0];
+	const int off = abs( target - cl.cmdTimeDelta );
+	if ( off > 100 || ( count < CLOCK_MIN_SLOTS && off > TICK_MSEC ) ) {
+		// far off, or not yet set (a connection): at once
+		cl.cmdTimeDelta = target;
+		cl.cmdCredit = 0;
+		cl.cmdSettleTime = Q_max( cls.realtime + cl.cmdTimeDelta, cl.oldCmdTime ) + TICK_MSEC;
+	} else if ( com_timescale->value == 0 || com_timescale->value == 1 ) {
+		CL_ClockSlew( &cl.cmdTimeDelta, target, &cl.cmdCredit, msec );
+	}
+}
+
 // called every frame of the game
 void CL_AdjustTimeDelta( void ) {
 	const qboolean newSnapshots = cl.newSnapshots;
@@ -724,6 +830,8 @@ void CL_AdjustTimeDelta( void ) {
 
 	const int msec = Q_min( Q_max( cls.realtime - cl.interpRealtime, 0 ), 200 );
 	cl.interpRealtime = cls.realtime;
+
+	CL_AdjustCmdDelta( msec );
 
 	// the largest serverTimeDelta this frame allows
 	const int newDelta = cl.snap.serverTime - cls.realtime;
@@ -749,6 +857,7 @@ void CL_AdjustTimeDelta( void ) {
 			const int jump = newDelta - TICK_MSEC - sorted[count / 2];
 			CL_ClockShift( &cl.interpWindow, jump );
 			cl.serverTimeDelta += jump;
+			CL_CmdClockJump( jump );
 			deltaDelta = abs( newDelta - cl.serverTimeDelta );
 			if ( cl_showTimeDelta->integer ) {
 				Com_Printf( "<JUMP %i> ", jump );
@@ -762,6 +871,7 @@ void CL_AdjustTimeDelta( void ) {
 			cl.serverTimeDelta = newDelta - TICK_MSEC;
 			cl.oldServerTime = cl.snap.serverTime;	// FIXME: is this a problem for cgame?
 			cl.serverTime = cl.snap.serverTime;
+			CL_CmdClockReset();
 			if ( cl_showTimeDelta->integer ) {
 				Com_Printf( "<RESET> " );
 			}
@@ -831,6 +941,11 @@ void CL_FirstSnapshot( void ) {
 	// set the timedelta so we are exactly on this first frame; in a game one interval behind it, the delay the
 	// client keeps until its window has samples (CL_AdjustTimeDelta): at no delay it would extrapolate
 	cl.serverTimeDelta = cl.snap.serverTime - cls.realtime - ( clc.demoplaying ? 0 : TICK_MSEC );
+	// the command clock starts on the drawn time: the first input margins the server reports set it
+	cl.cmdTimeDelta = cl.serverTimeDelta;
+	cl.cmdWindow.started = qfalse;
+	cl.oldCmdTime = 0;
+	cl.cmdSettleTime = 0;
 	cl.oldServerTime = cl.snap.serverTime;
 
 	clc.timeDemoBaseTime = cl.snap.serverTime;
@@ -916,6 +1031,13 @@ void CL_SetCGameTime( void ) {
 	// drift serverTimeDelta: the target moves only with new snapshots, so a period of packet loss makes no
 	// adjustment; the time moves towards it every frame
 	CL_AdjustTimeDelta();
+
+	// the command clock (a demo's local player is drawn at the demo's time)
+	cl.cmdTime = clc.demoplaying ? cl.serverTime : cls.realtime + cl.cmdTimeDelta;
+	if ( cl.cmdTime < cl.oldCmdTime ) {
+		cl.cmdTime = cl.oldCmdTime;
+	}
+	cl.oldCmdTime = cl.cmdTime;
 
 	if ( !clc.demoplaying ) {
 		return;

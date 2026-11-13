@@ -478,6 +478,9 @@ void SV_NetcodecSendSnapshot( client_t *client, const char *setGame ) {
 	sm.delta = (uint32_t)lastframe;
 	sm.time = SV_SnapshotTime( client );
 	sm.flags = (uint32_t)SV_SnapshotFlags( client );
+	// a margin is sent once, in the snapshot after its measure: the client takes each one as a new sample
+	sm.inputMargin = client->inputMarginNew ? Net_MarginToWire( client->inputMargin ) : INPUT_MARGIN_NONE;
+	client->inputMarginNew = qfalse;
 	sm.areas = frame->areabits;
 	sm.numAreas = (uint32_t)frame->areabytes;
 	sm.frame.seq = sm.seq;
@@ -518,6 +521,8 @@ void SV_NetcodecStats_f( void ) {
 			"ping %d ms; %d commands sent, %d of them repeats (not in the game %d, carrier lost %d, new command %d, "
 			"twice the ping passed %d, both %d); %d client packets, %.1f bytes per packet, %d not decoded, "
 			"%d above the packet rate, %.2f user commands per packet, %d lost (runs of 1: %d, 2: %d, 3: %d, 4+: %d); "
+			"ticks run with their command %d, without one %d, %d commands after their tick; input margin: mean %.1f ms, "
+			"lowest %d ms; "
 			"send time against the game clock: mean change %.3f ms, max %.3f ms, %d of %d changes of 1 ms or more\n",
 			i, cl->name, st.messages, st.messages ? st.bytes / st.messages : 0.0, st.escaped, st.snapshots, st.noBase,
 			st.baseRefused, st.cut, st.baseAge[0], st.baseAge[1], st.baseAge[2], st.baseAge[3], st.baseAge[4], st.baseAge[5],
@@ -525,6 +530,7 @@ void SV_NetcodecStats_f( void ) {
 			st.repeatsBy[4], st.packets, st.packets ? st.packetBytes / st.packets : 0.0, st.packetsNotDecoded,
 			st.packetsLimited, decoded ? (double)st.userCmds / decoded : 0.0,
 			st.packetsLost, st.lossRuns[0], st.lossRuns[1], st.lossRuns[2], st.lossRuns[3],
+			st.cmdsOnTime, st.cmdsMissing, st.cmdsLate, st.margins ? st.marginSum / st.margins : 0.0, st.marginMin,
 			st.sendChanges ? st.sendChangeSum / st.sendChanges / 1000.0 : 0.0, st.sendChangeMax / 1000.0,
 			st.sendChangesOver1ms, st.sendChanges );
 		Com_Memset( &st, 0, sizeof( st ) );

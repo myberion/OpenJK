@@ -1360,7 +1360,6 @@ void G_ClearTeamVote( gentity_t *ent, int team );
 void G_CheckClientTimeouts	( gentity_t *ent );
 void ClientThink			( int clientNum, usercmd_t *ucmd );
 void ClientEndFrame			( gentity_t *ent );
-void G_RunClient			( gentity_t *ent );
 
 //
 // g_team.c
