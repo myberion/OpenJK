@@ -2,7 +2,7 @@
 
 Written on 14 November 2026, during plan step 14 part 9b ([../PLAN.md](../PLAN.md)). The freeze when players' models are loaded during a game is, for a quarter, the reading and decoding of their images ([asset-loading.md](asset-loading.md)). The owner asked for better JPEG and PNG libraries before the rest of that part, with two wishes: one library for the image formats if one does it well, and very fast. The same day the owner decided that no library comes from the system any more: each is vendored at a pinned version and built with the project on Windows and Linux, as LLVM libc is for the math functions.
 
-Each source is labelled as in the other surveys: **primary** (the project's own documentation or source code), **secondary**, **community**. Every time below comes from `tools/imagebench/` (`imagebench.sh`, `bench.cpp`), built with clang on the owner's Windows machine, one thread on one core; each file is decoded to RGBA8, the best of 5 runs per file, summed.
+Each source is labelled as in the other surveys: **primary** (the project's own documentation or source code), **secondary**, **community**. Every time below comes from `tools/imagebench/` (`imagebench.sh`, `bench.cpp`, and `tga_check.cpp` for the engine's own TGA loader), built with clang on the owner's Windows machine, one thread on one core; each file is decoded to RGBA8, the best of 5 runs per file, summed.
 
 ## 1. Summary
 
@@ -12,14 +12,16 @@ Each source is labelled as in the other surveys: **primary** (the project's own 
 4. stb_image also does the three formats, slower (2.0 times libjpeg 9a, 1.3 times libpng), and its own header sends security-minded users to Wuffs.
 5. No candidate fails on any of the game's 5,875 images.
 6. Wuffs does not write images: the screenshots and the video capture need a writer (stb_image_write, or libjpeg-turbo).
-7. Recommended: Wuffs for all decoding. Its JPEG decoder exists only in version 0.4, not yet declared stable: the risk to weigh. Nothing is decided.
+7. Decided (owner, 14 November 2026): Wuffs for every image the game loads (JPEG, PNG and TGA), at the latest alpha of its version 0.4, the only one with a JPEG decoder; stb_image_write for the images it writes. Not written yet (section 6).
 
 ## 2. What the engine uses today
 
 Read in this tree:
 
 - The loaders are in `codemp/rd-common/`: `tr_image_jpg.cpp` (libjpeg: rows of RGB, widened to RGBA), `tr_image_png.cpp` (libpng; it refuses anything but 8-bit RGB or RGBA and any size that is not a power of two), `tr_image_tga.cpp` (the engine's own code: types 2, 3 and 10). A name is tried with its own extension first, then as `.jpg`, `.png` and `.tga` in that order (`tr_image_load.cpp`).
-- The same files write images: `RE_SaveJPG` and `RE_SaveJPGToBuffer` (JPEG screenshots and the video capture, `rd-vanilla/tr_init.cpp`), `RE_SavePNG` (PNG screenshots).
+- No other format is loaded: these three loaders are the only ones registered, and nothing else in the multiplayer tree decodes an image.
+- A malformed TGA stops the game with an error (`Com_Error( ERR_DROP )`); a malformed JPEG or PNG is only refused.
+- The same files write images: `RE_SaveJPG` and `RE_SaveJPGToBuffer` (JPEG screenshots and the video capture, `rd-vanilla/tr_init.cpp`), `RE_SavePNG` (PNG screenshots). The TGA screenshots and the level shots are written by the renderer's own code, with no library.
 - The libraries: `lib/jpeg-9a` (IJG libjpeg 9a, plain C), `lib/libpng` (1.6.53), `lib/zlib` (1.2.8, also used for the pk3 files). They are built with the project only on Windows: `UseInternalJPEG`, `UseInternalPNG` and `UseInternalZlib` default to OFF elsewhere (`CMakeLists.txt`), so a Linux build links the system's. On Debian 12 `libjpeg-dev` is `libjpeg62-turbo-dev` (primary: packages.debian.org).
 - The game's assets hold 4,271 JPEG files (387 MB), 1,134 PNG (204 MB) and 470 TGA (115 MB); the players' models, 1,009 JPEG and 198 PNG.
 
@@ -56,13 +58,19 @@ Every image of the game's assets, decoded to RGBA8 (ms: the sum over the files o
 | stb_image | 1,886 | 96 | 1.30 |
 | Wuffs | 1,238 | 146 | 1.99 |
 
-TGA, 470 files: 21.7 ms with stb_image, 20.7 ms with Wuffs. The format is not compressed or run-length coded: its decoding does not count.
+| TGA, 470 files | ms | MP/s | pixels against the engine's loader |
+|---|---|---|---|
+| the engine's own loader (`tr_image_tga.cpp`) | 23.4 | 1,345 | |
+| stb_image | 23.2 | 1,354 | the same on the 470 files |
+| Wuffs | 19.9 to 25.0 over the runs | 1,260 to 1,580 | the same on the 470 files |
+
+The game's TGA files are 464 uncompressed 32-bit images, 5 run-length coded 32-bit ones and 1 uncompressed 24-bit one: decoding them is copying memory, the three decoders are within the noise of one another, and the 470 files take 0.3 % of the time the game's JPEG files take with libjpeg 9a. The engine's loader is timed by `tga_check.cpp`, the two others by `bench.cpp`; Wuffs is timed by both (19.9 ms in the first, 20.7 to 25.0 ms in the second).
 
 The images of the players' models alone (the script's default set: 1,009 JPEG and 198 PNG). JPEG: libjpeg 9a 1,692 ms, libjpeg-turbo without its assembly code 1,170 ms (1.45 times as fast), stb_image 798 ms (2.12), Wuffs 672 ms (2.52), libjpeg-turbo 646 ms (2.62). PNG: libpng 551 ms, libspng 521 ms (1.06), stb_image 435 ms (1.27), Wuffs 290 ms (1.90).
 
 The pixels:
 
-- PNG and TGA: every decoder gives the same pixels on every file (1,134 and 470; the TGA files compared between stb_image and Wuffs, not with the engine's own loader).
+- PNG and TGA: every decoder gives the same pixels on every file (1,134 and 470). The engine's own TGA loader, built apart with stand-ins for the engine's functions (`tools/imagebench/tga_check.cpp`), gives the pixels of Wuffs on the 470 files: none differs, none is refused by either.
 - JPEG: Wuffs gives the pixels of libjpeg-turbo on the 4,271 files. libjpeg 9a gives them on 424 only: it upsamples the colour planes another way, and on the players' images a channel differs by up to 71 levels of 255 (0.18 on average). stb_image differs from libjpeg-turbo by up to 3 levels (0.02 on average).
 - No decoder refused a file.
 
@@ -81,21 +89,26 @@ For the writers (JPEG screenshots, video capture, PNG screenshots), with A or C:
 
 Recommended: A, with stb_image_write for the writers, which takes libjpeg and libpng out of the multiplayer build (they stay in the repository for the single-player trees, which are out of scope). It is the owner's wish (one library, fast), it needs nothing installed, and its JPEG pixels are already those of the Linux build. Its risk is its version: the JPEG decoder is in 0.4 only, whose tags are still named alpha; against it, the output is equal to libjpeg-turbo's on every JPEG of the game, and the library's kind of safety does not depend on its age. If that status is not acceptable: B.
 
-To decide with it:
+Asked with it, and answered in section 6:
 
 - whether the PNG loader keeps its two refusals (sizes that are not powers of two, kinds other than 8-bit RGB and RGBA);
-- zlib: 1.2.8 stays for the pk3 files either way; a replacement (zlib-ng, libdeflate) is another question, not measured.
+- zlib: 1.2.8 stays for the pk3 files while the images change; its replacement is another question, not measured.
 
 ## 6. The owner's choices
 
 - 14 November 2026: no system library; the JPEG and PNG libraries replaced before the rest of part 9b.
-- The library: not chosen yet.
+- 14 November 2026: Wuffs (option A), at the latest alpha of its version 0.4 (`v0.4.0-alpha.12` on that day). Accepted with it: a version not declared stable; the 9 % libjpeg-turbo has over it on JPEG; the JPEG pixels of the Windows build becoming those of libjpeg-turbo, which the Linux build already draws; the rare kinds of JPEG a player's own skin could use are not a concern.
+- Every format the game loads goes through it, TGA included: the engine's own TGA loader is removed with the libjpeg and libpng loaders. One loader for the three extensions, which finds the format from the file's content. A malformed TGA is then refused with a warning, as the others, instead of stopping the game.
+- The images the game writes (JPEG and PNG screenshots, the video capture) go through stb_image_write; libjpeg and libpng leave the multiplayer build. They stay in the repository for the single-player trees, out of scope.
+- The PNG loader accepts every size and every kind of PNG: its two refusals go.
+- GCC and MSVC: the owner builds on the VMs once it is written.
+- After the images, the compression libraries are replaced too (zlib, minizip, and any other the code holds), with a survey of their own. Wuffs is to be looked at for it: its release file has decoders for deflate, zlib, gzip, bzip2, LZMA and XZ; it has no reader of ZIP archives, which the pk3 files are, and no compressor.
+- Not written yet: the owner asked to wait before the engine is changed.
 
 ## 7. What was not read or verified
 
 - One machine, one compiler (clang of llvm-mingw). GCC and MSVC are not measured, and Wuffs was not compiled with MSVC.
 - The times are those of the decoders alone, on files already in memory: not the engine's loaders, which also read the pk3.
-- The TGA files were not decoded by the engine's own loader in the bench: stb_image and Wuffs agree with each other, not proven equal to it.
 - stb_image_write was not measured or tried.
 - The game's assets only: skins made by players (other encoders, progressive JPEG, odd PNG kinds) are not in the corpus.
 - Wuffs's and libjpeg-turbo's own benchmark claims were read (Wuffs: PNG 1.2 to 2.7 times libpng; libjpeg-turbo: 1.9 to 4.3 times libjpeg 8d on x86-64, for its version 1.5), not reproduced beyond this page's measure.

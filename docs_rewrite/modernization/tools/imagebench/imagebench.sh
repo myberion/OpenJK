@@ -67,6 +67,12 @@ clang++ $FLAGS -DWITH_LIBJPEG '-DJPEG_NAME="libjpeg-turbo 3.2.1"' -I turbo/libjp
 clang++ $FLAGS -DWITH_LIBJPEG '-DJPEG_NAME="turbo 3.2.1, no SIMD"' -I turbo/libjpeg-turbo-3.2.1/src -I turbo/build_nosimd \
 	"$HERE/bench.cpp" turbo/build_nosimd/libjpeg.a -static -o bench_nosimd.exe
 
+# the engine's own TGA loader against Wuffs, while the engine has one (its file is copied next to the stand-in header)
+if [ -f "$REPO/codemp/rd-common/tr_image_tga.cpp" ]; then
+	mkdir -p tga && cp "$HERE/tga_shim/tr_common.h" "$REPO/codemp/rd-common/tr_image_tga.cpp" tga/
+	clang++ -O2 -std=c++17 -I tga -I wuffs "$HERE/tga_check.cpp" -static -o tga_check.exe
+fi
+
 MODE=write
 [ "$SET" = all ] && MODE=hash
 echo "=== against this tree's libjpeg 9a and libpng (TGA: against stb_image)"
@@ -75,3 +81,7 @@ echo "=== against this tree's libjpeg 9a and libpng (TGA: against stb_image)"
 ./bench_nosimd.exe corpus ref_turbo | tail -n +2
 echo "=== JPEG against libjpeg-turbo"
 ./bench_tree.exe corpus ref_turbo | grep " jpg "
+if [ -f tga_check.exe ]; then
+	echo "=== TGA: the engine's loader against Wuffs"
+	./tga_check.exe corpus
+fi
