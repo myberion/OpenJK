@@ -976,7 +976,39 @@ Measured with the method above (same ten models, same machine, clang; one run ea
 The map's own loading (`CL_InitCGame`): 2.20 to 2.06 s as shipped, 1.16 to 0.89 s without the compression. In the second column of the last run the search of the shader text is 18 % of what is left (3.4 ms per model), the driver's wait 10 %.
 
 Checked here: the client and the renderer build with clang without a warning from the new file; the map, the ten models, the fonts and the HUD load with no image refused; a JPEG, a PNG and a TGA screenshot are written and look right, the JPEG also at a width whose rows are padded (638 pixels). Built by the owner on the VMs the same day, with MSVC and with GCC, the multiplayer and the single-player targets: everything compiles. To check (owner): the game on the VPS, a video capture.
-: the drawn delay of the other players depends on the frame rate
+### The pk3 files read by a reader of the engine's own, on zlib-ng (14 November 2026)
+
+Asked by the owner after the images: the same work on compression. The inventory, the candidates and their measures on the game's archives are in [../surveys/compression-libraries.md](../surveys/compression-libraries.md). The owner's choices of the same day: the files keep being inflated as they are read (the safe way against a freeze when a video or a music track is opened), which leaves zlib-ng 2.3.3; a reader of the archives' directory written for the engine, in place of minizip; the CRC-32 of every file read is checked; the code shared between the multiplayer and the single-player engines as far as it can be.
+
+What changed:
+
+- `shared/qcommon/q_pk3.cpp` (with `q_pk3.h`) is the only file that knows zlib-ng (`lib/zlib-ng`, the source tree of the tag `2.3.3`, built by its own CMake file), as `tr_image_codec.cpp` is for the image libraries. It reads an archive's directory in one read and its files, stored or deflated. Each open file has its own state (64 KB of input, the decoder), so any number of files of an archive can be open at once on the archive's one handle, and an archive closed while a file is open on it stays until that file closes: the music and the videos are read across a restart of the file system, for which `FS_FOpenFileRead` opened a second handle on the archive (`uniqueFILE`), now gone. A read inflates what it is asked for; the read that ends a file tells the decoder so, which then keeps no window (a file read whole in one call). A seek backwards in a deflated file starts it again, a seek forwards inflates and drops what it skips, as before; in a stored file it is free.
+- The CRC-32 of a file read from its start to its end is checked; when it is wrong, the read that ends the file fails with a warning. minizip computed it and the engine never looked at the result.
+- `qcommon/files.cpp` of both engines: the minizip calls of `FS_LoadZipFile`, `FS_FOpenFileRead`, `FS_Read`, `FS_Seek`, `FS_FTell`, `FS_FCloseFile` and `FS_FreePak` go through the reader (128 lines added and 315 removed over the two files). A file the archive cannot deliver (encrypted, another compression method, a damaged header) is a file the archive does not have: the search goes on. `FS_ReadFile` returns -1 when the read fails (damaged data, a wrong CRC-32): it ignored the result before and handed the buffer over as it was.
+- ZIP64 archives (4 GB or more, or 65,535 files or more) are read, as minizip read them (owner, the same day: a first version refused them). Not read, with a warning: an encrypted file, a compression method other than deflate, a file of 2 GB or more (sizes are ints in the file system).
+- Build: `lib/zlib` (zlib 1.2.8), `lib/minizip` and the option `UseInternalZlib` are removed, so the Linux build no longer takes zlib from the system; the engines link `zlib-ng`; the renderers no longer link minizip, which they did not call; the two unused `zlib.h` inclusions (`cl_parse.cpp`, `sv_client.cpp`), minizip's allocator hooks (`z_memman_pc.cpp`) and its memory tag are removed. The macOS-only `FS_LoadMachOBundle` is converted and was not compiled.
+
+Measured by `tools/zipbench/zipbench.sh` (`check`: `pk3check.cpp` builds the reader alone, with stand-ins for the engine's functions), clang, one core, the game's four archives (22,789 files, 1.87 GB):
+
+| | minizip + zlib 1.2.8, driven as the engine drove it | `q_pk3.cpp` + zlib-ng |
+|---|---|---|
+| the four directories read | 80.6 ms | 0.5 ms |
+| every file read whole | 3,698 ms | 2,081 ms (1.78 times as fast) |
+| every file read 8 KB at a time | | 2,267 ms |
+
+The survey's reader with zlib-ng took 2.00 s: it inflated each file in one call from its whole compressed data. This one reads the archive 64 KB at a time, as a file read in pieces needs; 16 KB gives 2,319 ms, 64 KB 2,184 ms and 256 KB 2,115 ms (a first run, with the benchmark's own copy of zlib-ng): 64 KB is kept.
+
+Checked here:
+
+- The reader's directory is minizip's on the 23,744 entries of the four archives (name, CRC-32, size, order): the archives' checksums are what they were. The dedicated server built here reports the `sv_paks` and `sv_referencedPaks` of the installed build on `mp/ffa3` with two bots, and the two console logs are the same, the paths, the compiler's name and the times apart.
+- Every file has the directory's CRC-32, read whole and read 8 KB at a time; 23,040 seeks from the three origins give the right position and the right bytes after it; 218 pairs of files of one archive read in turns are right; a file is read right after its archive was closed. The game's archives are not ZIP64, so six test archives made by `tools/zipbench/seeds.py` are read too, two of them ZIP64 (one by its 70,000 files, one with every entry's sizes and place in its ZIP64 field): their directories are minizip's, their files have the right CRC-32. The same checks pass under AddressSanitizer.
+- Malformed archives (`fuzz`: `fuzz_pk3.cpp`, libFuzzer with AddressSanitizer and UBSan, the reader's own code instrumented, a ZIP64 archive among its seeds): 1,529,721 archives in 5 minutes, no fault.
+- The multiplayer client, the dedicated server, the single-player engine and the three renderers build with clang, with no warning from the new file. The multiplayer client plays the logos video (a RoQ file read in pieces from the archive), restarts its file system (`fs_restart`) while the menu's video is open and goes on drawing it, and loads `mp/ffa3`; the single-player client loads `academy1` and plays its opening scene; no warning in either log.
+- Built by the owner on the VMs the same day, with MSVC (x64) and with GCC 12, the multiplayer and the single-player targets: everything compiles, with no warning from the new file or from zlib-ng. The two logs showed one defect, fixed: zlib-ng's CMake file includes CPack as this project does, and its package description had replaced the project's (`CPackConfig.cmake` named `zlib-ng`); the top-level file now sends it to zlib-ng's own build folder.
+
+Not checked: the builds were not run on the VMs' side (the game with MSVC, the server on the VPS); the client's profile was not taken again, so the gain in a model's load stays the survey's estimate (under 1 ms of 18.8); the streamed music was not listened to (volume 0.02, no error); Jedi Outcast.
+
+## 17. Part 11, an item added on 14 November 2026: the drawn delay of the other players depends on the frame rate
 
 Seen by the owner on the new lagometer (the blue line far thinner at `com_maxfps 100` than at 125), and measured in part 10 (section 14): when a snapshot arrives, the drawn time is 2.1 ms behind it at 100 frames per second, 7.0 ms at 125 and 10.6 ms at 333. Two players on the same server at the same ping do not see the others at the same instant: about 8 ms apart between 100 and 333 frames per second. By the owner's rule (a delay that depends on the frame rate is an inequality between players), it is a defect; the input margin was made independent of the frame rate in part 10, this delay was not.
 

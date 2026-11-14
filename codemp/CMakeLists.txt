@@ -186,13 +186,8 @@ if(BuildMPEngine OR BuildMPDed)
 	# Include directories
 	set(MPEngineAndDedIncludeDirectories ${MPDir} ${SharedDir} ${GSLIncludeDirectory} ${CMAKE_BINARY_DIR}/shared)
 
-	# Transparently use our bundled minizip.
-	list(APPEND MPEngineAndDedIncludeDirectories ${MINIZIP_INCLUDE_DIRS})
-	list(APPEND MPEngineAndDedLibraries          ${MINIZIP_LIBRARIES})
-
-	# Transparently use either bundled or system zlib.
-	list(APPEND MPEngineAndDedIncludeDirectories ${ZLIB_INCLUDE_DIR})
-	list(APPEND MPEngineAndDedLibraries          ${ZLIB_LIBRARIES})
+	# The library that inflates the pk3 files, vendored (lib/zlib-ng) and known to shared/qcommon/q_pk3.cpp only.
+	list(APPEND MPEngineAndDedLibraries zlib-ng)
 
 	set(MPEngineAndDedCgameFiles
 		"${MPDir}/cgame/cg_public.h"
@@ -264,6 +259,8 @@ if(BuildMPEngine OR BuildMPDed)
 		"${MPDir}/qcommon/timing.h"
 		"${MPDir}/qcommon/vm.cpp"
 		"${MPDir}/qcommon/z_memman_pc.cpp"
+		"${SharedDir}/qcommon/q_pk3.cpp"
+		"${SharedDir}/qcommon/q_pk3.h"
 
 		${SharedCommonFiles}
 		)

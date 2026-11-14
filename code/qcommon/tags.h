@@ -66,7 +66,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 	TAGDEF(DEFLATE),				// Temp memory used by zlib32
 	TAGDEF(POINTCACHE),					// weather effects
 	TAGDEF(NEWDEL),
-	TAGDEF(MINIZIP),
 	TAGDEF(COUNT)
 
 //////////////// eof //////////////

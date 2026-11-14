@@ -117,10 +117,6 @@ set(MPRend2Files ${MPRend2Files} ${MPRend2CommonSafeFiles})
 # The image libraries, vendored and compiled inside shared/rd-common/tr_image_codec.cpp: Wuffs decodes, stb_image_write writes.
 list(APPEND MPRend2IncludeDirectories "${CMAKE_SOURCE_DIR}/lib/wuffs" "${CMAKE_SOURCE_DIR}/lib/stb")
 
-# Transparently use our bundled minizip.
-list(APPEND MPRend2IncludeDirectories ${MINIZIP_INCLUDE_DIRS})
-list(APPEND MPRend2Libraries          ${MINIZIP_LIBRARIES})
-
 find_package(OpenGL REQUIRED)
 set(MPRend2IncludeDirectories ${MPRend2IncludeDirectories} ${OPENGL_INCLUDE_DIR})
 set(MPRend2Libraries ${MPRend2Libraries} ${OPENGL_LIBRARIES})

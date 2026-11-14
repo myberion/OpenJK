@@ -54,10 +54,6 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
     # The image libraries, vendored and compiled inside shared/rd-common/tr_image_codec.cpp: Wuffs decodes, stb_image_write writes.
     list(APPEND SPRDVanillaRendererIncludeDirectories "${CMAKE_SOURCE_DIR}/lib/wuffs" "${CMAKE_SOURCE_DIR}/lib/stb")
 
-    # Transparently use our bundled minizip.
-    list(APPEND SPRDVanillaRendererIncludeDirectories ${MINIZIP_INCLUDE_DIRS})
-    list(APPEND SPRDVanillaRendererLibraries          ${MINIZIP_LIBRARIES})
-
     # Transparantly make use of all renderer directories
     list(APPEND SPRDVanillaRendererIncludeDirectories "${SPDir}/rd-common")
     list(APPEND SPRDVanillaRendererIncludeDirectories "${SPDir}/rd-vanilla")

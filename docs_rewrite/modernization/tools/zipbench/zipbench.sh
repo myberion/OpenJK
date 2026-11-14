@@ -4,11 +4,13 @@
 # miniz, Wuffs and stb_image's decoder, each inflating every entry of the game's assets, the output checked against
 # the CRC-32 of the archive's directory; then the archive readers (minizip as the engine drives it, miniz, minizip-ng,
 # libzip, PhysicsFS, and a directory reader of 100 lines with libdeflate or Wuffs) opening the archives and reading
-# every entry.
+# every entry. Since zlib-ng was chosen: the engine's own reader (shared/qcommon/q_pk3.cpp with lib/zlib-ng), built
+# alone, checked against minizip and timed on the same archives (check), and given malformed archives by libFuzzer
+# for FUZZ_SECONDS seconds, 300 by default (fuzz, not part of all).
 # Windows, Git Bash, with llvm-mingw's clang, CMake and Ninja in the PATH. The candidates are downloaded into the work
 # folder, each in a folder of its own, and built there. zlib 1.2.8, minizip and Wuffs are taken from the repository
 # (from the last commit that holds them once they are removed).
-# Usage: zipbench.sh <work folder> <game base folder holding assets*.pk3> [inflate|crc|archives|all]
+# Usage: zipbench.sh <work folder> <game base folder holding assets*.pk3> [inflate|crc|archives|check|all|fuzz]
 set -eu
 mkdir -p "$1"
 WORK=$(cd "$1" && (pwd -W 2> /dev/null || pwd))	# a Windows path where there is one: CMake does not read Git Bash's
@@ -148,4 +150,22 @@ set_target_properties(zlib-ng::zlibstatic PROPERTIES IMPORTED_LOCATION "%s/zlibn
 	echo "=== archives: the four archives opened and listed (best of 5), then every entry read whole (best of 3)"
 	./arch_tree.exe "$BASE"
 	for b in zlib14 zlibng mzng libzip physfs chromium; do [ -f arch_$b.exe ] && ./arch_$b.exe "$BASE" | tail -n +2; done
+fi
+
+# the engine's own reader, with the repository's zlib-ng, built alone with the stand-ins of shim/
+if [ "$WHAT" = all ] || [ "$WHAT" = check ] || [ "$WHAT" = fuzz ]; then
+	cm vendored "$REPO/lib/zlib-ng" -DBUILD_TESTING=OFF -DWITH_GZFILEOP=OFF
+	ENGINE="-I $HERE/shim -I $REPO/shared -I vendored/build"
+fi
+if [ "$WHAT" = all ] || [ "$WHAT" = check ]; then
+	clang++ $FLAGS $ENGINE -I old/lib/minizip/include/minizip -I old/lib/zlib/include "$HERE/pk3check.cpp" "$REPO/shared/qcommon/q_pk3.cpp" 		old/build/lib/minizip/libbundled_minizip.a old/build/lib/zlib/libbundled_zlib.a vendored/build/libz-ng.a -static -o pk3check.exe
+	echo "=== check: the engine's reader on the same archives, against minizip's directory and the files' CRC-32"
+	python -I "$HERE/seeds.py" test_archives many
+	./pk3check.exe "$BASE" test_archives
+fi
+if [ "$WHAT" = fuzz ]; then
+	# llvm-mingw ships libFuzzer but its driver refuses -fsanitize=fuzzer: the coverage it implies, and its archive
+	python -I "$HERE/seeds.py" fuzz_corpus
+	clang++ -O1 -g -std=c++17 -fsanitize=address,undefined -fsanitize-coverage=inline-8bit-counters,pc-table,trace-cmp $ENGINE 		"$HERE/fuzz_pk3.cpp" "$REPO/shared/qcommon/q_pk3.cpp" vendored/build/libz-ng.a 		"$(clang++ -print-resource-dir)/lib/windows/libclang_rt.fuzzer-x86_64.a" -o fuzz_pk3.exe
+	./fuzz_pk3.exe -max_len=65536 -max_total_time="${FUZZ_SECONDS:-300}" fuzz_corpus
 fi

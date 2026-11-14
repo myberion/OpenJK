@@ -37,7 +37,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "client/client.h"
 #endif
 #endif
-#include <minizip/unzip.h>
+#include "qcommon/q_pk3.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -195,7 +195,7 @@ or configs will never get loaded from disk!
 
 typedef struct fileInPack_s {
 	char					*name;		// name of the file
-	unsigned long			pos;		// file info position in zip
+	unsigned long			pos;		// index of the file in the archive
 	unsigned long			len;		// uncompress file size
 	struct	fileInPack_s*	next;		// next file in the hash
 } fileInPack_t;
@@ -205,7 +205,7 @@ typedef struct pack_s {
 	char			pakFilename[MAX_OSPATH];	// c:\jediacademy\gamedata\base\assets0.pk3
 	char			pakBasename[MAX_OSPATH];	// assets0
 	char			pakGamename[MAX_OSPATH];	// base
-	unzFile			handle;						// handle to zip file
+	pk3Archive_t	*handle;					// the archive, open
 	int				checksum;					// regular checksum
 	int				pure_checksum;				// checksum for pure
 	int				numfiles;					// number of files in pk3
@@ -255,20 +255,17 @@ static int			fs_checksumFeed;
 
 typedef union qfile_gus {
 	FILE*		o;
-	unzFile		z;
+	pk3File_t	*z;
 } qfile_gut;
 
 typedef struct qfile_us {
 	qfile_gut	file;
-	qboolean	unique;
 } qfile_ut;
 
 typedef struct fileHandleData_s {
 	qfile_ut	handleFiles;
 	qboolean	handleSync;
 	int			fileSize;
-	int			zipFilePos;
-	int			zipFileLen;
 	qboolean	zipFile;
 	char		name[MAX_ZPATH];
 } fileHandleData_t;
@@ -1023,16 +1020,12 @@ FS_FCloseFile
 
 Close a file.
 
-There are three cases handled:
+There are two cases handled:
 
   * normal file: closed with fclose.
 
-  * file in pak3 archive: subfile is closed with unzCloseCurrentFile, but the
-    minizip handle to the pak3 remains open.
-
-  * file in pak3 archive, opened with "unique" flag: This file did not use
-    the system minizip handle to the pak3 file, but its own dedicated one.
-    The dedicated handle is closed with unzClose.
+  * file in pak3 archive: the file's own reading state is freed, the archive
+    remains open.
 
 ===========
 */
@@ -1040,10 +1033,7 @@ void FS_FCloseFile( fileHandle_t f ) {
 	FS_AssertInitialised();
 
 	if (fsh[f].zipFile == qtrue) {
-		unzCloseCurrentFile( fsh[f].handleFiles.file.z );
-		if ( fsh[f].handleFiles.unique ) {
-			unzClose( fsh[f].handleFiles.file.z );
-		}
+		PK3_CloseFile( fsh[f].handleFiles.file.z );
 		Com_Memset( &fsh[f], 0, sizeof( fsh[f] ) );
 		return;
 	}
@@ -1318,7 +1308,6 @@ long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean unique
 	fileInPack_t	*pakFile;
 	directory_t		*dir;
 	long			hash;
-	//unz_s			*zfi;
 	//void			*temp;
 	int				l;
 	bool			isUserConfig = false;
@@ -1362,7 +1351,6 @@ long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean unique
 	//
 
 	*file = FS_HandleForFile();
-	fsh[*file].handleFiles.unique = uniqueFILE;
 
 	// this new bool is in for an optimisation, if you (eg) opened a BSP file under fs_copyfiles==2,
 	//	then it triggered a copy operation to update your local HD version, then this will re-open the
@@ -1451,39 +1439,15 @@ long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean unique
 							*/
 						}
 
-						if ( uniqueFILE ) {
-							// open a new file on the pakfile
-							fsh[*file].handleFiles.file.z = unzOpen (pak->pakFilename);
-							if (fsh[*file].handleFiles.file.z == NULL) {
-								Com_Error (ERR_FATAL, "Couldn't open %s", pak->pakFilename);
-							}
-						} else {
-							fsh[*file].handleFiles.file.z = pak->handle;
+						// every file read from an archive has its own reading state and keeps the archive
+						// open until it is closed: uniqueFILE needs no second handle on the archive
+						fsh[*file].handleFiles.file.z = PK3_OpenFile( pak->handle, pakFile->pos );
+						if (fsh[*file].handleFiles.file.z == NULL) {
+							// a file the archive cannot deliver (PK3_OpenFile said why) is a file it does not have
+							break;
 						}
 						Q_strncpyz( fsh[*file].name, filename, sizeof( fsh[*file].name ) );
 						fsh[*file].zipFile = qtrue;
-
-						// set the file position in the zip file (also sets the current file info)
-						unzSetOffset(fsh[*file].handleFiles.file.z, pakFile->pos);
-
-						// open the file in the zip
-						unzOpenCurrentFile(fsh[*file].handleFiles.file.z);
-
-#if 0
-						zfi = (unz_s *)fsh[*file].handleFiles.file.z;
-						// in case the file was new
-						temp = zfi->filestream;
-						// set the file position in the zip file (also sets the current file info)
-						unzSetOffset(pak->handle, pakFile->pos);
-						// copy the file info into the unzip structure
-						Com_Memcpy( zfi, pak->handle, sizeof(unz_s) );
-						// we copy this back into the structure
-						zfi->filestream = temp;
-						// open the file in the zip
-						unzOpenCurrentFile( fsh[*file].handleFiles.file.z );
-#endif
-						fsh[*file].zipFilePos = pakFile->pos;
-						fsh[*file].zipFileLen = pakFile->len;
 
 						if ( fs_debug->integer ) {
 							Com_Printf( "FS_FOpenFileRead: %s (found in '%s')\n",
@@ -1712,7 +1676,7 @@ int FS_Read( void *buffer, int len, fileHandle_t f ) {
 		}
 		return len;
 	} else {
-		return unzReadCurrentFile(fsh[f].handleFiles.file.z, buffer, len);
+		return PK3_Read( fsh[f].handleFiles.file.z, buffer, len );
 	}
 }
 
@@ -1778,7 +1742,6 @@ void QDECL FS_Printf( fileHandle_t h, const char *fmt, ... ) {
 	FS_Write(msg, strlen(msg), h);
 }
 
-#define PK3_SEEK_BUFFER_SIZE 65536
 /*
 =================
 FS_Seek
@@ -1791,64 +1754,7 @@ int FS_Seek( fileHandle_t f, long offset, int origin ) {
 	FS_AssertInitialised();
 
 	if (fsh[f].zipFile == qtrue) {
-		//FIXME: this is really, really crappy
-		//(but better than what was here before)
-		byte	buffer[PK3_SEEK_BUFFER_SIZE];
-		int		remainder;
-		int		currentPosition = FS_FTell( f );
-
-		// change negative offsets into FS_SEEK_SET
-		if ( offset < 0 ) {
-			switch( origin ) {
-				case FS_SEEK_END:
-					remainder = fsh[f].zipFileLen + offset;
-					break;
-
-				case FS_SEEK_CUR:
-					remainder = currentPosition + offset;
-					break;
-
-				case FS_SEEK_SET:
-				default:
-					remainder = 0;
-					break;
-			}
-
-			if ( remainder < 0 ) {
-				remainder = 0;
-			}
-
-			origin = FS_SEEK_SET;
-		} else {
-			if ( origin == FS_SEEK_END ) {
-				remainder = fsh[f].zipFileLen - currentPosition + offset;
-			} else {
-				remainder = offset;
-			}
-		}
-
-		switch( origin ) {
-			case FS_SEEK_SET:
-				if ( remainder == currentPosition ) {
-					return offset;
-				}
-				unzSetOffset(fsh[f].handleFiles.file.z, fsh[f].zipFilePos);
-				unzOpenCurrentFile(fsh[f].handleFiles.file.z);
-				//fallthrough
-
-			case FS_SEEK_END:
-			case FS_SEEK_CUR:
-				while( remainder > PK3_SEEK_BUFFER_SIZE ) {
-					FS_Read( buffer, PK3_SEEK_BUFFER_SIZE, f );
-					remainder -= PK3_SEEK_BUFFER_SIZE;
-				}
-				FS_Read( buffer, remainder, f );
-				return offset;
-
-			default:
-				Com_Error( ERR_FATAL, "Bad origin in FS_Seek" );
-				return -1;
-		}
+		return PK3_Seek( fsh[f].handleFiles.file.z, offset, origin );
 	} else {
 		FILE *file;
 		file = FS_FileForHandle(f);
@@ -2038,7 +1944,13 @@ long FS_ReadFile( const char *qpath, void **buffer ) {
 
 //	Z_Label(buf, qpath);
 
-	FS_Read (buf, len, h);
+	if ( FS_Read (buf, len, h) != len ) {
+		// a file that cannot be read whole (a damaged archive: the reader said why) is a file that is not there
+		FS_FCloseFile( h );
+		Z_Free( buf );
+		*buffer = NULL;
+		return -1;
+	}
 
 	// guarantee that it will have a trailing 0 for string operations
 	buf[len] = 0;
@@ -2115,13 +2027,12 @@ static pack_t *FS_LoadZipFile( const char *zipfile, const char *basename )
 {
 	fileInPack_t	*buildBuffer;
 	pack_t			*pack;
-	unzFile			uf;
-	int				err;
-	unz_global_info gi;
+	pk3Archive_t	*archive;
+	pk3Entry_t		entry;
+	int				numEntries;
 	char			filename_inzip[MAX_ZPATH];
-	unz_file_info	file_info;
 	int				len;
-	size_t			i;
+	int				i;
 	long			hash;
 	int				fs_numHeaderLongs;
 	int				*fs_headerLongs;
@@ -2129,33 +2040,28 @@ static pack_t *FS_LoadZipFile( const char *zipfile, const char *basename )
 
 	fs_numHeaderLongs = 0;
 
-	uf = unzOpen(zipfile);
-	err = unzGetGlobalInfo (uf,&gi);
-
-	if (err != UNZ_OK)
+	archive = PK3_Open( zipfile );
+	if ( !archive )
 		return NULL;
+	numEntries = PK3_NumEntries( archive );
 
 	len = 0;
-	unzGoToFirstFile(uf);
-	for (i = 0; i < gi.number_entry; i++)
+	for (i = 0; i < numEntries; i++)
 	{
-		err = unzGetCurrentFileInfo(uf, &file_info, filename_inzip, sizeof(filename_inzip), NULL, 0, NULL, 0);
-		if (err != UNZ_OK) {
-			break;
-		}
+		PK3_GetEntry( archive, i, &entry );
+		Q_strncpyz( filename_inzip, entry.name, sizeof(filename_inzip) );
 		len += strlen(filename_inzip) + 1;
-		unzGoToNextFile(uf);
 	}
 
-	buildBuffer = (struct fileInPack_s *)Z_Malloc( (gi.number_entry * sizeof( fileInPack_t )) + len, TAG_FILESYS, qtrue );
-	namePtr = ((char *) buildBuffer) + gi.number_entry * sizeof( fileInPack_t );
-	fs_headerLongs = (int *)Z_Malloc( ( gi.number_entry + 1 ) * sizeof(int), TAG_FILESYS, qtrue );
+	buildBuffer = (struct fileInPack_s *)Z_Malloc( (numEntries * sizeof( fileInPack_t )) + len, TAG_FILESYS, qtrue );
+	namePtr = ((char *) buildBuffer) + numEntries * sizeof( fileInPack_t );
+	fs_headerLongs = (int *)Z_Malloc( ( numEntries + 1 ) * sizeof(int), TAG_FILESYS, qtrue );
 	fs_headerLongs[ fs_numHeaderLongs++ ] = LittleLong( fs_checksumFeed );
 
 	// get the hash table size from the number of files in the zip
 	// because lots of custom pk3 files have less than 32 or 64 files
 	for (i = 1; i <= MAX_FILEHASH_SIZE; i <<= 1) {
-		if (i > gi.number_entry) {
+		if (i > numEntries) {
 			break;
 		}
 	}
@@ -2175,30 +2081,26 @@ static pack_t *FS_LoadZipFile( const char *zipfile, const char *basename )
 		pack->pakBasename[strlen( pack->pakBasename ) - 4] = 0;
 	}
 
-	pack->handle = uf;
-	pack->numfiles = gi.number_entry;
-	unzGoToFirstFile(uf);
+	pack->handle = archive;
+	pack->numfiles = numEntries;
 
-	for (i = 0; i < gi.number_entry; i++)
+	for (i = 0; i < numEntries; i++)
 	{
-		err = unzGetCurrentFileInfo(uf, &file_info, filename_inzip, sizeof(filename_inzip), NULL, 0, NULL, 0);
-		if (err != UNZ_OK) {
-			break;
+		PK3_GetEntry( archive, i, &entry );
+		if (entry.size > 0) {
+			fs_headerLongs[fs_numHeaderLongs++] = LittleLong(entry.crc);
 		}
-		if (file_info.uncompressed_size > 0) {
-			fs_headerLongs[fs_numHeaderLongs++] = LittleLong(file_info.crc);
-		}
+		Q_strncpyz( filename_inzip, entry.name, sizeof(filename_inzip) );
 		Q_strlwr( filename_inzip );
 		hash = FS_HashFileName(filename_inzip, pack->hashSize);
 		buildBuffer[i].name = namePtr;
 		strcpy( buildBuffer[i].name, filename_inzip );
 		namePtr += strlen(filename_inzip) + 1;
-		// store the file position in the zip
-		buildBuffer[i].pos = unzGetOffset(uf);
-		buildBuffer[i].len = file_info.uncompressed_size;
+		// store the file's index in the archive
+		buildBuffer[i].pos = i;
+		buildBuffer[i].len = entry.size;
 		buildBuffer[i].next = pack->hashTable[hash];
 		pack->hashTable[hash] = &buildBuffer[i];
-		unzGoToNextFile(uf);
 	}
 
 	pack->checksum = Com_BlockChecksum( &fs_headerLongs[ 1 ], sizeof(*fs_headerLongs) * ( fs_numHeaderLongs - 1 ) );
@@ -2222,7 +2124,7 @@ Frees a pak structure and releases all associated resources
 
 void FS_FreePak(pack_t *thepak)
 {
-	unzClose(thepak->handle);
+	PK3_Close( thepak->handle );
 	Z_Free(thepak->buildBuffer);
 	Z_Free(thepak);
 }
@@ -3114,7 +3016,7 @@ static void FS_AddGameDirectory( const char *path, const char *dir ) {
 
 			if (!found) {
 				// server has no interest in the file
-				unzClose(pak->handle);
+				PK3_Close( pak->handle );
 				Z_Free(pak->buildBuffer);
 				Z_Free(pak);
 				continue;
@@ -4189,7 +4091,7 @@ int		FS_FOpenFileByMode( const char *qpath, fileHandle_t *f, fsMode_t mode ) {
 int		FS_FTell( fileHandle_t f ) {
 	int pos;
 	if (fsh[f].zipFile == qtrue) {
-		pos = unztell(fsh[f].handleFiles.file.z);
+		pos = PK3_Tell( fsh[f].handleFiles.file.z );
 	} else {
 		pos = ftell(fsh[f].handleFiles.file.o);
 	}
@@ -4236,11 +4138,12 @@ bool FS_LoadMachOBundle( const char *name )
 	void    *data;
 	fileHandle_t    f;
 	char    *fn;
-	unzFile dll;
+	pk3Archive_t *dll;
+	pk3File_t *dllFile = NULL;
+	pk3Entry_t entry;
 	byte* buf;
 	char    dllName[MAX_QPATH];
 	char    *tempName;
-	unz_file_info   zfi;
 
 	//read zipped bundle from pk3
 	len = FS_ReadFile(name, &data);
@@ -4272,21 +4175,31 @@ bool FS_LoadMachOBundle( const char *name )
 	FS_FCloseFile( f );
 	FS_FreeFile(data);
 
-	//unzOpen zipped bundle, find the dylib, and try to write it
+	//open zipped bundle, find the dylib, and try to write it
 	fn = FS_BuildOSPath( fs_homepath->string, fs_gamedir, dllName );
 
-	dll = unzOpen( fn );
+	dll = PK3_Open( fn );
 
 	Com_sprintf (dllName, sizeof(dllName), "%s.bundle/Contents/MacOS/%s", name, name);
 
-	if (unzLocateFile(dll, dllName, 0) != UNZ_OK)
+	for ( int i = 0; dll && !dllFile && i < PK3_NumEntries( dll ); i++ )
 	{
-		unzClose(dll);
+		PK3_GetEntry( dll, i, &entry );
+		if ( !strcmp( entry.name, dllName ) )
+		{
+			dllFile = PK3_OpenFile( dll, i );
+		}
+	}
+
+	if ( !dllFile )
+	{
+		if ( dll )
+		{
+			PK3_Close( dll );
+		}
 		remove( fn );
 		return false;
 	}
-
-	unzOpenCurrentFile( dll );
 
 	Com_sprintf( dllName, sizeof(dllName), "%s_pk3" DLL_EXT, name );
 
@@ -4294,37 +4207,35 @@ bool FS_LoadMachOBundle( const char *name )
 
 	if ( !f )
 	{
-		unzCloseCurrentFile( dll );
-		unzClose( dll );
+		PK3_CloseFile( dllFile );
+		PK3_Close( dll );
 		remove( fn );
 		return false;
 	}
 
-	unzGetCurrentFileInfo( dll, &zfi, NULL, 0, NULL, 0, NULL, 0 );
-
-	len = zfi.uncompressed_size;
+	len = entry.size;
 
 	buf = (byte*)Z_Malloc( len+1, TAG_FILESYS, qfalse);
 
-	if (unzReadCurrentFile( dll, buf, len ) < len)
+	if (PK3_Read( dllFile, buf, len ) < len)
 	{
 		FS_FCloseFile( f );
-		unzCloseCurrentFile( dll );
-		unzClose( dll );
+		PK3_CloseFile( dllFile );
+		PK3_Close( dll );
 		return false;
 	}
 
 	if (FS_Write(buf, len, f) < len)
 	{
 		FS_FCloseFile( f );
-		unzCloseCurrentFile( dll );
-		unzClose( dll );
+		PK3_CloseFile( dllFile );
+		PK3_Close( dll );
 		return false;
 	}
 
 	FS_FCloseFile( f );
-	unzCloseCurrentFile( dll );
-	unzClose( dll );
+	PK3_CloseFile( dllFile );
+	PK3_Close( dll );
 	Z_Free( buf );
 
 	//remove temporary zipped bundle

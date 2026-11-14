@@ -111,10 +111,6 @@ set(MPVanillaRendererFiles ${MPVanillaRendererFiles} ${MPVanillaRendererCommonSa
 # The image libraries, vendored and compiled inside shared/rd-common/tr_image_codec.cpp: Wuffs decodes, stb_image_write writes.
 list(APPEND MPVanillaRendererIncludeDirectories "${CMAKE_SOURCE_DIR}/lib/wuffs" "${CMAKE_SOURCE_DIR}/lib/stb")
 
-# Transparently use our bundled minizip.
-list(APPEND MPVanillaRendererIncludeDirectories ${MINIZIP_INCLUDE_DIRS})
-list(APPEND MPVanillaRendererLibraries          ${MINIZIP_LIBRARIES})
-
 find_package(OpenGL REQUIRED)
 set(MPVanillaRendererIncludeDirectories ${MPVanillaRendererIncludeDirectories} ${OPENGL_INCLUDE_DIR})
 set(MPVanillaRendererLibraries ${MPVanillaRendererLibraries} ${OPENGL_LIBRARIES})

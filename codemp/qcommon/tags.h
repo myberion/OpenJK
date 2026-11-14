@@ -81,7 +81,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 	TAGDEF(TEMP_HUNKALLOC),
 	TAGDEF(AVI),
-	TAGDEF(MINIZIP),
 	TAGDEF(COUNT)
 
 
