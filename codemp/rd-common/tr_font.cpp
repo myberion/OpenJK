@@ -272,7 +272,7 @@ public:
 //
 float RoundTenth( float fValue )
 {
-	return ( floorf( (fValue*10.0f) + 0.5f) ) / 10.0f;
+	return ( Q_floorf( (fValue*10.0f) + 0.5f) ) / 10.0f;
 }
 
 
@@ -1459,14 +1459,14 @@ float RE_Font_StrLenPixelsNew( const char *psText, const int iFontHandle, const 
 				fValue *= ((float)(SCREEN_WIDTH * glConfig.vidHeight) / (float)(SCREEN_HEIGHT * glConfig.vidWidth));
 			}
 			else if ( r_aspectCorrectFonts->integer == 2 ) {
-				fValue = ceilf(
+				fValue = Q_ceilf(
 					fValue * ((float)(SCREEN_WIDTH * glConfig.vidHeight) / (float)(SCREEN_HEIGHT * glConfig.vidWidth))
 				);
 			}
 			thisLineWidth += curfont->mbRoundCalcs
-				? roundf( fValue )
+				? Q_roundf( fValue )
 				: (r_aspectCorrectFonts->integer == 2)
-					? ceilf( fValue )
+					? Q_ceilf( fValue )
 					: fValue;
 			if ( thisLineWidth > maxLineWidth ) {
 				maxLineWidth = thisLineWidth;
@@ -1477,7 +1477,7 @@ float RE_Font_StrLenPixelsNew( const char *psText, const int iFontHandle, const 
 }
 
 int RE_Font_StrLenPixels( const char *psText, const int iFontHandle, const float fScale ) {
-	return (int)ceilf( RE_Font_StrLenPixelsNew( psText, iFontHandle, fScale ) );
+	return (int)Q_ceilf( RE_Font_StrLenPixelsNew( psText, iFontHandle, fScale ) );
 }
 
 // not really a font function, but keeps naming consistant...
@@ -1716,9 +1716,12 @@ void RE_Font_DrawString(int ox, int oy, const char *psText, const float *rgba, c
 					fy += 3.0f; // I'm sick and tired of going round in circles trying to do this legally, so bollocks to it
 				}
 
-				RE_StretchPic(curfont->mbRoundCalcs ? fx + Round(pLetter->horizOffset * fThisScale) : fx + pLetter->horizOffset * fThisScale, // float x
+				// aspect correction narrows the glyph as well as its advance (only the advance made the letters overlap)
+				const float fAspect = r_aspectCorrectFonts->integer
+					? ((float)(SCREEN_WIDTH * glConfig.vidHeight) / (float)(SCREEN_HEIGHT * glConfig.vidWidth)) : 1.0f;
+				RE_StretchPic(fx + (curfont->mbRoundCalcs ? Round(pLetter->horizOffset * fThisScale) : pLetter->horizOffset * fThisScale) * fAspect, // float x
 								(uiLetter > (unsigned)g_iNonScaledCharRange) ? fy - fAsianYAdjust : fy,	// float y
-								curfont->mbRoundCalcs ? Round(pLetter->width * fThisScale) : pLetter->width * fThisScale,	// float w
+								(curfont->mbRoundCalcs ? Round(pLetter->width * fThisScale) : pLetter->width * fThisScale) * fAspect,	// float w
 								curfont->mbRoundCalcs ? Round(pLetter->height * fThisScale) : pLetter->height * fThisScale, // float h
 								pLetter->s,						// float s1
 								pLetter->t,						// float t1
@@ -1732,7 +1735,7 @@ void RE_Font_DrawString(int ox, int oy, const char *psText, const float *rgba, c
 						* ((float)(SCREEN_WIDTH * glConfig.vidHeight) / (float)(SCREEN_HEIGHT * glConfig.vidWidth));
 				}
 				else if ( r_aspectCorrectFonts->integer == 2 ) {
-					fx += ceilf( fAdvancePixels
+					fx += Q_ceilf( fAdvancePixels
 						* ((float)(SCREEN_WIDTH * glConfig.vidHeight) / (float)(SCREEN_HEIGHT * glConfig.vidWidth)) );
 				}
 				else {

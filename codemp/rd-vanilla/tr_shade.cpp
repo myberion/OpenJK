@@ -560,7 +560,7 @@ static void ProjectDlightTexture2( void ) {
 				continue;
 			}
 			modulate = 1.0f-((fac*fac) / (radius*radius));
-			fac = 0.5f/sqrtf(radius*radius - fac*fac);
+			fac = 0.5f/Q_sqrtf(radius*radius - fac*fac);
 
 			// save the verts
 			VectorCopy(posa,vertCoordsArray[numIndexes]);
@@ -956,7 +956,7 @@ static void ProjectDlightTexture( void ) {
 				clip |= 32;
 				modulate = 0.0f;
 			} else {
-				dist[bestIndex] = Q_fabs(dist[bestIndex]);
+				dist[bestIndex] = Q_fabsf(dist[bestIndex]);
 				if ( dist[bestIndex] < radius * 0.5f ) {
 					modulate = 1.0f;
 				} else {
@@ -1562,7 +1562,7 @@ static vec4_t	GLFogOverrideColors[GLFOGOVERRIDE_MAX] =
 	{ 1.0, 1.0, 1.0, 1.0 }	// GLFOGOVERRIDE_WHITE
 };
 
-static const float logtestExp2 = (sqrt( -log( 1.0 / 255.0 ) ));
+static const float logtestExp2 = (Q_sqrt( -Q_log( 1.0 / 255.0 ) ));
 extern bool tr_stencilled; //tr_backend.cpp
 static void RB_IterateStagesGeneric( shaderCommands_t *input )
 {

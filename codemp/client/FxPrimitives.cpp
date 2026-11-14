@@ -53,8 +53,8 @@ void CParticle::Init(void)
 	mRefEnt.radius = 0.0f;
 	if (mFlags & FX_PLAYER_VIEW)
 	{
-		mOrigin1[0] = irand(0, 639);
-		mOrigin1[1] = irand(0, 479);
+		mOrigin1[0] = Q_irand(0, 639);
+		mOrigin1[1] = Q_irand(0, 479);
 	}
 }
 
@@ -66,7 +66,7 @@ void CParticle::Die(void)
 		vec3_t	norm;
 
 		// Man, this just seems so, like, uncool and stuff...
-		VectorSet( norm, flrand(-1.0f, 1.0f), flrand(-1.0f, 1.0f), flrand(-1.0f, 1.0f));
+		VectorSet( norm, Q_flrand(-1.0f, 1.0f), Q_flrand(-1.0f, 1.0f), Q_flrand(-1.0f, 1.0f));
 		VectorNormalize( norm );
 
 		theFxScheduler.PlayEffect( mDeathFxID, mOrigin1, norm );
@@ -366,7 +366,7 @@ void CParticle::UpdateSize(void)
 	else if (( mFlags & FX_SIZE_PARM_MASK ) == FX_SIZE_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf( (theFxHelper.mTime - mTimeStart) * mSizeParm );
+		perc1 = perc1 * Q_cosf( (theFxHelper.mTime - mTimeStart) * mSizeParm );
 	}
 	else if (( mFlags & FX_SIZE_PARM_MASK ) == FX_SIZE_CLAMP )
 	{
@@ -396,7 +396,7 @@ void CParticle::UpdateSize(void)
 	if ( mFlags & FX_SIZE_RAND )
 	{
 		// Random simply modulates the existing value
-		perc1 = flrand(0.0f, perc1);
+		perc1 = Q_flrand(0.0f, perc1);
 	}
 
 	mRefEnt.radius = (mSizeStart * perc1) + (mSizeEnd * (1.0f - perc1));
@@ -456,7 +456,7 @@ void CParticle::UpdateRGB(void)
 	else if (( mFlags & FX_RGB_PARM_MASK ) == FX_RGB_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf(( theFxHelper.mTime - mTimeStart ) * mRGBParm );
+		perc1 = perc1 * Q_cosf(( theFxHelper.mTime - mTimeStart ) * mRGBParm );
 	}
 	else if (( mFlags & FX_RGB_PARM_MASK ) == FX_RGB_CLAMP )
 	{
@@ -486,7 +486,7 @@ void CParticle::UpdateRGB(void)
 	if ( mFlags & FX_RGB_RAND )
 	{
 		// Random simply modulates the existing value
-		perc1 = flrand(0.0f, perc1);
+		perc1 = Q_flrand(0.0f, perc1);
 	}
 
 	// Now get the correct color
@@ -535,7 +535,7 @@ void CParticle::UpdateAlpha(void)
 	else if (( mFlags & FX_ALPHA_PARM_MASK ) == FX_ALPHA_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf( (theFxHelper.mTime - mTimeStart) * mAlphaParm );
+		perc1 = perc1 * Q_cosf( (theFxHelper.mTime - mTimeStart) * mAlphaParm );
 	}
 	else if (( mFlags & FX_ALPHA_PARM_MASK ) == FX_ALPHA_CLAMP )
 	{
@@ -570,7 +570,7 @@ void CParticle::UpdateAlpha(void)
 	if ( mFlags & FX_ALPHA_RAND )
 	{
 		// Random simply modulates the existing value
-		perc1 = flrand(0.0f, perc1);
+		perc1 = Q_flrand(0.0f, perc1);
 	}
 
 	alpha = Com_Clamp(0, 255, perc1 * 255.0f);
@@ -846,7 +846,7 @@ CElectricity::CElectricity(void)
 //----------------------------
 void CElectricity::Initialize(void)
 {
-	mRefEnt.frame = flrand(0.0f, 1.0f) * 1265536.0f;
+	mRefEnt.frame = Q_flrand(0.0f, 1.0f) * 1265536.0f;
 	mRefEnt.axis[0][2] = theFxHelper.mTime + (mTimeEnd - mTimeStart); // endtime
 
 	if ( mFlags & FX_DEPTH_HACK )
@@ -1067,7 +1067,7 @@ void CTail::UpdateLength(void)
 	else if (( mFlags & FX_LENGTH_PARM_MASK ) == FX_LENGTH_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf( (theFxHelper.mTime - mTimeStart) * mLengthParm );
+		perc1 = perc1 * Q_cosf( (theFxHelper.mTime - mTimeStart) * mLengthParm );
 	}
 	else if (( mFlags & FX_LENGTH_PARM_MASK ) == FX_LENGTH_CLAMP )
 	{
@@ -1097,7 +1097,7 @@ void CTail::UpdateLength(void)
 	if ( mFlags & FX_LENGTH_RAND )
 	{
 		// Random simply modulates the existing value
-		perc1 = flrand(0.0f, perc1);
+		perc1 = Q_flrand(0.0f, perc1);
 	}
 
 	mLength = (mLengthStart * perc1) + (mLengthEnd * (1.0f - perc1));
@@ -1211,7 +1211,7 @@ void CCylinder::UpdateSize2(void)
 	else if (( mFlags & FX_SIZE2_PARM_MASK ) == FX_SIZE2_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf( (theFxHelper.mTime - mTimeStart) * mSize2Parm );
+		perc1 = perc1 * Q_cosf( (theFxHelper.mTime - mTimeStart) * mSize2Parm );
 	}
 	else if (( mFlags & FX_SIZE2_PARM_MASK ) == FX_SIZE2_CLAMP )
 	{
@@ -1241,7 +1241,7 @@ void CCylinder::UpdateSize2(void)
 	if ( mFlags & FX_SIZE2_RAND )
 	{
 		// Random simply modulates the existing value
-		perc1 = flrand(0.0f, perc1);
+		perc1 = Q_flrand(0.0f, perc1);
 	}
 
 	mRefEnt.rotation = (mSize2Start * perc1) + (mSize2End * (1.0f - perc1));
@@ -1345,7 +1345,7 @@ void CEmitter::Draw(void)
 #define TRAIL_RATE		12 // we "think" at about a 60hz rate
 
 		// Pick a target step distance and square it
-		step = mDensity + flrand(-mVariance, mVariance);
+		step = mDensity + Q_flrand(-mVariance, mVariance);
 		step *= step;
 
 		dif = 0;
@@ -1370,7 +1370,7 @@ void CEmitter::Draw(void)
 			if ( DistanceSquared( org, mOldOrigin ) >= step )
 			{
 				// Pick a new target step distance and square it
-				step = mDensity + flrand(-mVariance, mVariance);
+				step = mDensity + Q_flrand(-mVariance, mVariance);
 				step *= step;
 
 				// We met the step criteria so, we should add in the effect
@@ -1560,7 +1560,7 @@ void CLight::UpdateSize(void)
 	else if (( mFlags & FX_SIZE_PARM_MASK ) == FX_SIZE_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf( (theFxHelper.mTime - mTimeStart) * mSizeParm );
+		perc1 = perc1 * Q_cosf( (theFxHelper.mTime - mTimeStart) * mSizeParm );
 	}
 	else if (( mFlags & FX_SIZE_PARM_MASK ) == FX_SIZE_CLAMP )
 	{
@@ -1590,7 +1590,7 @@ void CLight::UpdateSize(void)
 	if ( mFlags & FX_SIZE_RAND )
 	{
 		// Random simply modulates the existing value
-		perc1 = flrand(0.0f, perc1);
+		perc1 = Q_flrand(0.0f, perc1);
 	}
 
 	mRefEnt.radius = (mSizeStart * perc1) + (mSizeEnd * (1.0f - perc1));
@@ -1634,7 +1634,7 @@ void CLight::UpdateRGB(void)
 	else if (( mFlags & FX_RGB_PARM_MASK ) == FX_RGB_WAVE )
 	{
 		// wave gen, with parm being the frequency multiplier
-		perc1 = perc1 * cosf(( theFxHelper.mTime - mTimeStart ) * mRGBParm );
+		perc1 = perc1 * Q_cosf(( theFxHelper.mTime - mTimeStart ) * mRGBParm );
 	}
 	else if (( mFlags & FX_RGB_PARM_MASK ) == FX_RGB_CLAMP )
 	{
@@ -1664,7 +1664,7 @@ void CLight::UpdateRGB(void)
 	if ( mFlags & FX_RGB_RAND )
 	{
 		// Random simply modulates the existing value
-		perc1 = flrand(0.0f, perc1);
+		perc1 = Q_flrand(0.0f, perc1);
 	}
 
 	// Now get the correct color
@@ -1852,16 +1852,16 @@ void CPoly::CalcRotateMatrix(void)
 {
 	float	cosX, cosZ;
 	float	sinX, sinZ;
-	float	rad;
+	float	halfTurns;
 
 	// rotate around Z
-	rad = DEG2RAD( mRotDelta[YAW] * theFxHelper.mFrameTime * 0.01f );
-	cosZ = cosf( rad );
-	sinZ = sinf( rad );
+	halfTurns = mRotDelta[YAW] * theFxHelper.mFrameTime * 0.01f / 180.0f;
+	cosZ = Q_cospif( halfTurns );
+	sinZ = Q_sinpif( halfTurns );
 	// rotate around X
-	rad = DEG2RAD( mRotDelta[PITCH] * theFxHelper.mFrameTime * 0.01f );
-	cosX = cosf( rad );
-	sinX = sinf( rad );
+	halfTurns = mRotDelta[PITCH] * theFxHelper.mFrameTime * 0.01f / 180.0f;
+	cosX = Q_cospif( halfTurns );
+	sinX = Q_sinpif( halfTurns );
 
 /*Pitch - aroundx  Yaw - around z
 1 0  0			 c -s 0
@@ -1892,7 +1892,7 @@ Roll
 void CPoly::Rotate(void)
 {
 	vec3_t	temp[MAX_CPOLY_VERTS];
-	float	dif = fabs( (float)(mLastFrameTime - theFxHelper.mFrameTime) );
+	float	dif = Q_fabs( (float)(mLastFrameTime - theFxHelper.mFrameTime) );
 
 	if ( dif > 0.1f * mLastFrameTime )
 	{
@@ -2295,7 +2295,7 @@ void CFlash::Draw( void )
 		VectorMA( mRefEnt.origin, FLASH_DISTANCE_FROM_VIEWER, theFxHelper.refdef->viewaxis[0], mRefEnt.origin );
 
         // This is assuming that the screen is wider than it is tall.
-        mRefEnt.radius = FLASH_DISTANCE_FROM_VIEWER * tan (DEG2RAD (theFxHelper.refdef->fov_x * 0.5f));
+        mRefEnt.radius = FLASH_DISTANCE_FROM_VIEWER * Q_tanpif( theFxHelper.refdef->fov_x / 360.0f );
 
 		theFxHelper.AddFxToScene( &mRefEnt );
 	}

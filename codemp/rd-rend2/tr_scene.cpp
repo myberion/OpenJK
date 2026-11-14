@@ -362,7 +362,7 @@ void RE_BeginScene(const refdef_t *fd)
 		}
 		else
 		{
-			float scale = pow(2.0f, r_mapOverBrightBits->integer - tr.overbrightBits - 8);
+			float scale = Q_pow(2.0f, r_mapOverBrightBits->integer - tr.overbrightBits - 8);
 			if (r_forceSun->integer)
 			{
 				VectorScale(tr.sunLight, scale * r_forceSunLightScale->value,   tr.refdef.sunCol);
@@ -380,14 +380,14 @@ void RE_BeginScene(const refdef_t *fd)
 			vec4_t lightDir, lightCol;
 			int scale = 32768;
 			float angle = (fd->time % scale) / (float)scale * M_PI;
-			lightDir[0] = cos(angle);
-			lightDir[1] = sin(35.0f * M_PI / 180.0f);
-			lightDir[2] = sin(angle) * cos(35.0f * M_PI / 180.0f);
+			lightDir[0] = Q_cos(angle);
+			lightDir[1] = Q_sinpif( 35.0f / 180.0f );
+			lightDir[2] = Q_sin(angle) * Q_cospif( 35.0f / 180.0f );
 			lightDir[3] = 0.0f;
 
 			lightCol[0] =
 				lightCol[1] =
-				lightCol[2] = CLAMP(sin(angle) * 2.0f, 0.0f, 1.0f) * 2.0f;
+				lightCol[2] = CLAMP(Q_sin(angle) * 2.0f, 0.0f, 1.0f) * 2.0f;
 			lightCol[3] = 1.0f;
 
 			VectorCopy4(lightDir, tr.refdef.sunDir);
@@ -409,15 +409,15 @@ void RE_BeginScene(const refdef_t *fd)
 
 	if (r_forceToneMap->integer)
 	{
-		tr.refdef.toneMinAvgMaxLinear[0] = pow(2, r_forceToneMapMin->value);
-		tr.refdef.toneMinAvgMaxLinear[1] = pow(2, r_forceToneMapAvg->value);
-		tr.refdef.toneMinAvgMaxLinear[2] = pow(2, r_forceToneMapMax->value);
+		tr.refdef.toneMinAvgMaxLinear[0] = Q_pow(2, r_forceToneMapMin->value);
+		tr.refdef.toneMinAvgMaxLinear[1] = Q_pow(2, r_forceToneMapAvg->value);
+		tr.refdef.toneMinAvgMaxLinear[2] = Q_pow(2, r_forceToneMapMax->value);
 	}
 	else
 	{
-		tr.refdef.toneMinAvgMaxLinear[0] = pow(2, tr.toneMinAvgMaxLevel[0]);
-		tr.refdef.toneMinAvgMaxLinear[1] = pow(2, tr.toneMinAvgMaxLevel[1]);
-		tr.refdef.toneMinAvgMaxLinear[2] = pow(2, tr.toneMinAvgMaxLevel[2]);
+		tr.refdef.toneMinAvgMaxLinear[0] = Q_pow(2, tr.toneMinAvgMaxLevel[0]);
+		tr.refdef.toneMinAvgMaxLinear[1] = Q_pow(2, tr.toneMinAvgMaxLevel[1]);
+		tr.refdef.toneMinAvgMaxLinear[2] = Q_pow(2, tr.toneMinAvgMaxLevel[2]);
 	}
 
 	// Makro - copy exta info if present

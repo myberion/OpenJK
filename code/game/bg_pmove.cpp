@@ -7181,7 +7181,7 @@ void PM_AnglesForSlope( const float yaw, const vec3_t slope, vec3_t angles )
 
 	angles[YAW] = 0;
 	angles[PITCH] = dot * pitch;
-	angles[ROLL] = ((1-Q_fabs(dot)) * pitch * mod);
+	angles[ROLL] = ((1-Q_fabsf(dot)) * pitch * mod);
 }
 
 void PM_FootSlopeTrace( float *pDiff, float *pInterval )

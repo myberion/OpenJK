@@ -907,7 +907,7 @@ static int G_CheckSpecialDeathAnim( gentity_t *self, vec3_t point, int damage, i
 	}
 	else if ( G_InKnockDown( &self->client->ps ) )
 	{//since these happen a lot, let's handle them case by case
-		int animLength = bgAllAnims[self->localAnimIndex].anims[self->client->ps.legsAnim].numFrames * fabs((float)(bgHumanoidAnimations[self->client->ps.legsAnim].frameLerp));
+		int animLength = bgAllAnims[self->localAnimIndex].anims[self->client->ps.legsAnim].numFrames * Q_fabs((float)(bgHumanoidAnimations[self->client->ps.legsAnim].frameLerp));
 		switch ( self->client->ps.legsAnim )
 		{
 		case BOTH_KNOCKDOWN1:
@@ -2110,6 +2110,11 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	if ( !attacker )
 		return;
 
+	g_stats.deaths++;
+	if ( meansOfDeath >= 0 && meansOfDeath < MOD_MAX ) {
+		g_stats.modKills[meansOfDeath]++;
+	}
+
 	//check player stuff
 	g_dontFrickinCheck = qfalse;
 
@@ -2951,7 +2956,7 @@ int CheckArmor (gentity_t *ent, int damage, int dflags)
 
 	if (dflags & DAMAGE_HALF_ABSORB)
 	{	// Half the damage gets absorbed by the shields, rather than 100%
-		save = ceil( damage * ARMOR_PROTECTION );
+		save = Q_ceil( damage * ARMOR_PROTECTION );
 	}
 	else
 	{	// All the damage gets absorbed by the shields.
@@ -3050,9 +3055,9 @@ int RaySphereIntersections( vec3_t origin, float radius, vec3_t point, vec3_t di
 
 	d = b * b - 4 * c;
 	if (d > 0) {
-		t = (- b + sqrt(d)) / 2;
+		t = (- b + Q_sqrt(d)) / 2;
 		VectorMA(point, t, dir, intersections[0]);
-		t = (- b - sqrt(d)) / 2;
+		t = (- b - Q_sqrt(d)) / 2;
 		VectorMA(point, t, dir, intersections[1]);
 		return 2;
 	}
@@ -5386,6 +5391,13 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 			}
 		}
 		targ->health = targ->health - take;
+		if ( targ->client && mod >= 0 && mod < MOD_MAX ) {
+			g_stats.modDamage[mod] += take;
+			G_ScenarioDamageTrace( targ, inflictor, point, take, mod );
+		}
+		if ( mod == MOD_FORCE_DARK && targ->client ) {
+			g_stats.forceDamage += take;
+		}
 
 		if ( (targ->flags&FL_UNDYING) )
 		{//take damage down to 1, but never die

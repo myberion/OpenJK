@@ -23,6 +23,10 @@ endif(NOT InOpenJK)
 
 set(MPSharedDefines ${SharedDefines})
 
+# Message codec of the new netcode: the static library netcodec::netcodec (C++20 inside; the engine includes
+# netcodec/engine.h, which is C++11). Linked by the client and the dedicated server (plan step 7).
+add_subdirectory("${MPDir}/netcodec")
+
 #    Add Game Project
 if(BuildMPGame)
 	add_subdirectory("${MPDir}/game")
@@ -173,7 +177,7 @@ if(BuildMPEngine OR BuildMPDed)
 	#    Common files/libraries/defines of both Engine and Dedicated Server
 
 	# libraries: Botlib
-	set(MPEngineAndDedLibraries ${MPBotLib})
+	set(MPEngineAndDedLibraries ${MPBotLib} netcodec::netcodec qlibm)
 	# Platform-specific libraries
 	if(WIN32)
 		set(MPEngineAndDedLibraries ${MPEngineAndDedLibraries} "winmm" "wsock32")
@@ -182,13 +186,8 @@ if(BuildMPEngine OR BuildMPDed)
 	# Include directories
 	set(MPEngineAndDedIncludeDirectories ${MPDir} ${SharedDir} ${GSLIncludeDirectory} ${CMAKE_BINARY_DIR}/shared)
 
-	# Transparently use our bundled minizip.
-	list(APPEND MPEngineAndDedIncludeDirectories ${MINIZIP_INCLUDE_DIRS})
-	list(APPEND MPEngineAndDedLibraries          ${MINIZIP_LIBRARIES})
-
-	# Transparently use either bundled or system zlib.
-	list(APPEND MPEngineAndDedIncludeDirectories ${ZLIB_INCLUDE_DIR})
-	list(APPEND MPEngineAndDedLibraries          ${ZLIB_LIBRARIES})
+	# The library that inflates the pk3 files, vendored (lib/zlib-ng) and known to shared/qcommon/q_pk3.cpp only.
+	list(APPEND MPEngineAndDedLibraries zlib-ng)
 
 	set(MPEngineAndDedCgameFiles
 		"${MPDir}/cgame/cg_public.h"
@@ -231,7 +230,7 @@ if(BuildMPEngine OR BuildMPDed)
 		"${MPDir}/qcommon/common.cpp"
 		"${MPDir}/qcommon/cvar.cpp"
 		"${MPDir}/qcommon/disablewarnings.h"
-		"${MPDir}/qcommon/files.cpp"
+		"${MPDir}/qcommon/files_engine.h"
 		"${MPDir}/qcommon/game_version.h"
 		"${MPDir}/qcommon/GenericParser2.cpp"
 		"${MPDir}/qcommon/GenericParser2.h"
@@ -260,6 +259,10 @@ if(BuildMPEngine OR BuildMPDed)
 		"${MPDir}/qcommon/timing.h"
 		"${MPDir}/qcommon/vm.cpp"
 		"${MPDir}/qcommon/z_memman_pc.cpp"
+		"${SharedDir}/qcommon/files.cpp"
+		"${SharedDir}/qcommon/files.h"
+		"${SharedDir}/qcommon/q_pk3.cpp"
+		"${SharedDir}/qcommon/q_pk3.h"
 
 		${SharedCommonFiles}
 		)
@@ -325,6 +328,7 @@ if(BuildMPEngine OR BuildMPDed)
 		"${MPDir}/server/sv_init.cpp"
 		"${MPDir}/server/sv_main.cpp"
 		"${MPDir}/server/sv_net_chan.cpp"
+		"${MPDir}/server/sv_netcodec.cpp"
 		"${MPDir}/server/sv_snapshot.cpp"
 		"${MPDir}/server/sv_world.cpp"
 		"${MPDir}/server/sv_gameapi.cpp"
@@ -437,6 +441,7 @@ if(BuildMPEngine)
 		"${MPDir}/client/cl_main.cpp"
 		"${MPDir}/client/cl_net_chan.cpp"
 		"${MPDir}/client/cl_parse.cpp"
+		"${MPDir}/client/cl_netcodec.cpp"
 		"${MPDir}/client/cl_scrn.cpp"
 		"${MPDir}/client/cl_ui.cpp"
 		"${MPDir}/client/cl_uiapi.cpp"

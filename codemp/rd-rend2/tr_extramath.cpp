@@ -253,8 +253,8 @@ float GSmithCorrelated(float roughness, float NdotV, float NdotL)
 {
 	const float m = roughness * roughness;
 	const float m2 = m * m;
-	const float visV = NdotL * sqrtf(NdotV * (NdotV - NdotV * m2) + m2);
-	const float visL = NdotV * sqrtf(NdotL * (NdotL - NdotL * m2) + m2);
+	const float visV = NdotL * Q_sqrtf(NdotV * (NdotV - NdotV * m2) + m2);
+	const float visL = NdotV * Q_sqrtf(NdotL * (NdotL - NdotL * m2) + m2);
 
 	return 0.5f / (visV + visL);
 }

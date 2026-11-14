@@ -469,6 +469,12 @@ void UISyscall_RemoveCommand( const char *cmd_name )
 	Com_Printf( S_COLOR_YELLOW "WARNING: trap->ext.RemoveCommand() is only supported with OpenJK mod API!\n" );
 }
 
+// a legacy engine has no server state: there a positive ping is the only sign of an answer
+int UISyscall_LAN_GetServerState( int source, int n )
+{
+	return trap_LAN_GetServerPing( source, n ) > 0 ? LANSERVER_ANSWERED : LANSERVER_WAITING;
+}
+
 NORETURN void QDECL UI_Error( int level, const char *error, ... ) {
 	va_list argptr;
 	char text[4096] = {0};
@@ -651,4 +657,5 @@ static void TranslateSyscalls( void ) {
 	trap->ext.R_Font_StrLenPixels			= trap_R_Font_StrLenPixelsFloat;
 	trap->ext.AddCommand					= UISyscall_AddCommand;
 	trap->ext.RemoveCommand					= UISyscall_RemoveCommand;
+	trap->ext.LAN_GetServerState			= UISyscall_LAN_GetServerState;
 }

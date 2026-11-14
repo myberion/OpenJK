@@ -27,13 +27,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "server.h"
 #include "qcommon/stringed_ingame.h"
 
-#ifdef USE_INTERNAL_ZLIB
-#include "zlib/zlib.h"
-#else
-#include <zlib.h>
-#endif
-
 #include "server/sv_gameapi.h"
+#include "netcodec/engine.h"
+
+namespace eng = netcodec::engine;
 
 static void SV_CloseDownload( client_t *cl );
 
@@ -132,7 +129,7 @@ void SV_DirectConnect( const netadr_t *from ) {
 	char		userinfo[MAX_INFO_STRING];
 	int			i;
 	client_t	*cl, *newcl;
-	client_t	temp;
+	static client_t	temp;	// not on the stack: 896 KB with the 128 snapshots of plan step 14 part 5, over Windows' 1 MB
 	sharedEntity_t *ent;
 	int			clientNum;
 	int			version;
@@ -311,6 +308,7 @@ gotnewcl:
 
 	// save the address
 	Netchan_Setup (NS_SERVER, &newcl->netchan , from, qport);
+	SV_NetcodecNewClient( newcl );	// the message codec holds no message of this client yet
 
 	// save the userinfo
 	Q_strncpyz( newcl->userinfo, userinfo, sizeof(newcl->userinfo) );
@@ -481,11 +479,6 @@ the wrong gamestate.
 ================
 */
 void SV_SendClientGameState( client_t *client ) {
-	msg_t		msg;
-	byte		msgBuffer[MAX_MSGLEN];
-
-	MSG_Init( &msg, msgBuffer, sizeof( msgBuffer ) );
-
 	// MW - my attempt to fix illegible server message errors caused by
 	// packet fragmentation of initial snapshot.
 	while(client->state&&client->netchan.unsentFragments)
@@ -509,35 +502,15 @@ void SV_SendClientGameState( client_t *client ) {
 	// gamestate message was not just sent, forcing a retransmit
 	client->gamestateMessageNum = client->netchan.outgoingSequence;
 
-	SV_CreateClientGameStateMessage( client, &msg );
-
-	// deliver this to the client
-	SV_SendMessageToClient( &msg, client );
+	// the commands and the gamestate, coded and sent
+	SV_NetcodecSendGameState( client );
 }
 
 
 void SV_SendClientMapChange( client_t *client )
 {
-	msg_t		msg;
-	byte		msgBuffer[MAX_MSGLEN];
-
-	MSG_Init( &msg, msgBuffer, sizeof( msgBuffer ) );
-
-	// NOTE, MRE: all server->client messages now acknowledge
-	// let the client know which reliable clientCommands we have received
-	MSG_WriteLong( &msg, client->lastClientCommand );
-
-	// send any server commands waiting to be sent first.
-	// we have to do this cause we send the client->reliableSequence
-	// with a gamestate and it sets the clc.serverCommandSequence at
-	// the client side
-	SV_UpdateServerCommandsToClient( client, &msg );
-
-	// send the gamestate
-	MSG_WriteByte( &msg, svc_mapchange );
-
-	// deliver this to the client
-	SV_SendMessageToClient( &msg, client );
+	// the waiting server commands and the map change, coded and sent
+	SV_NetcodecSendMapChange( client );
 }
 
 /*
@@ -572,6 +545,14 @@ void SV_ClientEnterWorld( client_t *client, usercmd_t *cmd ) {
 	client->deltaMessage = -1;
 	client->nextSnapshotTime = svs.time;	// generate a snapshot immediately
 
+	client->inputFirst = client->inputLast = 0;	// commands of before (a map_restart) are not run
+	client->inputNewest = sv.time;	// the commands made before the client was in this world (its time does not run until
+										// its first snapshot) are neither run nor measured
+	client->inputStarted = qfalse;
+	client->inputRepeats = 0;
+	client->inputMargin = 0;
+	client->inputMarginNew = qfalse;
+	client->lateButtons = client->lateUpmove = client->lateGeneric = 0;
 	if(cmd)
 		memcpy(&client->lastUsercmd, cmd, sizeof(client->lastUsercmd));
 	else
@@ -698,25 +679,25 @@ static void SV_BeginDownload_f( client_t *cl ) {
 	// Kill any existing download
 	SV_CloseDownload( cl );
 
-	// cl->downloadName is non-zero now, SV_WriteDownloadToClient will see this and open
+	// cl->downloadName is non-zero now, SV_NextDownloadBlock will see this and open
 	// the file itself
 	Q_strncpyz( cl->downloadName, Cmd_Argv(1), sizeof(cl->downloadName) );
 }
 
 /*
 ==================
-SV_WriteDownloadToClient
+SV_NextDownloadBlock
 
 Check to see if the client wants a file, open it if needed and start pumping the client
-Fill up msg with data
+The block for the next message, if any: one per message (the message codec sends one download block per message)
 ==================
 */
-void SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
+void SV_NextDownloadBlock(client_t *cl, svDownloadBlock_t *out)
 {
 	int curindex;
-	int rate;
-	int blockspersnap;
-	char errorMessage[1024];
+	static char errorMessage[1024];	// sent as the block's data, after this function returns
+
+	out->present = qfalse;
 
 	if (!*cl->downloadName)
 		return;	// Nothing being downloaded
@@ -754,10 +735,11 @@ void SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
 				Com_Printf("clientDownload: %d : \"%s\" file not found on server\n", (int) (cl - svs.clients), cl->downloadName);
 				Com_sprintf(errorMessage, sizeof(errorMessage), "File \"%s\" not found on server for autodownloading.\n", cl->downloadName);
 			}
-			MSG_WriteByte( msg, svc_download );
-			MSG_WriteShort( msg, 0 ); // client is expecting block zero
-			MSG_WriteLong( msg, -1 ); // illegal file size
-			MSG_WriteString( msg, errorMessage );
+			out->present = qtrue;
+			out->block = 0;		// client is expecting block zero
+			out->fileSize = -1;	// illegal file size
+			out->data = (const byte *)errorMessage;
+			out->size = (int)strlen( errorMessage );
 
 			*cl->downloadName = 0;
 
@@ -809,75 +791,39 @@ void SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
 		cl->downloadEOF = qtrue;  // We have added the EOF block
 	}
 
-	// Loop up to window size times based on how many blocks we can fit in the
-	// client snapMsec and rate
+	// Write out the next section of the file, if we have already reached our window,
+	// automatically start retransmitting
 
-	// based on the rate, how many bytes can we fit in the snapMsec time of the client
-	// normal rate / snapshotMsec calculation
-	rate = cl->rate;
-	if ( sv_maxRate->integer ) {
-		if ( sv_maxRate->integer < 1000 ) {
-			Cvar_Set( "sv_MaxRate", "1000" );
-		}
-		if ( sv_maxRate->integer < rate ) {
-			rate = sv_maxRate->integer;
-		}
+	if (cl->downloadClientBlock == cl->downloadCurrentBlock)
+		return; // Nothing to transmit
+
+	if (cl->downloadXmitBlock == cl->downloadCurrentBlock) {
+		// We have transmitted the complete window, should we start resending?
+
+		//FIXME:  This uses a hardcoded one second timeout for lost blocks
+		//the timeout should be based on client rate somehow
+		if (svs.time - cl->downloadSendTime > 1000)
+			cl->downloadXmitBlock = cl->downloadClientBlock;
+		else
+			return;
 	}
 
-	if (!rate) {
-		blockspersnap = 1;
-	} else {
-		blockspersnap = ( (rate * cl->snapshotMsec) / 1000 + MAX_DOWNLOAD_BLKSIZE ) /
-			MAX_DOWNLOAD_BLKSIZE;
-	}
+	// Send current block
+	curindex = (cl->downloadXmitBlock % MAX_DOWNLOAD_WINDOW);
 
-	if (blockspersnap < 0)
-		blockspersnap = 1;
+	out->present = qtrue;
+	out->block = cl->downloadXmitBlock;
+	out->fileSize = cl->downloadSize;	// block zero is special, contains file size
+	out->data = cl->downloadBlocks[curindex];
+	out->size = cl->downloadBlockSize[curindex];
 
-	while (blockspersnap--) {
+	Com_DPrintf( "clientDownload: %d : writing block %d\n", (int) (cl - svs.clients), cl->downloadXmitBlock );
 
-		// Write out the next section of the file, if we have already reached our window,
-		// automatically start retransmitting
+	// Move on to the next block
+	// It will get sent with next snap shot.  The rate will keep us in line.
+	cl->downloadXmitBlock++;
 
-		if (cl->downloadClientBlock == cl->downloadCurrentBlock)
-			return; // Nothing to transmit
-
-		if (cl->downloadXmitBlock == cl->downloadCurrentBlock) {
-			// We have transmitted the complete window, should we start resending?
-
-			//FIXME:  This uses a hardcoded one second timeout for lost blocks
-			//the timeout should be based on client rate somehow
-			if (svs.time - cl->downloadSendTime > 1000)
-				cl->downloadXmitBlock = cl->downloadClientBlock;
-			else
-				return;
-		}
-
-		// Send current block
-		curindex = (cl->downloadXmitBlock % MAX_DOWNLOAD_WINDOW);
-
-		MSG_WriteByte( msg, svc_download );
-		MSG_WriteShort( msg, cl->downloadXmitBlock );
-
-		// block zero is special, contains file size
-		if ( cl->downloadXmitBlock == 0 )
-			MSG_WriteLong( msg, cl->downloadSize );
-
-		MSG_WriteShort( msg, cl->downloadBlockSize[curindex] );
-
-		// Write the block
-		if ( cl->downloadBlockSize[curindex] ) {
-			MSG_WriteData( msg, cl->downloadBlocks[curindex], cl->downloadBlockSize[curindex] );
-		}
-
-		Com_DPrintf( "clientDownload: %d : writing block %d\n", (int) (cl - svs.clients), cl->downloadXmitBlock );
-
-		// Move on to the next block
-		// It will get sent with next snap shot.  The rate will keep us in line.
-		cl->downloadXmitBlock++;
-
-		cl->downloadSendTime = svs.time;
-	}
+	cl->downloadSendTime = svs.time;
 }
 
 /*
@@ -1062,65 +1008,10 @@ into a more C friendly form.
 */
 void SV_UserinfoChanged( client_t *cl ) {
 	char	*val=NULL, *ip=NULL;
-	int		i=0, len=0;
+	int		len=0;
 
 	// name for C code
 	Q_strncpyz( cl->name, Info_ValueForKey (cl->userinfo, "name"), sizeof(cl->name) );
-
-	// rate command
-
-	// if the client is on the same subnet as the server and we aren't running an
-	// internet public server, assume they don't need a rate choke
-	if ( Sys_IsLANAddress( &cl->netchan.remoteAddress ) && com_dedicated->integer != 2 && sv_lanForceRate->integer == 1 ) {
-		cl->rate = 100000;	// lans should not rate limit
-	} else {
-		val = Info_ValueForKey (cl->userinfo, "rate");
-		if (sv_ratePolicy->integer == 1)
-		{
-			// NOTE: what if server sets some dumb sv_clientRate value?
-			cl->rate = sv_clientRate->integer;
-		}
-		else if( sv_ratePolicy->integer == 2)
-		{
-			i = atoi(val);
-			if (!i) {
-				i = sv_maxRate->integer; //FIXME old code was 3000 here, should increase to 5000 instead or maxRate?
-			}
-			i = Com_Clampi(1000, 100000, i);
-			i = Com_Clampi( sv_minRate->integer, sv_maxRate->integer, i );
-			if (i != cl->rate) {
-				cl->rate = i;
-			}
-		}
-	}
-
-	// snaps command
-	//Note: cl->snapshotMsec is also validated in sv_main.cpp -> SV_CheckCvars if sv_fps, sv_snapsMin or sv_snapsMax is changed
-	int minSnaps = Com_Clampi(1, sv_snapsMax->integer, sv_snapsMin->integer); // between 1 and sv_snapsMax ( 1 <-> 40 )
-	int maxSnaps = Q_min(sv_fps->integer, sv_snapsMax->integer); // can't produce more than sv_fps snapshots/sec, but can send less than sv_fps snapshots/sec
-	val = Info_ValueForKey(cl->userinfo, "snaps");
-	cl->wishSnaps = atoi(val);
-	if (!cl->wishSnaps)
-		cl->wishSnaps = maxSnaps;
-	if (sv_snapsPolicy->integer == 1)
-	{
-		cl->wishSnaps = sv_fps->integer;
-		i = 1000 / sv_fps->integer;
-		if (i != cl->snapshotMsec) {
-			// Reset next snapshot so we avoid desync between server frame time and snapshot send time
-			cl->nextSnapshotTime = -1;
-			cl->snapshotMsec = i;
-		}
-	}
-	else if (sv_snapsPolicy->integer == 2)
-	{
-		i = 1000 / Com_Clampi(minSnaps, maxSnaps, cl->wishSnaps);
-		if (i != cl->snapshotMsec) {
-			// Reset next snapshot so we avoid desync between server frame time and snapshot send time
-			cl->nextSnapshotTime = -1;
-			cl->snapshotMsec = i;
-		}
-	}
 
 	// TTimo
 	// maintain the IP information
@@ -1246,18 +1137,23 @@ void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK ) {
 SV_ClientCommand
 ===============
 */
-static qboolean SV_ClientCommand( client_t *cl, msg_t *msg ) {
-	int		seq;
-	const char	*s;
+static qboolean SV_ClientCommand( client_t *cl, const eng::Command &command ) {
+	const int	seq = command.seq;
+	char		s[MAX_STRING_CHARS];
 	qboolean clientOk = qtrue;
-
-	seq = MSG_ReadLong( msg );
-	s = MSG_ReadString( msg );
 
 	// see if we have already executed it
 	if ( cl->lastClientCommand >= seq ) {
 		return qtrue;
 	}
+
+	// the decoded text, at most MAX_STRING_CHARS - 1 characters, format specifiers made harmless as the legacy string
+	// reader did ('%' became '.')
+	const uint32_t n = command.length < sizeof( s ) - 1 ? command.length : (uint32_t)sizeof( s ) - 1;
+	for ( uint32_t i = 0; i < n; i++ ) {
+		s[i] = command.text[i] == '%' ? '.' : command.text[i];
+	}
+	s[n] = 0;
 
 	Com_DPrintf( "clientCommand: %s : %i : %s\n", cl->name, seq, s );
 
@@ -1325,6 +1221,119 @@ void SV_ClientThink (client_t *cl, usercmd_t *cmd) {
 
 /*
 ==================
+SV_RunClientCommands
+
+Runs, for every player in the game, one command at the coming tick, whose time is `time` (plan step 14, part 4c): every
+player's state at a tick is the result of its command of that tick, after the bots' commands and before the game frame.
+
+- The command of the tick is the one whose time is in the tick (above time - frameMsec, up to time). How early it
+  arrived is the player's input margin, sent in the next snapshot: the client keeps its command clock just far enough
+  ahead for its commands to arrive before their tick.
+- A command that comes after its tick gets no movement time, and what it newly pressed (buttons, a jump, the generic
+  command) goes into the next command run: a short press acts a tick late instead of being lost (as Counter-Strike 2;
+  docs_rewrite/modernization/surveys/tick-and-lag-compensation.md, section 11). Its margin is negative.
+- A tick without a command runs the last one again, for SV_INPUT_REPEAT_MSEC, then an empty one (no movement, no
+  button): a lost packet does not stop the player, a lost connection does.
+
+The clients run in rising order of their numbers at one tick and in falling order at the next: within a tick the first
+to move takes a contested place and the first to shoot kills first, and of any two clients each is first every other tick.
+==================
+*/
+static void SV_FoldLateCommand( client_t *cl, const usercmd_t *late ) {
+	cl->lateButtons |= late->buttons & ~cl->lastUsercmd.buttons;
+	if ( late->upmove > 0 && cl->lastUsercmd.upmove <= 0 ) {
+		cl->lateUpmove = late->upmove;
+	}
+	if ( late->generic_cmd ) {
+		cl->lateGeneric = late->generic_cmd;
+	}
+}
+
+void SV_RunClientCommands( int time, int frameMsec ) {
+	const int now = Sys_Milliseconds();
+	const int falling = ( time / TICK_MSEC ) & 1;
+
+	for ( int n = 0; n < sv_maxclients->integer; n++ ) {
+		client_t *cl = &svs.clients[falling ? sv_maxclients->integer - 1 - n : n];
+		if ( cl->state != CS_ACTIVE || cl->netchan.remoteAddress.type == NA_BOT ) {
+			continue;	// a bot's commands come from the game (SV_BotFrame)
+		}
+
+		netcodecStats_t &st = cl->netcodecStats;
+		usercmd_t cmd;
+		qboolean own = qfalse, measured = qfalse;
+		int margin = 0;
+
+		while ( cl->inputFirst != cl->inputLast ) {
+			const int slot = cl->inputFirst & ( SV_INPUT_BUFFER - 1 );
+			const usercmd_t &c = cl->inputCmds[slot];
+			if ( c.serverTime > time ) {
+				break;	// waits for its tick
+			}
+			cl->inputFirst++;
+			int m;
+			if ( c.serverTime > time - frameMsec ) {
+				if ( own ) {
+					SV_FoldLateCommand( cl, &cmd );	// two commands in one tick (times off the ticks): the last one runs
+				}
+				cmd = c;
+				own = qtrue;
+				m = now - cl->inputArrival[slot];
+			} else {
+				// its tick ran a whole number of ticks before this one
+				SV_FoldLateCommand( cl, &c );
+				st.cmdsLate++;
+				m = Q_min( now - ( time - c.serverTime ) / frameMsec * frameMsec - cl->inputArrival[slot], -1 );
+			}
+			margin = measured ? Q_min( margin, m ) : m;
+			measured = qtrue;
+		}
+		if ( measured ) {
+			cl->inputMargin = margin;
+			cl->inputMarginNew = qtrue;
+			st.marginMin = st.margins ? Q_min( st.marginMin, margin ) : margin;
+			st.margins++;
+			st.marginSum += margin;
+		}
+
+		if ( own ) {
+			cl->inputStarted = qtrue;
+			cl->inputRepeats = 0;
+			st.cmdsOnTime++;
+		} else {
+			if ( !cl->inputStarted ) {
+				continue;	// no command of the player ran yet in this world: nothing to run again
+			}
+			cmd = cl->lastUsercmd;
+			cmd.generic_cmd = 0;	// a one-off command is not run twice
+			if ( ++cl->inputRepeats > SV_INPUT_REPEAT_MSEC / TICK_MSEC ) {
+				cmd.forwardmove = cmd.rightmove = cmd.upmove = 0;
+				cmd.buttons = 0;
+			}
+			st.cmdsMissing++;
+		}
+
+		// what the next tick without a command runs again: the command as the player sent it, not what a late one adds
+		usercmd_t held = cmd;
+		held.serverTime = time;
+
+		cmd.serverTime = time;
+		cmd.buttons |= cl->lateButtons;
+		if ( cmd.upmove <= 0 && cl->lateUpmove > 0 ) {
+			cmd.upmove = (signed char)cl->lateUpmove;
+		}
+		if ( !cmd.generic_cmd ) {
+			cmd.generic_cmd = (byte)cl->lateGeneric;
+		}
+		cl->lateButtons = cl->lateUpmove = cl->lateGeneric = 0;
+
+		SV_ClientThink( cl, &cmd );
+		cl->lastUsercmd = held;
+	}
+}
+
+/*
+==================
 SV_UserMove
 
 The message usually contains all the movement commands
@@ -1335,12 +1344,10 @@ On very fast clients, there may be multiple usercmd packed into
 each of the backup packets.
 ==================
 */
-static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
-	int			i, key;
+static void SV_UserMove( client_t *cl, const eng::ClientPacket &packet, qboolean delta ) {
+	int			i;
 	int			cmdCount;
-	usercmd_t	nullcmd;
 	usercmd_t	cmds[MAX_PACKET_USERCMDS];
-	usercmd_t	*cmd, *oldcmd;
 
 	if ( delta ) {
 		cl->deltaMessage = cl->messageAcknowledge;
@@ -1348,7 +1355,7 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 		cl->deltaMessage = -1;
 	}
 
-	cmdCount = MSG_ReadByte( msg );
+	cmdCount = (int)packet.numUserCmds;
 
 	if ( cmdCount < 1 ) {
 		Com_Printf( "cmdCount < 1\n" );
@@ -1360,32 +1367,41 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 		return;
 	}
 
-	// use the checksum feed in the key
-	key = sv.checksumFeed;
-	// also use the message acknowledge
-	key ^= cl->messageAcknowledge;
-	// also use the last acknowledged server command in the key
-	key ^= Com_HashKey(cl->reliableCommands[ cl->reliableAcknowledge & (MAX_RELIABLE_COMMANDS-1) ], 32);
-
-	Com_Memset( &nullcmd, 0, sizeof(nullcmd) );
-	oldcmd = &nullcmd;
+	Com_Memcpy( cmds, packet.userCmds, cmdCount * sizeof( usercmd_t ) );
 	for ( i = 0 ; i < cmdCount ; i++ ) {
-		cmd = &cmds[i];
-		MSG_ReadDeltaUsercmdKey( msg, key, oldcmd, cmd );
-		if ( sv_legacyFixes->integer ) {
+		// a client makes its moves -127 to 127 (ClampChar), but the server does not trust what it receives: a modified
+		// client's -128 would move 128 / 127 as fast (OpenJK's packet reader did the same)
+		if ( cmds[i].forwardmove == -128 ) {
+			cmds[i].forwardmove = -127;
+		}
+		if ( cmds[i].rightmove == -128 ) {
+			cmds[i].rightmove = -127;
+		}
+		if ( cmds[i].upmove == -128 ) {
+			cmds[i].upmove = -127;
+		}
+	}
+	if ( sv_legacyFixes->integer ) {
+		for ( i = 0 ; i < cmdCount ; i++ ) {
 			// block "charge jump" and other nonsense
-			if ( cmd->forcesel == FP_LEVITATION || cmd->forcesel >= NUM_FORCE_POWERS ) {
-				cmd->forcesel = 0xFFu;
+			if ( cmds[i].forcesel == FP_LEVITATION || cmds[i].forcesel >= NUM_FORCE_POWERS ) {
+				cmds[i].forcesel = 0xFFu;
 			}
 
 			// affects speed calculation
-			cmd->angles[ROLL] = 0;
+			cmds[i].angles[ROLL] = 0;
 		}
-		oldcmd = cmd;
 	}
 
-	// save time for ping calculation
-	cl->frames[ cl->messageAcknowledge & PACKET_MASK ].messageAcked = svs.time;
+	// save the real time of the first acknowledge of the message for the ping calculation, while its slot still holds
+	// it (a message being sent in fragments already took the slot SV_PING_WINDOW messages back)
+	if ( cl->netchan.outgoingSequence - cl->messageAcknowledge < SV_PING_WINDOW ) {
+		auto &ping = cl->pingTimes[cl->messageAcknowledge & ( SV_PING_WINDOW - 1 )];
+		if ( !ping.isAcked ) {
+			ping.isAcked = qtrue;
+			ping.acked = Sys_Milliseconds();
+		}
+	}
 
 	// TTimo
 	// catch the no-cp-yet situation before SV_ClientEnterWorld
@@ -1419,6 +1435,8 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 		return;
 	}
 
+	const int arrival = Sys_Milliseconds();
+
 	// usually, the first couple commands will be duplicates
 	// of ones we have previously received, but the servertimes
 	// in the commands will cause them to be immediately discarded
@@ -1431,12 +1449,23 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 		//if ( cmds[i].serverTime > svs.time + 3000 ) {
 		//	continue;
 		//}
-		// don't execute if this is an old cmd which is already executed
-		// these old cmds are included when cl_packetdup > 0
-		if ( cmds[i].serverTime <= cl->lastUsercmd.serverTime ) {
+		// don't keep a cmd already received: these old cmds are included by CL_PACKET_DUP
+		if ( cmds[i].serverTime <= cl->inputNewest ) {
 			continue;
 		}
-		SV_ClientThink (cl, &cmds[ i ]);
+		// a client's clock that lost its way: the margin tells it how far ahead it is
+		if ( cmds[i].serverTime > sv.time + SV_INPUT_AHEAD_MSEC ) {
+			cl->inputMargin = cmds[i].serverTime - sv.time;
+			cl->inputMarginNew = qtrue;
+			continue;
+		}
+		if ( cl->inputLast - cl->inputFirst == SV_INPUT_BUFFER ) {
+			break;	// a client SV_INPUT_BUFFER commands ahead of the ticks: the rest waits for its next packets
+		}
+		cl->inputCmds[cl->inputLast & ( SV_INPUT_BUFFER - 1 )] = cmds[i];
+		cl->inputArrival[cl->inputLast & ( SV_INPUT_BUFFER - 1 )] = arrival;
+		cl->inputNewest = cmds[i].serverTime;
+		cl->inputLast++;
 	}
 }
 
@@ -1453,17 +1482,19 @@ USER CMD EXECUTION
 ===================
 SV_ExecuteClientMessage
 
-Parse a client packet
+Parse a client packet, decoded by netcodec (sv_netcodec.cpp)
 ===================
 */
 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
-	int			c;
 	int			serverId;
 
-	MSG_Bitstream(msg);
+	const eng::ClientPacket *packet = SV_NetcodecDecodeClientPacket( cl, msg );
+	if ( !packet ) {
+		return;	// malformed, or coded against a message the server no longer holds
+	}
 
-	serverId = MSG_ReadLong( msg );
-	cl->messageAcknowledge = MSG_ReadLong( msg );
+	serverId = packet->serverId;
+	cl->messageAcknowledge = packet->ack;
 
 	if (cl->messageAcknowledge < 0) {
 		// usually only hackers create messages like this
@@ -1472,7 +1503,7 @@ void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
 		return;
 	}
 
-	cl->reliableAcknowledge = MSG_ReadLong( msg );
+	cl->reliableAcknowledge = packet->reliableAck;
 
 	// NOTE: when the client message is fux0red the acknowledgement numbers
 	// can be out of range, this could cause the server to send thousands of server
@@ -1519,33 +1550,19 @@ void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
 		cl->oldServerTime = 0;
 	}
 
-	// read optional clientCommand strings
-	do {
-		c = MSG_ReadByte( msg );
-		if ( c == clc_EOF ) {
-			break;
-		}
-		if ( c != clc_clientCommand ) {
-			break;
-		}
-		if ( !SV_ClientCommand( cl, msg ) ) {
+	// the client commands not yet acknowledged
+	for ( uint32_t i = 0; i < packet->numCommands; i++ ) {
+		if ( !SV_ClientCommand( cl, packet->commands[i] ) ) {
 			return;	// we couldn't execute it because of the flood protection
 		}
 		if (cl->state == CS_ZOMBIE) {
 			return;	// disconnect command
 		}
-	} while ( 1 );
-
-	// read the usercmd_t
-	if ( c == clc_move ) {
-		SV_UserMove( cl, msg, qtrue );
-	} else if ( c == clc_moveNoDelta ) {
-		SV_UserMove( cl, msg, qfalse );
-	} else if ( c != clc_EOF ) {
-		Com_Printf( "WARNING: bad command byte for client %i\n", cl - svs.clients );
 	}
-//	if ( msg->readcount != msg->cursize ) {
-//		Com_Printf( "WARNING: Junk at end of packet for client %i\n", cl - svs.clients );
-//	}
+
+	// the usercmd_t
+	if ( packet->move != eng::Move::kNone ) {
+		SV_UserMove( cl, *packet, packet->move == eng::Move::kDelta ? qtrue : qfalse );
+	}
 }
 

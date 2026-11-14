@@ -50,10 +50,8 @@ cvar_t	*cl_motdServer[MAX_MASTER_SERVERS];
 cvar_t	*rcon_client_password;
 cvar_t	*rconAddress;
 
-cvar_t	*cl_timeout;
-cvar_t	*cl_maxpackets;
-cvar_t	*cl_packetdup;
-cvar_t	*cl_timeNudge;
+cvar_t	*cl_debugInterpForce;
+cvar_t	*cl_debugInterpDelay;
 cvar_t	*cl_showTimeDelta;
 cvar_t	*cl_freezeDemo;
 
@@ -102,8 +100,6 @@ cvar_t	*cl_autolodscale;
 cvar_t	*cl_consoleKeys;
 cvar_t	*cl_consoleUseScanCode;
 cvar_t	*cl_consoleShiftRequirement;
-
-cvar_t  *cl_lanForcePackets;
 
 cvar_t	*cl_drawRecording;
 
@@ -198,29 +194,6 @@ CLIENT SIDE DEMO RECORDING
 
 /*
 ====================
-CL_WriteDemoMessage
-
-Dumps the current net message, prefixed by the length
-====================
-*/
-void CL_WriteDemoMessage ( msg_t *msg, int headerBytes ) {
-	int		len, swlen;
-
-	// write the packet sequence
-	len = clc.serverMessageSequence;
-	swlen = LittleLong( len );
-	FS_Write (&swlen, 4, clc.demofile);
-
-	// skip the packet sequencing information
-	len = msg->cursize - headerBytes;
-	swlen = LittleLong(len);
-	FS_Write (&swlen, 4, clc.demofile);
-	FS_Write ( msg->data + headerBytes, len, clc.demofile );
-}
-
-
-/*
-====================
 CL_StopRecording_f
 
 stop recording a demo
@@ -272,12 +245,6 @@ Begins recording a demo from the current position
 static char		demoName[MAX_QPATH];	// compiler bug workaround
 void CL_Record_f( void ) {
 	char		name[MAX_OSPATH];
-	byte		bufData[MAX_MSGLEN];
-	msg_t	buf;
-	int			i;
-	int			len;
-	entityState_t	*ent;
-	entityState_t	nullstate;
 	char		*s;
 
 	if ( Cmd_Argc() > 2 ) {
@@ -297,10 +264,6 @@ void CL_Record_f( void ) {
 		return;
 	}
 
-	// sync 0 doesn't prevent recording, so not forcing it off .. everyone does g_sync 1 ; record ; g_sync 0 ..
-	if ( NET_IsLocalAddress( &clc.serverAddress ) && !Cvar_VariableValue( "g_synchronousClients" ) ) {
-		Com_Printf (S_COLOR_YELLOW "WARNING: You should set 'g_synchronousClients 1' for smoother demo recording\n");
-	}
 
 	if ( Cmd_Argc() == 2 ) {
 		s = Cmd_Argv(1);
@@ -335,65 +298,15 @@ void CL_Record_f( void ) {
 
 	Q_strncpyz( clc.demoName, demoName, sizeof( clc.demoName ) );
 
-	// don't start saving messages until a non-delta compressed message is received
-	clc.demowaiting = qtrue;
-
-	// write out the gamestate message
-	MSG_Init (&buf, bufData, sizeof(bufData));
-	MSG_Bitstream(&buf);
-
-	// NOTE, MRE: all server->client messages now acknowledge
-	MSG_WriteLong( &buf, clc.reliableSequence );
-
-	MSG_WriteByte (&buf, svc_gamestate);
-	MSG_WriteLong (&buf, clc.serverCommandSequence );
-
-	// configstrings
-	for ( i = 0 ; i < MAX_CONFIGSTRINGS ; i++ ) {
-		if ( !cl.gameState.stringOffsets[i] ) {
-			continue;
-		}
-		s = cl.gameState.stringData + cl.gameState.stringOffsets[i];
-		MSG_WriteByte (&buf, svc_configstring);
-		MSG_WriteShort (&buf, i);
-		MSG_WriteBigString (&buf, s);
+	// write out the gamestate message; every message decoded from now on is coded again into the demo against the
+	// demo's own previous snapshot (cl_netcodec.cpp), so no full snapshot needs to be asked of the server
+	if ( !CL_NetcodecRecordGameState() ) {
+		Com_Printf( "ERROR: the gamestate could not be coded.\n" );
+		FS_FCloseFile( clc.demofile );
+		clc.demofile = 0;
+		clc.demorecording = qfalse;
+		clc.spDemoRecording = qfalse;
 	}
-
-	// baselines
-	Com_Memset (&nullstate, 0, sizeof(nullstate));
-	for ( i = 0; i < MAX_GENTITIES ; i++ ) {
-		ent = &cl.entityBaselines[i];
-		if ( !ent->number ) {
-			continue;
-		}
-		MSG_WriteByte (&buf, svc_baseline);
-		MSG_WriteDeltaEntity (&buf, &nullstate, ent, qtrue );
-	}
-
-	MSG_WriteByte( &buf, svc_EOF );
-
-	// finished writing the gamestate stuff
-
-	// write the client num
-	MSG_WriteLong(&buf, clc.clientNum);
-	// write the checksum feed
-	MSG_WriteLong(&buf, clc.checksumFeed);
-
-	// Filler for old RMG system.
-	MSG_WriteShort ( &buf, 0 );
-
-	// finished writing the client packet
-	MSG_WriteByte( &buf, svc_EOF );
-
-	// write it to the demo file
-	len = LittleLong( clc.serverMessageSequence - 1 );
-	FS_Write (&len, 4, clc.demofile);
-
-	len = LittleLong (buf.cursize);
-	FS_Write (&len, 4, clc.demofile);
-	FS_Write (buf.data, buf.cursize, clc.demofile);
-
-	// the rest of the demo file will be copied from net messages
 }
 
 /*
@@ -727,6 +640,7 @@ void CL_ClearState (void) {
 
 //	S_StopAllSounds();
 	Com_Memset( &cl, 0, sizeof( cl ) );
+	CL_NetcodecReset();	// its frames point into cl.snapshots and cl.parseEntities
 }
 
 /*
@@ -921,11 +835,12 @@ void CL_RequestMotd( void ) {
 
 	info[0] = 0;
   // NOTE TTimo xoring against Com_Milliseconds, otherwise we may not have a true randomization
-  // only srand I could catch before here is tr_noise.c l:26 srand(1001)
-  // https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=382
-  // NOTE: the Com_Milliseconds xoring only affects the lower 16-bit word,
-  //   but I decided it was enough randomization
-	Com_sprintf( cls.updateChallenge, sizeof( cls.updateChallenge ), "%i", ((rand() << 16) ^ rand()) ^ Com_Milliseconds());
+	// the challenge from the system's random bytes, which an attacker cannot guess (rand() and the clock could be)
+	{
+		int challenge;
+		Com_RandomBytes( (byte *)&challenge, sizeof( challenge ) );
+		Com_sprintf( cls.updateChallenge, sizeof( cls.updateChallenge ), "%i", challenge );
+	}
 
 	Info_SetValueForKey( info, "challenge", cls.updateChallenge );
 	Info_SetValueForKey( info, "renderer", cls.glconfig.renderer_string );
@@ -1065,8 +980,9 @@ void CL_Connect_f( void ) {
 	} else {
 		cls.state = CA_CONNECTING;
 
-		// Set a client challenge number that ideally is mirrored back by the server.
-		clc.challenge = ((rand() << 16) ^ rand()) ^ Com_Milliseconds();
+		// Set a client challenge number that ideally is mirrored back by the server: the system's random bytes, which
+		// an attacker cannot guess
+		Com_RandomBytes( (byte *)&clc.challenge, sizeof( clc.challenge ) );
 	}
 
 	Key_SetCatcher( 0 );
@@ -1707,7 +1623,8 @@ void CL_InitServerInfo( serverInfo_t *server, const netadr_t *address ) {
 	server->trueJedi = 0;
 	server->weaponDisable = 0;
 	server->forceDisable = 0;
-	server->ping = -1;
+	server->ping = 0;
+	server->state = LANSERVER_NOT_ASKED;
 	server->game[0] = '\0';
 	server->gameType = 0;
 	server->humans = server->bots = 0;
@@ -2050,8 +1967,6 @@ A packet has arrived from the main event loop
 =================
 */
 void CL_PacketEvent( const netadr_t *from, msg_t *msg ) {
-	int		headerBytes;
-
 	clc.lastPacketTime = cls.realtime;
 
 	if ( msg->cursize >= 4 && *(int *)msg->data == -1 ) {
@@ -2084,24 +1999,13 @@ void CL_PacketEvent( const netadr_t *from, msg_t *msg ) {
 		return;		// out of order, duplicated, etc
 	}
 
-	// the header is different lengths for reliable and unreliable messages
-	headerBytes = msg->readcount;
-
 	// track the last message received so it can be returned in
 	// client messages, allowing the server to detect a dropped
 	// gamestate
 	clc.serverMessageSequence = LittleLong( *(int *)msg->data );
 
 	clc.lastPacketTime = cls.realtime;
-	CL_ParseServerMessage( msg );
-
-	//
-	// we don't know if it is ok to save a demo message until
-	// after we have parsed the frame
-	//
-	if ( clc.demorecording && !clc.demowaiting ) {
-		CL_WriteDemoMessage( msg, headerBytes );
-	}
+	CL_ParseServerMessage( msg );	// a demo being recorded gets the decoded message coded again (cl_netcodec.cpp)
 }
 
 /*
@@ -2116,7 +2020,7 @@ void CL_CheckTimeout( void ) {
 	//
 	if ( ( !CL_CheckPaused() || !sv_paused->integer )
 		&& cls.state >= CA_CONNECTED && cls.state != CA_CINEMATIC
-	    && cls.realtime - clc.lastPacketTime > cl_timeout->value*1000) {
+	    && cls.realtime - clc.lastPacketTime > 1000 * ( cls.state == CA_ACTIVE ? TIMEOUT_ACTIVE : TIMEOUT_CONNECTING ) ) {
 		if (++cl.timeoutcount > 5) {	// timeoutcount saves debugger
 			const char *psTimedOut = SE_GetString("MP_SVGAME_SERVER_CONNECTION_TIMED_OUT");
 			Com_Printf ("\n%s\n",psTimedOut);
@@ -2241,14 +2145,15 @@ void CL_Frame ( int msec ) {
 	// drop the connection
 	CL_CheckTimeout();
 
-	// send intentions now
-	CL_SendCmd();
-
 	// resend a connection request if necessary
 	CL_CheckForResend();
 
 	// decide on the serverTime to render
 	CL_SetCGameTime();
+
+	// send intentions now, once the time to render is decided: the command of the tick in progress then exists when cgame
+	// predicts the local player and draws it between the last two ticks (plan step 14)
+	CL_SendCmd();
 
 	// update the screen
 	SCR_UpdateScreen();
@@ -2745,9 +2650,8 @@ void CL_Init( void ) {
 	for ( int index = 2; index < MAX_MASTER_SERVERS; index++ )
 		cl_motdServer[index] = Cvar_Get( va( "cl_motdServer%d", index + 1 ), "", CVAR_ARCHIVE_ND );
 
-	cl_timeout = Cvar_Get ("cl_timeout", "200", 0);
-
-	cl_timeNudge = Cvar_Get ("cl_timeNudge", "0", CVAR_TEMP );
+	cl_debugInterpForce = Cvar_Get ("cl_debugInterpForce", "0", CVAR_CHEAT, "Debug: 1 shows the world cl_debugInterpDelay ms behind the newest snapshot instead of the computed delay" );
+	cl_debugInterpDelay = Cvar_Get ("cl_debugInterpDelay", "50", CVAR_CHEAT, "Debug: the interpolation delay forced by cl_debugInterpForce, in ms behind the newest snapshot when it arrives" );
 	cl_shownet = Cvar_Get ("cl_shownet", "0", CVAR_TEMP );
 	cl_showSend = Cvar_Get ("cl_showSend", "0", CVAR_TEMP );
 	cl_showTimeDelta = Cvar_Get ("cl_showTimeDelta", "0", CVAR_TEMP );
@@ -2766,9 +2670,6 @@ void CL_Init( void ) {
 	cl_yawspeed = Cvar_Get ("cl_yawspeed", "140", CVAR_ARCHIVE_ND );
 	cl_pitchspeed = Cvar_Get ("cl_pitchspeed", "140", CVAR_ARCHIVE_ND );
 	cl_anglespeedkey = Cvar_Get ("cl_anglespeedkey", "1.5", CVAR_ARCHIVE_ND );
-
-	cl_maxpackets = Cvar_Get ("cl_maxpackets", "63", CVAR_ARCHIVE );
-	cl_packetdup = Cvar_Get ("cl_packetdup", "1", CVAR_ARCHIVE_ND );
 
 	cl_run = Cvar_Get ("cl_run", "1", CVAR_ARCHIVE_ND, "Always run");
 	cl_sensitivity = Cvar_Get ("sensitivity", "5", CVAR_ARCHIVE, "Mouse sensitivity value");
@@ -2814,8 +2715,6 @@ void CL_Init( void ) {
 
 	Cvar_Get( "cl_maxPing", "800", CVAR_ARCHIVE_ND, "Max. ping for servers when searching the serverlist" );
 
-	cl_lanForcePackets = Cvar_Get ("cl_lanForcePackets", "1", CVAR_ARCHIVE_ND);
-
 	cl_drawRecording = Cvar_Get("cl_drawRecording", "1", CVAR_ARCHIVE);
 
 	// enable the ja_guid player identifier in userinfo by default in OpenJK
@@ -2837,8 +2736,6 @@ void CL_Init( void ) {
 
 	// userinfo
 	Cvar_Get ("name", "Padawan", CVAR_USERINFO | CVAR_ARCHIVE_ND, "Player name" );
-	Cvar_Get ("rate", "25000", CVAR_USERINFO | CVAR_ARCHIVE, "Data rate" );
-	Cvar_Get ("snaps", "40", CVAR_USERINFO | CVAR_ARCHIVE, "Client snapshots per second" );
 	Cvar_Get ("model", DEFAULT_MODEL"/default", CVAR_USERINFO | CVAR_ARCHIVE, "Player model" );
 	Cvar_Get ("forcepowers", "7-1-032330000000001333", CVAR_USERINFO | CVAR_ARCHIVE, "Player forcepowers" );
 //	Cvar_Get ("g_redTeam", DEFAULT_REDTEAM_NAME, CVAR_SERVERINFO | CVAR_ARCHIVE);
@@ -2872,6 +2769,7 @@ void CL_Init( void ) {
 	Cmd_AddCommand ("demo", CL_PlayDemo_f, "Playback a demo" );
 	Cmd_SetCommandCompletionFunc( "demo", CL_CompleteDemoName );
 	Cmd_AddCommand ("stoprecord", CL_StopRecord_f, "Stop recording a demo" );
+	Cmd_AddCommand ("netstats", CL_NetcodecStats_f, "Message codec statistics since the last call" );
 	Cmd_AddCommand ("configstrings", CL_Configstrings_f, "Prints the configstrings list" );
 	Cmd_AddCommand ("clientinfo", CL_Clientinfo_f, "Prints the userinfo variables" );
 	Cmd_AddCommand ("snd_restart", CL_Snd_Restart_f, "Restart sound" );
@@ -2951,6 +2849,7 @@ void CL_Shutdown( void ) {
 	Cmd_RemoveCommand ("demo");
 	Cmd_RemoveCommand ("cinematic");
 	Cmd_RemoveCommand ("stoprecord");
+	Cmd_RemoveCommand ("netstats");
 	Cmd_RemoveCommand ("connect");
 	Cmd_RemoveCommand ("reconnect");
 	Cmd_RemoveCommand ("localservers");
@@ -2985,7 +2884,7 @@ qboolean CL_ConnectedToRemoteServer( void ) {
 	return (qboolean)( com_sv_running && !com_sv_running->integer && cls.state >= CA_CONNECTED && !clc.demoplaying );
 }
 
-static void CL_SetServerInfo(serverInfo_t *server, const char *info, int ping) {
+static void CL_SetServerInfo(serverInfo_t *server, const char *info, lanServerState_t state, int ping) {
 	if (server) {
 		if (info) {
 			server->clients = atoi(Info_ValueForKey(info, "clients"));
@@ -3006,28 +2905,29 @@ static void CL_SetServerInfo(serverInfo_t *server, const char *info, int ping) {
 			server->bots = atoi( Info_ValueForKey( info, "bots" ) );
 //			server->pure = (qboolean)atoi(Info_ValueForKey(info, "pure" ));
 		}
+		server->state = state;
 		server->ping = ping;
 	}
 }
 
-static void CL_SetServerInfoByAddress(const netadr_t *from, const char *info, int ping) {
+static void CL_SetServerInfoByAddress(const netadr_t *from, const char *info, lanServerState_t state, int ping) {
 	int i;
 
 	for (i = 0; i < MAX_OTHER_SERVERS; i++) {
 		if (NET_CompareAdr(from, &cls.localServers[i].adr)) {
-			CL_SetServerInfo(&cls.localServers[i], info, ping);
+			CL_SetServerInfo(&cls.localServers[i], info, state, ping);
 		}
 	}
 
 	for (i = 0; i < MAX_GLOBAL_SERVERS; i++) {
 		if (NET_CompareAdr(from, &cls.globalServers[i].adr)) {
-			CL_SetServerInfo(&cls.globalServers[i], info, ping);
+			CL_SetServerInfo(&cls.globalServers[i], info, state, ping);
 		}
 	}
 
 	for (i = 0; i < MAX_OTHER_SERVERS; i++) {
 		if (NET_CompareAdr(from, &cls.favoriteServers[i].adr)) {
-			CL_SetServerInfo(&cls.favoriteServers[i], info, ping);
+			CL_SetServerInfo(&cls.favoriteServers[i], info, state, ping);
 		}
 	}
 }
@@ -3072,10 +2972,11 @@ void CL_ServerInfoPacket( const netadr_t *from, msg_t *msg ) {
 	// iterate servers waiting for ping response
 	for (i=0; i<MAX_PINGREQUESTS; i++)
 	{
-		if ( cl_pinglist[i].adr.port && !cl_pinglist[i].time && NET_CompareAdr( from, &cl_pinglist[i].adr ) )
+		if ( cl_pinglist[i].adr.port && !cl_pinglist[i].answered && NET_CompareAdr( from, &cl_pinglist[i].adr ) )
 		{
 			// calc ping time
 			cl_pinglist[i].time = Sys_Milliseconds() - cl_pinglist[i].start;
+			cl_pinglist[i].answered = qtrue;
 			if ( com_developer->integer ) {
 				Com_Printf( "ping time %dms from %s\n", cl_pinglist[i].time, NET_AdrToString( from ) );
 			}
@@ -3097,7 +2998,7 @@ void CL_ServerInfoPacket( const netadr_t *from, msg_t *msg ) {
 					break;
 			}
 			Info_SetValueForKey( cl_pinglist[i].info, "nettype", va("%d", type) );
-			CL_SetServerInfoByAddress(from, infoString, cl_pinglist[i].time);
+			CL_SetServerInfoByAddress(from, infoString, LANSERVER_ANSWERED, cl_pinglist[i].time);
 
 			return;
 		}
@@ -3461,25 +3362,27 @@ void CL_GlobalServers_f( void ) {
 CL_GetPing
 ==================
 */
-void CL_GetPing( int n, char *buf, int buflen, int *pingtime )
+lanServerState_t CL_GetPing( int n, char *buf, int buflen, int *pingtime )
 {
 	const char	*str;
 	int		time;
 	int		maxPing;
+	lanServerState_t	state;
 
 	if (n < 0 || n >= MAX_PINGREQUESTS || !cl_pinglist[n].adr.port)
 	{
 		// empty or invalid slot
 		buf[0]    = '\0';
 		*pingtime = 0;
-		return;
+		return LANSERVER_NOT_ASKED;
 	}
 
 	str = NET_AdrToString( &cl_pinglist[n].adr );
 	Q_strncpyz( buf, str, buflen );
 
 	time = cl_pinglist[n].time;
-	if (!time)
+	state = LANSERVER_ANSWERED;
+	if (!cl_pinglist[n].answered)
 	{
 		// check for timeout
 		time = Sys_Milliseconds() - cl_pinglist[n].start;
@@ -3491,12 +3394,18 @@ void CL_GetPing( int n, char *buf, int buflen, int *pingtime )
 		{
 			// not timed out yet
 			time = 0;
+			state = LANSERVER_WAITING;
+		}
+		else
+		{
+			state = LANSERVER_NO_ANSWER;
 		}
 	}
 
-	CL_SetServerInfoByAddress(&cl_pinglist[n].adr, cl_pinglist[n].info, cl_pinglist[n].time);
+	CL_SetServerInfoByAddress(&cl_pinglist[n].adr, cl_pinglist[n].info, state, cl_pinglist[n].time);
 
 	*pingtime = time;
+	return state;
 }
 
 /*
@@ -3572,7 +3481,7 @@ ping_t* CL_GetFreePing( void )
 		// find free ping slot
 		if (pingptr->adr.port)
 		{
-			if (!pingptr->time)
+			if (!pingptr->answered)
 			{
 				if (Sys_Milliseconds() - pingptr->start < 500)
 				{
@@ -3638,8 +3547,9 @@ void CL_Ping_f( void ) {
 	memcpy( &pingptr->adr, &to, sizeof (netadr_t) );
 	pingptr->start = Sys_Milliseconds();
 	pingptr->time  = 0;
+	pingptr->answered = qfalse;
 
-	CL_SetServerInfoByAddress(&pingptr->adr, NULL, 0);
+	CL_SetServerInfoByAddress(&pingptr->adr, NULL, LANSERVER_WAITING, 0);
 
 	NET_OutOfBandPrint( NS_CLIENT, &to, "getinfo xxx" );
 }
@@ -3684,7 +3594,7 @@ qboolean CL_UpdateVisiblePings_f(int source) {
 		}
 		for (i = 0; i < max; i++) {
 			if (server[i].visible) {
-				if (server[i].ping == -1) {
+				if (server[i].state == LANSERVER_NOT_ASKED) {
 					int j;
 
 					if (slots >= MAX_PINGREQUESTS) {
@@ -3709,13 +3619,14 @@ qboolean CL_UpdateVisiblePings_f(int source) {
 						memcpy(&cl_pinglist[j].adr, &server[i].adr, sizeof(netadr_t));
 						cl_pinglist[j].start = Sys_Milliseconds();
 						cl_pinglist[j].time = 0;
+						cl_pinglist[j].answered = qfalse;
 						NET_OutOfBandPrint( NS_CLIENT, &cl_pinglist[j].adr, "getinfo xxx" );
 						slots++;
 					}
 				}
 				// if the server has a ping higher than cl_maxPing or
 				// the ping packet got lost
-				else if (server[i].ping == 0) {
+				else if (server[i].state == LANSERVER_NO_ANSWER) {
 					// if we are updating global servers
 					if (source == AS_GLOBAL) {
 						//
@@ -3738,8 +3649,7 @@ qboolean CL_UpdateVisiblePings_f(int source) {
 		if (!cl_pinglist[i].adr.port) {
 			continue;
 		}
-		CL_GetPing( i, buff, MAX_STRING_CHARS, &pingTime );
-		if (pingTime != 0) {
+		if (CL_GetPing( i, buff, MAX_STRING_CHARS, &pingTime ) != LANSERVER_WAITING) {
 			CL_ClearPing(i);
 			status = qtrue;
 		}

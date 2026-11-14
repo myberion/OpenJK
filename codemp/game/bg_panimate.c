@@ -1594,7 +1594,7 @@ int BG_AnimLength( int index, animNumber_t anim ) {
 		return 0;
 	}
 
-	return bgAllAnims[index].anims[anim].numFrames * fabs( (float)(bgAllAnims[index].anims[anim].frameLerp) );
+	return bgAllAnims[index].anims[anim].numFrames * Q_fabs( (float)(bgAllAnims[index].anims[anim].frameLerp) );
 }
 
 //just use whatever pm->animations is
@@ -1603,7 +1603,7 @@ int PM_AnimLength( int index, animNumber_t anim ) {
 		return 0;
 	}
 
-	return pm->animations[anim].numFrames * fabs( (float)(pm->animations[anim].frameLerp) );
+	return pm->animations[anim].numFrames * Q_fabs( (float)(pm->animations[anim].frameLerp) );
 }
 
 void PM_DebugLegsAnim(int anim)
@@ -2469,18 +2469,18 @@ int BG_ParseAnimationFile(const char *filename, animation_t *animset, qboolean i
 		{
 			break;
 		}
-		fps = atof( token );
+		fps = Q_atof( token );
 		if ( fps == 0 )
 		{
 			fps = 1;//Don't allow divide by zero error
 		}
 		if ( fps < 0 )
 		{//backwards
-			animset[animNum].frameLerp = floor(1000.0f / fps);
+			animset[animNum].frameLerp = Q_floor(1000.0f / fps);
 		}
 		else
 		{
-			animset[animNum].frameLerp = ceil(1000.0f / fps);
+			animset[animNum].frameLerp = Q_ceil(1000.0f / fps);
 		}
 	}
 /*
@@ -2575,6 +2575,13 @@ static void BG_StartLegsAnim( playerState_t *ps, int anim )
 		//one frame, indicating that anim should be restarted.
 		BG_FlipPart(ps, SETANIM_LEGS);
 	}
+#elif defined( _CGAME )
+	else if (ps == pm_startPs && pm_startLegsAnim == anim)
+	{ // the server's rule above, in the prediction: its entity state holds the animation its last frame ended with, which
+		// is the one the predicted command starts from. Without it the client restarted the animation once less than the
+		// server within a command that leaves it and takes it again (zoomed with the disruptor: at every tick)
+		BG_FlipPart(ps, SETANIM_LEGS);
+	}
 #endif
 	ps->legsAnim = anim;
 
@@ -2638,6 +2645,11 @@ void BG_StartTorsoAnim( playerState_t *ps, int anim )
 	else if (g_entities[ps->clientNum].s.torsoAnim == anim)
 	{ //toggled anim to one anim then back to the one we were at previously in
 		//one frame, indicating that anim should be restarted.
+		BG_FlipPart(ps, SETANIM_TORSO);
+	}
+#elif defined( _CGAME )
+	else if (ps == pm_startPs && pm_startTorsoAnim == anim)
+	{ // as for the legs (BG_StartLegsAnim)
 		BG_FlipPart(ps, SETANIM_TORSO);
 	}
 #endif
@@ -2795,7 +2807,7 @@ void BG_SetAnimFinal(playerState_t *ps, animation_t *animations,
 				int dur;
 				int speedDif;
 
-				dur = (animations[anim].numFrames-1) * fabs((float)(animations[anim].frameLerp));
+				dur = (animations[anim].numFrames-1) * Q_fabs((float)(animations[anim].frameLerp));
 				speedDif = dur - (dur * editAnimSpeed);
 				dur += speedDif;
 				if (dur > 1)
@@ -2804,12 +2816,12 @@ void BG_SetAnimFinal(playerState_t *ps, animation_t *animations,
 				}
 				else
 				{
-					ps->torsoTimer = fabs((float)(animations[anim].frameLerp));
+					ps->torsoTimer = Q_fabs((float)(animations[anim].frameLerp));
 				}
 			}
 			else
 			{
-				ps->torsoTimer = ((animations[anim].numFrames ) * fabs((float)(animations[anim].frameLerp)));
+				ps->torsoTimer = ((animations[anim].numFrames ) * Q_fabs((float)(animations[anim].frameLerp)));
 			}
 
 			if (ps->fd.forcePowersActive & (1 << FP_RAGE))
@@ -2843,7 +2855,7 @@ setAnimLegs:
 				int dur;
 				int speedDif;
 
-				dur = (animations[anim].numFrames-1) * fabs((float)(animations[anim].frameLerp));
+				dur = (animations[anim].numFrames-1) * Q_fabs((float)(animations[anim].frameLerp));
 				speedDif = dur - (dur * editAnimSpeed);
 				dur += speedDif;
 				if (dur > 1)
@@ -2852,12 +2864,12 @@ setAnimLegs:
 				}
 				else
 				{
-					ps->legsTimer = fabs((float)(animations[anim].frameLerp));
+					ps->legsTimer = Q_fabs((float)(animations[anim].frameLerp));
 				}
 			}
 			else
 			{
-				ps->legsTimer = ((animations[anim].numFrames ) * fabs((float)(animations[anim].frameLerp)));
+				ps->legsTimer = ((animations[anim].numFrames ) * Q_fabs((float)(animations[anim].frameLerp)));
 			}
 
 			if (PM_RunningAnim(anim) ||

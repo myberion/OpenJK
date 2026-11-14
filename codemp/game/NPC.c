@@ -396,9 +396,9 @@ void pitch_roll_for_slope( gentity_t *forwhom, vec3_t pass_slope )
 		float oldmins2;
 
 		forwhom->client->ps.viewangles[PITCH] = dot * pitch;
-		forwhom->client->ps.viewangles[ROLL] = ((1-Q_fabs(dot)) * pitch * mod);
+		forwhom->client->ps.viewangles[ROLL] = ((1-Q_fabsf(dot)) * pitch * mod);
 		oldmins2 = forwhom->r.mins[2];
-		forwhom->r.mins[2] = -24 + 12 * fabs(forwhom->client->ps.viewangles[PITCH])/180.0f;
+		forwhom->r.mins[2] = -24 + 12 * Q_fabs(forwhom->client->ps.viewangles[PITCH])/180.0f;
 		//FIXME: if it gets bigger, move up
 		if ( oldmins2 > forwhom->r.mins[2] )
 		{//our mins is now lower, need to move up
@@ -411,7 +411,7 @@ void pitch_roll_for_slope( gentity_t *forwhom, vec3_t pass_slope )
 	else
 	{
 		forwhom->r.currentAngles[PITCH] = dot * pitch;
-		forwhom->r.currentAngles[ROLL] = ((1-Q_fabs(dot)) * pitch * mod);
+		forwhom->r.currentAngles[ROLL] = ((1-Q_fabsf(dot)) * pitch * mod);
 	}
 }
 
@@ -747,7 +747,9 @@ void NPC_HandleAIFlags (void)
 	//been told to play a victory sound after a delay
 	if ( NPCS.NPCInfo->greetingDebounceTime && NPCS.NPCInfo->greetingDebounceTime < level.time )
 	{
-		G_AddVoiceEvent( NPCS.NPC, Q_irand(EV_VICTORY1, EV_VICTORY3), Q_irand( 2000, 4000 ) );
+		// the event drawn first on every compiler (the order of a call's arguments is unspecified)
+		const int victory = Q_irand(EV_VICTORY1, EV_VICTORY3);
+		G_AddVoiceEvent( NPCS.NPC, victory, Q_irand( 2000, 4000 ) );
 		NPCS.NPCInfo->greetingDebounceTime = 0;
 	}
 

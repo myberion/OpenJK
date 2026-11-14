@@ -29,8 +29,16 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #ifndef _WIN32
 #include <cmath>
 #endif
-unsigned	frame_msec;
+unsigned	frame_msec;		// the frame's length: the view turns every frame
 int			old_com_frameTime;
+// One user command per tick (plan step 14): the key states are measured over the time since the last command, and the
+// movement the mouse gives while strafing or without mouse look is gathered over the frames until the next command.
+static unsigned	s_cmdMsec;			// the input's time since the last command was made
+static int		s_lastCmdFrameTime;
+// The input's time, on the clock of com_frameTime and of the key events: the frame's time when a frame reads the input,
+// the present time when a tick's command is made between two frames (CL_InputTick)
+static int		s_inputTime;
+static float	s_mouseSide, s_mouseForward;
 
 float cl_mPitchOverride = 0.0f;
 float cl_mYawOverride = 0.0f;
@@ -474,10 +482,11 @@ void IN_KeyUp( kbutton_t *b ) {
 ===============
 CL_KeyState
 
-Returns the fraction of the frame that the key was down
+Returns the fraction of the span (the frame for the view angles, the time since the last
+command for the movement) that the key was down
 ===============
 */
-float CL_KeyState( kbutton_t *key ) {
+float CL_KeyState( kbutton_t *key, unsigned span ) {
 	float		val;
 	int			msec;
 
@@ -487,11 +496,11 @@ float CL_KeyState( kbutton_t *key ) {
 	if ( key->active ) {
 		// still down
 		if ( !key->downtime ) {
-			msec = com_frameTime;
+			msec = s_inputTime;
 		} else {
-			msec += com_frameTime - key->downtime;
+			msec += s_inputTime - key->downtime;
 		}
-		key->downtime = com_frameTime;
+		key->downtime = s_inputTime;
 	}
 
 #if 0
@@ -500,7 +509,7 @@ float CL_KeyState( kbutton_t *key ) {
 	}
 #endif
 
-	val = (float)msec / frame_msec;
+	val = (float)msec / span;
 	if ( val < 0 ) {
 		val = 0;
 	}
@@ -833,19 +842,19 @@ void CL_AdjustAngles( void ) {
 		{
 			if ( cl_mSensitivityOverride )
 			{
-				cl.viewangles[YAW] -= cl_mYawOverride*cl_mSensitivityOverride*speed*cl_yawspeed->value*CL_KeyState (&in_right);
-				cl.viewangles[YAW] += cl_mYawOverride*cl_mSensitivityOverride*speed*cl_yawspeed->value*CL_KeyState (&in_left);
+				cl.viewangles[YAW] -= cl_mYawOverride*cl_mSensitivityOverride*speed*cl_yawspeed->value*CL_KeyState (&in_right, frame_msec);
+				cl.viewangles[YAW] += cl_mYawOverride*cl_mSensitivityOverride*speed*cl_yawspeed->value*CL_KeyState (&in_left, frame_msec);
 			}
 			else
 			{
-				cl.viewangles[YAW] -= cl_mYawOverride*OVERRIDE_MOUSE_SENSITIVITY*speed*cl_yawspeed->value*CL_KeyState (&in_right);
-				cl.viewangles[YAW] += cl_mYawOverride*OVERRIDE_MOUSE_SENSITIVITY*speed*cl_yawspeed->value*CL_KeyState (&in_left);
+				cl.viewangles[YAW] -= cl_mYawOverride*OVERRIDE_MOUSE_SENSITIVITY*speed*cl_yawspeed->value*CL_KeyState (&in_right, frame_msec);
+				cl.viewangles[YAW] += cl_mYawOverride*OVERRIDE_MOUSE_SENSITIVITY*speed*cl_yawspeed->value*CL_KeyState (&in_left, frame_msec);
 			}
 		}
 		else
 		{
-			cl.viewangles[YAW] -= speed*cl_yawspeed->value*CL_KeyState (&in_right);
-			cl.viewangles[YAW] += speed*cl_yawspeed->value*CL_KeyState (&in_left);
+			cl.viewangles[YAW] -= speed*cl_yawspeed->value*CL_KeyState (&in_right, frame_msec);
+			cl.viewangles[YAW] += speed*cl_yawspeed->value*CL_KeyState (&in_left, frame_msec);
 		}
 	}
 
@@ -853,19 +862,19 @@ void CL_AdjustAngles( void ) {
 	{
 		if ( cl_mSensitivityOverride )
 		{
-			cl.viewangles[PITCH] -= cl_mPitchOverride*cl_mSensitivityOverride*speed*cl_pitchspeed->value * CL_KeyState (&in_lookup);
-			cl.viewangles[PITCH] += cl_mPitchOverride*cl_mSensitivityOverride*speed*cl_pitchspeed->value * CL_KeyState (&in_lookdown);
+			cl.viewangles[PITCH] -= cl_mPitchOverride*cl_mSensitivityOverride*speed*cl_pitchspeed->value * CL_KeyState (&in_lookup, frame_msec);
+			cl.viewangles[PITCH] += cl_mPitchOverride*cl_mSensitivityOverride*speed*cl_pitchspeed->value * CL_KeyState (&in_lookdown, frame_msec);
 		}
 		else
 		{
-			cl.viewangles[PITCH] -= cl_mPitchOverride*OVERRIDE_MOUSE_SENSITIVITY*speed*cl_pitchspeed->value * CL_KeyState (&in_lookup);
-			cl.viewangles[PITCH] += cl_mPitchOverride*OVERRIDE_MOUSE_SENSITIVITY*speed*cl_pitchspeed->value * CL_KeyState (&in_lookdown);
+			cl.viewangles[PITCH] -= cl_mPitchOverride*OVERRIDE_MOUSE_SENSITIVITY*speed*cl_pitchspeed->value * CL_KeyState (&in_lookup, frame_msec);
+			cl.viewangles[PITCH] += cl_mPitchOverride*OVERRIDE_MOUSE_SENSITIVITY*speed*cl_pitchspeed->value * CL_KeyState (&in_lookdown, frame_msec);
 		}
 	}
 	else
 	{
-		cl.viewangles[PITCH] -= speed*cl_pitchspeed->value * CL_KeyState (&in_lookup);
-		cl.viewangles[PITCH] += speed*cl_pitchspeed->value * CL_KeyState (&in_lookdown);
+		cl.viewangles[PITCH] -= speed*cl_pitchspeed->value * CL_KeyState (&in_lookup, frame_msec);
+		cl.viewangles[PITCH] += speed*cl_pitchspeed->value * CL_KeyState (&in_lookdown, frame_msec);
 	}
 }
 
@@ -897,19 +906,19 @@ void CL_KeyMove( usercmd_t *cmd ) {
 	side = 0;
 	up = 0;
 	if ( in_strafe.active ) {
-		side += movespeed * CL_KeyState (&in_right);
-		side -= movespeed * CL_KeyState (&in_left);
+		side += movespeed * CL_KeyState (&in_right, s_cmdMsec);
+		side -= movespeed * CL_KeyState (&in_left, s_cmdMsec);
 	}
 
-	side += movespeed * CL_KeyState (&in_moveright);
-	side -= movespeed * CL_KeyState (&in_moveleft);
+	side += movespeed * CL_KeyState (&in_moveright, s_cmdMsec);
+	side -= movespeed * CL_KeyState (&in_moveleft, s_cmdMsec);
 
 
-	up += movespeed * CL_KeyState (&in_up);
-	up -= movespeed * CL_KeyState (&in_down);
+	up += movespeed * CL_KeyState (&in_up, s_cmdMsec);
+	up -= movespeed * CL_KeyState (&in_down, s_cmdMsec);
 
-	forward += movespeed * CL_KeyState (&in_forward);
-	forward -= movespeed * CL_KeyState (&in_back);
+	forward += movespeed * CL_KeyState (&in_forward, s_cmdMsec);
+	forward -= movespeed * CL_KeyState (&in_back, s_cmdMsec);
 
 	cmd->forwardmove = ClampChar( forward );
 	cmd->rightmove = ClampChar( side );
@@ -962,20 +971,18 @@ void CL_JoystickEvent( int axis, int value, int time ) {
 
 /*
 =================
-CL_JoystickMove
+CL_JoystickAngles
+
+The view angles the joystick gives, every frame
 =================
 */
 extern cvar_t *in_joystick;
-void CL_JoystickMove( usercmd_t *cmd ) {
+static void CL_JoystickAngles( void ) {
 	float	anglespeed;
 
 	if ( !in_joystick->integer )
 	{
 		return;
-	}
-
-	if ( !(in_speed.active ^ cl_run->integer) ) {
-		cmd->buttons |= BUTTON_WALKING;
 	}
 
 	if ( in_speed.active ) {
@@ -1001,10 +1008,6 @@ void CL_JoystickMove( usercmd_t *cmd ) {
 			cl.viewangles[YAW] += anglespeed * (cl_yawspeed->value / 100.0f) * cl.joystickAxis[AXIS_SIDE];
 		}
 	}
-	else
-	{
-		cmd->rightmove = ClampChar( cmd->rightmove + cl.joystickAxis[AXIS_SIDE] );
-	}
 
 	if ( in_mlooking || cl_freelook->integer ) {
 		if ( cl_mPitchOverride )
@@ -1022,8 +1025,31 @@ void CL_JoystickMove( usercmd_t *cmd ) {
 		{
 			cl.viewangles[PITCH] += anglespeed * (cl_pitchspeed->value / 100.0f) * cl.joystickAxis[AXIS_FORWARD];
 		}
-	} else
+	}
+}
+
+/*
+=================
+CL_JoystickMove
+
+The movement the joystick gives, per command
+=================
+*/
+static void CL_JoystickMove( usercmd_t *cmd ) {
+	if ( !in_joystick->integer )
 	{
+		return;
+	}
+
+	if ( !(in_speed.active ^ cl_run->integer) ) {
+		cmd->buttons |= BUTTON_WALKING;
+	}
+
+	if ( in_strafe.active ) {
+		cmd->rightmove = ClampChar( cmd->rightmove + cl.joystickAxis[AXIS_SIDE] );
+	}
+
+	if ( !in_mlooking && !cl_freelook->integer ) {
 		cmd->forwardmove = ClampChar( cmd->forwardmove + cl.joystickAxis[AXIS_FORWARD] );
 	}
 
@@ -1033,9 +1059,11 @@ void CL_JoystickMove( usercmd_t *cmd ) {
 /*
 =================
 CL_MouseMove
+
+Every frame: the view angles now, and the movement of strafing or of no mouse look gathered for the next command
 =================
 */
-void CL_MouseMove( usercmd_t *cmd ) {
+static void CL_MouseMove( void ) {
 	float	mx, my;
 	const float	speed = static_cast<float>(frame_msec);
 
@@ -1097,10 +1125,10 @@ void CL_MouseMove( usercmd_t *cmd ) {
 			// cl_mouseAccelOffset is the rate for which the acceleration will have doubled the non accelerated amplification
 			// NOTE: decouple the config cvars for independent acceleration setup along X and Y?
 
-			rate[0] = fabs( mx ) / speed;
-			rate[1] = fabs( my ) / speed;
-			power[0] = powf( rate[0] / cl_mouseAccelOffset->value, cl_mouseAccel->value );
-			power[1] = powf( rate[1] / cl_mouseAccelOffset->value, cl_mouseAccel->value );
+			rate[0] = Q_fabs( mx ) / speed;
+			rate[1] = Q_fabs( my ) / speed;
+			power[0] = Q_powf( rate[0] / cl_mouseAccelOffset->value, cl_mouseAccel->value );
+			power[1] = Q_powf( rate[1] / cl_mouseAccelOffset->value, cl_mouseAccel->value );
 
 			if ( cl_mYawOverride || cl_mPitchOverride )
 			{//FIXME: different people have different speed mouses,
@@ -1157,7 +1185,7 @@ void CL_MouseMove( usercmd_t *cmd ) {
 
 	// add mouse X/Y movement to cmd
 	if ( in_strafe.active )
-		cmd->rightmove = ClampChar( cmd->rightmove + m_side->value * mx );
+		s_mouseSide += m_side->value * mx;
 	else {
 		if ( cl_mYawOverride )
 			cl.viewangles[YAW] -= cl_mYawOverride * mx;
@@ -1179,7 +1207,7 @@ void CL_MouseMove( usercmd_t *cmd ) {
 			cl.viewangles[PITCH] += pitch * my * cl_pitchSensitivity;
 	}
 	else
-		cmd->forwardmove = ClampChar( cmd->forwardmove - m_forward->value * my );
+		s_mouseForward -= m_forward->value * my;
 }
 
 qboolean CL_NoUseableForce(void)
@@ -1279,7 +1307,7 @@ void CL_FinishMove( usercmd_t *cmd ) {
 		//yawDelta *= (4.0f*pVeh->m_fTimeModifier);
 		cl_sendAngles[ROLL] -= yawDelta;
 
-		float nRoll = fabs(cl_sendAngles[ROLL]);
+		float nRoll = Q_fabs(cl_sendAngles[ROLL]);
 
 		pitchDelta = AngleSubtract(cl.viewangles[PITCH],cl_lastViewAngles[PITCH]);
 		//pitchDelta *= (2.0f*pVeh->m_fTimeModifier);
@@ -1332,12 +1360,6 @@ CL_CreateCmd
 */
 usercmd_t CL_CreateCmd( void ) {
 	usercmd_t	cmd;
-	vec3_t		oldAngles;
-
-	VectorCopy( cl.viewangles, oldAngles );
-
-	// keyboard angle adjustment
-	CL_AdjustAngles ();
 
 	Com_Memset( &cmd, 0, sizeof( cmd ) );
 
@@ -1346,11 +1368,40 @@ usercmd_t CL_CreateCmd( void ) {
 	// get basic movement from keyboard
 	CL_KeyMove( &cmd );
 
-	// get basic movement from mouse
-	CL_MouseMove( &cmd );
+	// get basic movement from mouse, gathered over the frames since the last command
+	cmd.rightmove = ClampChar( cmd.rightmove + s_mouseSide );
+	cmd.forwardmove = ClampChar( cmd.forwardmove + s_mouseForward );
+	s_mouseSide = s_mouseForward = 0.0f;
 
 	// get basic movement from joystick
 	CL_JoystickMove( &cmd );
+
+	// store out the final values
+	CL_FinishMove( &cmd );
+
+	return cmd;
+}
+
+/*
+=================
+CL_UpdateViewAngles
+
+The view angles, every frame (plan step 14: the commands are made per tick, the view turns at the frame rate)
+=================
+*/
+static void CL_UpdateViewAngles( void ) {
+	vec3_t		oldAngles;
+
+	VectorCopy( cl.viewangles, oldAngles );
+
+	// keyboard angle adjustment
+	CL_AdjustAngles ();
+
+	// the mouse
+	CL_MouseMove();
+
+	// the joystick
+	CL_JoystickAngles();
 
 	// check to make sure the angles haven't wrapped
 	if ( cl.viewangles[PITCH] - oldAngles[PITCH] > 90 ) {
@@ -1358,9 +1409,6 @@ usercmd_t CL_CreateCmd( void ) {
 	} else if ( oldAngles[PITCH] - cl.viewangles[PITCH] > 90 ) {
 		cl.viewangles[PITCH] = oldAngles[PITCH] - 90;
 	}
-
-	// store out the final values
-	CL_FinishMove( &cmd );
 
 	// draw debug graphs of turning for mouse testing
 	if ( cl_debugMove->integer ) {
@@ -1371,8 +1419,6 @@ usercmd_t CL_CreateCmd( void ) {
 			SCR_DebugGraph( abs(cl.viewangles[PITCH] - oldAngles[PITCH]), 0 );
 		}
 	}
-
-	return cmd;
 }
 
 
@@ -1380,17 +1426,19 @@ usercmd_t CL_CreateCmd( void ) {
 =================
 CL_CreateNewCommands
 
-Create a new usercmd_t structure for this frame
+Turns the view, then creates a usercmd_t for each tick of cl.serverTime this frame
+entered (plan step 14): every command moves TICK_MSEC, whatever the frame rate. A
+command is made as the clock enters its tick, with the input gathered over the tick
+before, and carries the time the tick ends (option C, owner, 13 November 2026), so that
+cgame predicts the tick in progress and draws the local player between two ticks
 =================
 */
 void CL_CreateNewCommands( void ) {
-	int			cmdNum;
-
 	// no need to create usercmds until we have a gamestate
 	if ( cls.state < CA_PRIMED )
 		return;
 
-	frame_msec = com_frameTime - old_com_frameTime;
+	frame_msec = s_inputTime - old_com_frameTime;	// since the input was last read (a frame, or a tick between two)
 
 	// if running over 1000fps, act as if each frame is 1ms
 	// prevents divisions by zero
@@ -1402,28 +1450,77 @@ void CL_CreateNewCommands( void ) {
 	if ( frame_msec > 200 )
 		frame_msec = 200;
 
-	old_com_frameTime = com_frameTime;
+	old_com_frameTime = s_inputTime;
 
-	// generate a command for this frame
-	cl.cmdNumber++;
-	cmdNum = cl.cmdNumber & CMD_MASK;
-	cl.cmds[cmdNum] = CL_CreateCmd();
+	CL_UpdateViewAngles();
+
+	// until the first snapshot the client's clock does not run: a command every frame, as before, so that the packets
+	// whose commands make the server put the client in the world keep coming
+	if ( cls.state != CA_ACTIVE ) {
+		s_cmdMsec = frame_msec;
+		s_lastCmdFrameTime = s_inputTime;
+		cl.cmdNumber++;
+		cl.cmds[cl.cmdNumber & CMD_MASK] = CL_CreateCmd();
+		return;
+	}
+
+	// the end of the tick in progress on the command clock (plan step 14, part 4c: ahead of the server's clock, so that
+	// the command reaches the server just before that tick runs); after the first command, a jump of the clock (by more
+	// than 200 ms either way: a map_restart, a hitch) gives one command at the new time, as one frame's command did
+	const int tick = cl.cmdTime - cl.cmdTime % TICK_MSEC + TICK_MSEC;
+	int last = cl.cmds[cl.cmdNumber & CMD_MASK].serverTime;
+	if ( cl.cmdNumber == 0 || abs( tick - last ) > 200 ) {
+		last = tick - TICK_MSEC;
+	}
+	if ( last >= tick ) {
+		return;	// the gathered input waits for the next tick
+	}
+
+	s_cmdMsec = Q_min( Q_max( s_inputTime - s_lastCmdFrameTime, 1 ), 200 );
+	s_lastCmdFrameTime = s_inputTime;
+	usercmd_t cmd = CL_CreateCmd();
+	for ( int t = last + TICK_MSEC; t <= tick; t += TICK_MSEC ) {
+		cmd.serverTime = t;
+		cl.cmdNumber++;
+		cl.cmds[cl.cmdNumber & CMD_MASK] = cmd;
+		cl.cmdDeltaAt[cl.cmdNumber & CMD_MASK] = cl.cmdTimeDelta;
+		cmd.generic_cmd = 0;	// a one-off command (a style change, a force power): in the first tick only
+	}
+}
+
+/*
+=================
+CL_PendingCmd
+
+The view angles and the command clock of now, for cgame's drawing of the local player
+(plan step 14: the commands are made per tick, the view turns every frame): the last
+command with the view angles of the frame and the command clock as its time, never
+sent. qfalse before the first command.
+=================
+*/
+qboolean CL_PendingCmd( usercmd_t *cmd ) {
+	if ( cl.cmdNumber == 0 ) {
+		return qfalse;
+	}
+	*cmd = cl.cmds[cl.cmdNumber & CMD_MASK];
+	cmd->serverTime = cl.cmdTime;
+	for ( int i = 0; i < 3; i++ ) {
+		cmd->angles[i] = ANGLE2SHORT( cl.viewangles[i] );
+	}
+	return qtrue;
 }
 
 /*
 =================
 CL_ReadyToSendPacket
 
-Returns qfalse if we are over the maxpackets limit
-and should choke back the bandwidth a bit by not sending
-a packet this frame.  All the commands will still get
-delivered in the next packet, but saving a header and
-getting more delta compression will reduce total bandwidth.
+Returns qtrue when this frame made a new command (a packet per tick, plan step 14), or,
+before the client is in the game (awaiting the gamestate or its first snapshot), once
+per interval of MAX_PACKET_RATE
 =================
 */
-qboolean CL_ReadyToSendPacket( void ) {
-	int		oldPacketNum;
-	int		delta;
+static qboolean CL_ReadyToSendPacket( qboolean newCommand ) {
+	const int interval = 1000 / MAX_PACKET_RATE;
 
 	// don't send anything if playing back a demo
 	if ( clc.demoplaying || cls.state == CA_CINEMATIC ) {
@@ -1436,13 +1533,13 @@ qboolean CL_ReadyToSendPacket( void ) {
 		return qfalse;
 	}
 
-	// if we don't have a valid gamestate yet, only send
-	// one packet a second
-	if ( cls.state != CA_ACTIVE &&
-		cls.state != CA_PRIMED &&
-		!*clc.downloadTempName &&
-		cls.realtime - clc.lastPacketSentTime < 1000 ) {
-		return qfalse;
+	// While awaiting the gamestate the client sends at the normal rate (plan step 10; it sent one packet a second): the
+	// server resends a gamestate as soon as the client acknowledges a later message (SV_ExecuteClientMessage), so a
+	// lost gamestate fragment now costs about one round trip instead of a second or more.
+
+	// in the game, a packet carries the new commands (and repeats those of the last CL_PACKET_DUP packets)
+	if ( cls.state == CA_ACTIVE ) {
+		return newCommand;
 	}
 
 	// send every frame for loopbacks
@@ -1450,24 +1547,16 @@ qboolean CL_ReadyToSendPacket( void ) {
 		return qtrue;
 	}
 
-	// send every frame for LAN
-	if ( cl_lanForcePackets->integer && Sys_IsLANAddress( &clc.netchan.remoteAddress ) ) {
-		return qtrue;
-	}
-
-	// check for exceeding cl_maxpackets
-	if ( cl_maxpackets->integer < 20 ) {
-		Cvar_Set( "cl_maxpackets", "20" );
-	}
-	else if ( cl_maxpackets->integer > 1000 ) {
-		Cvar_Set( "cl_maxpackets", "1000" );
-	}
-	oldPacketNum = (clc.netchan.outgoingSequence - 1) & PACKET_MASK;
-	delta = cls.realtime -  cl.outPackets[ oldPacketNum ].p_realtime;
-	if ( delta < 1000 / cl_maxpackets->integer ) {
+	// a packet every frame, up to MAX_PACKET_RATE per second (plan step 11; the server decodes no more). The unused part
+	// of the interval carries over to the next frame (at most one interval), so that the client sends min(frame rate,
+	// MAX_PACKET_RATE) packets per second on average: a minimum gap checked once per frame let a packet leave only every
+	// second frame when the frames were slightly shorter than the gap (62.5 packets per second at 125 fps with a cap of
+	// 100, 72 at 144 fps with a cap of 125).
+	if ( cls.realtime < clc.nextPacketTime ) {
 		// the accumulated commands will go out in the next packet
 		return qfalse;
 	}
+	clc.nextPacketTime = Q_max( clc.nextPacketTime, cls.realtime - interval ) + interval;
 
 	return qtrue;
 }
@@ -1479,120 +1568,58 @@ CL_WritePacket
 Create and send the command packet to the server
 Including both the reliable commands and the usercmds
 
-During normal gameplay, a client packet will contain something like:
-
-4	sequence number
-2	qport
-4	serverid
-4	acknowledged sequence number
-4	clc.serverCommandSequence
-<optional reliable commands>
-1	clc_move or clc_moveNoDelta
-1	command count
-<count * usercmds>
-
+After the netchan header (sequence number, qport), a client packet holds the serverId, the last server message and
+server command received, the client commands not yet acknowledged and the usercmds of the last few packets, all coded
+by netcodec (CL_NetcodecWritePacket, plan step 8).
 ===================
 */
 void CL_WritePacket( void ) {
 	msg_t		buf;
 	byte		data[MAX_MSGLEN];
-	int			i, j;
-	usercmd_t	*cmd, *oldcmd;
-	usercmd_t	nullcmd;
 	int			packetNum;
 	int			oldPacketNum;
-	int			count, key;
+	int			count;
 
 	// don't send anything if playing back a demo
 	if ( clc.demoplaying || cls.state == CA_CINEMATIC ) {
 		return;
 	}
 
-	Com_Memset( &nullcmd, 0, sizeof(nullcmd) );
-	oldcmd = &nullcmd;
-
 	MSG_Init( &buf, data, sizeof(data) );
-
-	MSG_Bitstream( &buf );
-	// write the current serverId so the server
-	// can tell if this is from the current gameState
-	MSG_WriteLong( &buf, cl.serverId );
-
-	// write the last message we received, which can
-	// be used for delta compression, and is also used
-	// to tell if we dropped a gamestate
-	MSG_WriteLong( &buf, clc.serverMessageSequence );
-
-	// write the last reliable message we received
-	MSG_WriteLong( &buf, clc.serverCommandSequence );
-
-	// write any unacknowledged clientCommands
-	for ( i = clc.reliableAcknowledge + 1 ; i <= clc.reliableSequence ; i++ ) {
-		MSG_WriteByte( &buf, clc_clientCommand );
-		MSG_WriteLong( &buf, i );
-		MSG_WriteString( &buf, clc.reliableCommands[ i & (MAX_RELIABLE_COMMANDS-1) ] );
-	}
 
 	// we want to send all the usercmds that were generated in the last
 	// few packet, so even if a couple packets are dropped in a row,
 	// all the cmds will make it to the server
-	if ( cl_packetdup->integer < 0 ) {
-		Cvar_Set( "cl_packetdup", "0" );
-	} else if ( cl_packetdup->integer > 5 ) {
-		Cvar_Set( "cl_packetdup", "5" );
-	}
-	oldPacketNum = (clc.netchan.outgoingSequence - 1 - cl_packetdup->integer) & PACKET_MASK;
+	oldPacketNum = (clc.netchan.outgoingSequence - 1 - CL_PACKET_DUP) & OUT_PACKET_MASK;
 	count = cl.cmdNumber - cl.outPackets[ oldPacketNum ].p_cmdNumber;
 	if ( count > MAX_PACKET_USERCMDS ) {
 		count = MAX_PACKET_USERCMDS;
 		Com_Printf("MAX_PACKET_USERCMDS\n");
 	}
-	if ( count >= 1 ) {
-		if ( cl_showSend->integer ) {
-			Com_Printf( "(%i)", count );
-		}
+	if ( count >= 1 && cl_showSend->integer ) {
+		Com_Printf( "(%i)", count );
+	}
 
-		// begin a client move command
-		if ( cl_nodelta->integer || !cl.snap.valid
-			|| clc.demowaiting
-			|| clc.serverMessageSequence != cl.snap.messageNum ) {
-			MSG_WriteByte (&buf, clc_moveNoDelta);
-		} else {
-			MSG_WriteByte (&buf, clc_move);
-		}
+	// the usercmds are a delta (clc_move) unless the last message's snapshot is missing (clc_moveNoDelta: the server
+	// sends a full snapshot)
+	const qboolean delta = ( !cl_nodelta->integer && cl.snap.valid && clc.serverMessageSequence == cl.snap.messageNum ) ? qtrue : qfalse;
+	if ( !CL_NetcodecWritePacket( &buf, count, delta ) ) {
+		return;
+	}
 
-		// write the command count
-		MSG_WriteByte( &buf, count );
-
-		// use the checksum feed in the key
-		key = clc.checksumFeed;
-		// also use the message acknowledge
-		key ^= clc.serverMessageSequence;
-		// also use the last acknowledged server command in the key
-		key ^= Com_HashKey(clc.serverCommands[ clc.serverCommandSequence & (MAX_RELIABLE_COMMANDS-1) ], 32);
-
-		// write all the commands, including the predicted command
-		for ( i = 0 ; i < count ; i++ ) {
-			j = (cl.cmdNumber - count + i + 1) & CMD_MASK;
-			cmd = &cl.cmds[j];
-			MSG_WriteDeltaUsercmdKey (&buf, key, oldcmd, cmd);
-			oldcmd = cmd;
-		}
-
-		if (cl.gcmdSentValue)
-		{ //hmm, just clear here, I guess.. hoping it will resolve issues with gencmd values sometimes not going through.
-			cl.gcmdSendValue = qfalse;
-			cl.gcmdSentValue = qfalse;
-			cl.gcmdValue = 0;
-		}
+	if ( count >= 1 && cl.gcmdSentValue )
+	{ //hmm, just clear here, I guess.. hoping it will resolve issues with gencmd values sometimes not going through.
+		cl.gcmdSendValue = qfalse;
+		cl.gcmdSentValue = qfalse;
+		cl.gcmdValue = 0;
 	}
 
 	//
 	// deliver the message
 	//
-	packetNum = clc.netchan.outgoingSequence & PACKET_MASK;
-	cl.outPackets[ packetNum ].p_realtime = cls.realtime;
-	cl.outPackets[ packetNum ].p_serverTime = oldcmd->serverTime;
+	packetNum = clc.netchan.outgoingSequence & OUT_PACKET_MASK;
+	cl.outPackets[ packetNum ].p_realtime = Sys_Milliseconds();
+	cl.outPackets[ packetNum ].p_serverTime = count >= 1 ? cl.cmds[ cl.cmdNumber & CMD_MASK ].serverTime : 0;
 	cl.outPackets[ packetNum ].p_cmdNumber = cl.cmdNumber;
 	clc.lastPacketSentTime = cls.realtime;
 
@@ -1617,6 +1644,23 @@ CL_SendCmd
 Called every frame to builds and sends a command packet to the server.
 =================
 */
+// makes the commands that are due at the input's time and sends their packet
+static void CL_MakeAndSend( void ) {
+	// we create commands even if a demo is playing,
+	const int cmdNumber = cl.cmdNumber;
+	CL_CreateNewCommands();
+
+	// don't send a packet if the last packet was sent too recently
+	if ( !CL_ReadyToSendPacket( cl.cmdNumber != cmdNumber ? qtrue : qfalse ) ) {
+		if ( cl_showSend->integer ) {
+			Com_Printf( ". " );
+		}
+		return;
+	}
+
+	CL_WritePacket();
+}
+
 void CL_SendCmd( void ) {
 	// don't send any message if not connected
 	if ( cls.state < CA_CONNECTED ) {
@@ -1628,18 +1672,66 @@ void CL_SendCmd( void ) {
 		return;
 	}
 
-	// we create commands even if a demo is playing,
-	CL_CreateNewCommands();
+	s_inputTime = com_frameTime;
+	CL_MakeAndSend();
+}
 
-	// don't send a packet if the last packet was sent too recently
-	if ( !CL_ReadyToSendPacket() ) {
-		if ( cl_showSend->integer ) {
-			Com_Printf( ". " );
-		}
-		return;
+/*
+=================
+CL_NextCommandMsec
+
+How long until the command clock enters its next tick, in ms of real time (0: it has, the tick's command is due); -1
+when no command is to be made between two frames: not in a game, a demo, a pause, or a jump of the clock (left to the
+frame, as a map_restart or a hitch is). The command clock is read at the present time: cls.realtime moves once per
+frame, with com_frameTime.
+=================
+*/
+int CL_NextCommandMsec( void ) {
+	if ( cls.state != CA_ACTIVE || clc.demoplaying || cl.cmdNumber == 0 ) {
+		return -1;
+	}
+	if ( com_sv_running->integer && sv_paused->integer && cl_paused->integer ) {
+		return -1;
+	}
+	const int now = Q_max( cls.realtime + ( Sys_Milliseconds() - com_frameTime ) + cl.cmdTimeDelta, cl.oldCmdTime );
+	const int last = cl.cmds[cl.cmdNumber & CMD_MASK].serverTime;	// the end of the tick the last command is for
+
+	if ( abs( now - last ) > 200 ) {
+		return -1;
+	}
+	return Q_max( last - now, 0 );
+}
+
+/*
+=================
+CL_InputTick
+
+Between two frames, when the command clock enters a tick (Com_Frame): reads the input (the system's events, the key
+binds), turns the view, makes the tick's command and sends its packet, as a frame does, without drawing. The client's
+clock is set to the present for it (the packet's send time, the command clock) and put back: the frame that follows
+moves it by its whole length. Returns qfalse when no command was made (the events changed the client's state).
+=================
+*/
+qboolean CL_InputTick( void ) {
+	const int cmdNumber = cl.cmdNumber;
+	const int realtime = cls.realtime;
+
+	s_inputTime = Com_EventLoop();	// Com_Frame has just polled the input (IN_Frame)
+	// the key binds go through the command buffer; not while a wait command counts frames (this is not one)
+	if ( !Cbuf_Waiting() ) {
+		Cbuf_Execute();
+	}
+	if ( cls.state < CA_CONNECTED || CL_NextCommandMsec() != 0 ) {
+		return qfalse;
 	}
 
-	CL_WritePacket();
+	cls.realtime += s_inputTime - com_frameTime;
+	cl.cmdTime = Q_max( cls.realtime + cl.cmdTimeDelta, cl.oldCmdTime );
+	cl.oldCmdTime = cl.cmdTime;
+	CL_MakeAndSend();
+	cls.realtime = realtime;
+
+	return cl.cmdNumber != cmdNumber ? qtrue : qfalse;
 }
 
 static const cmdList_t inputCmds[] =

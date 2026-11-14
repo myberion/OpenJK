@@ -51,22 +51,8 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 	source_group("ghoul2" FILES ${SPRDVanillaG2Files})
 	set(SPRDVanillaFiles ${SPRDVanillaFiles} ${SPRDVanillaG2Files})
 
-    # Transparently use either bundled or system jpeg.
-    list(APPEND SPRDVanillaRendererIncludeDirectories ${JPEG_INCLUDE_DIR})
-    list(APPEND SPRDVanillaRendererLibraries          ${JPEG_LIBRARIES})
-
-    # Transparently use either bundled or system libpng.  Order is important --
-    # libpng used zlib, so it must come before it on the linker command line.
-    list(APPEND SPRDVanillaRendererIncludeDirectories ${PNG_INCLUDE_DIRS})
-    list(APPEND SPRDVanillaRendererLibraries          ${PNG_LIBRARIES})
-
-    # Transparently use either bundled or system zlib.
-    list(APPEND SPRDVanillaRendererIncludeDirectories ${ZLIB_INCLUDE_DIR})
-    list(APPEND SPRDVanillaRendererLibraries          ${ZLIB_LIBRARIES})
-
-    # Transparently use our bundled minizip.
-    list(APPEND SPRDVanillaRendererIncludeDirectories ${MINIZIP_INCLUDE_DIRS})
-    list(APPEND SPRDVanillaRendererLibraries          ${MINIZIP_LIBRARIES})
+    # The image libraries, vendored and compiled inside shared/rd-common/tr_image_codec.cpp: Wuffs decodes, stb_image_write writes.
+    list(APPEND SPRDVanillaRendererIncludeDirectories "${CMAKE_SOURCE_DIR}/lib/wuffs" "${CMAKE_SOURCE_DIR}/lib/stb")
 
     # Transparantly make use of all renderer directories
     list(APPEND SPRDVanillaRendererIncludeDirectories "${SPDir}/rd-common")
@@ -139,10 +125,8 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		"${SPDir}/rd-common/tr_common.h"
 		"${SPDir}/rd-common/tr_font.cpp"
 		"${SPDir}/rd-common/tr_font.h"
-		"${SPDir}/rd-common/tr_image_load.cpp"
-		"${SPDir}/rd-common/tr_image_jpg.cpp"
-		"${SPDir}/rd-common/tr_image_tga.cpp"
-		"${SPDir}/rd-common/tr_image_png.cpp"
+		"${SharedDir}/rd-common/tr_image_load.cpp"
+		"${SharedDir}/rd-common/tr_image_codec.cpp"
 		"${SPDir}/rd-common/tr_noise.cpp"
 		"${SPDir}/rd-common/tr_public.h"
 		"${SPDir}/rd-common/tr_types.h")
@@ -189,7 +173,7 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		set_target_properties(${ProjectName} PROPERTIES INCLUDE_DIRECTORIES "${SPRDVanillaRendererIncludeDirectories}")
 		set_target_properties(${ProjectName} PROPERTIES PROJECT_LABEL ${Label})
 
-		target_link_libraries(${ProjectName} ${SPRDVanillaRendererLibraries})
+		target_link_libraries(${ProjectName} ${SPRDVanillaRendererLibraries} qlibm)
 	endfunction(add_sp_renderer_project)
 
 	if(BuildSPRdVanilla)

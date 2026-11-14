@@ -320,22 +320,6 @@ void *Z_Malloc(int iSize, memtag_t eTag, qboolean bZeroit /* = qfalse */, int iU
 	return pvReturnMem;
 }
 
-// Special wrapper around Z_Malloc for better separation between the main engine
-// code and the bundled minizip library.
-
-extern "C" Q_EXPORT void* openjk_minizip_malloc(int size);
-extern "C" Q_EXPORT void openjk_minizip_free(void* to_free);
-
-void* openjk_minizip_malloc(int size)
-{
-    return Z_Malloc(size, TAG_MINIZIP, qfalse, 0);
-}
-
-void openjk_minizip_free(void *to_free)
-{
-    Z_Free(to_free);
-}
-
 // used during model cacheing to save an extra malloc, lets us morph the disk-load buffer then
 //	just not fs_freefile() it afterwards.
 //
@@ -569,7 +553,7 @@ static void Z_Details_f(void)
 			//
 			float	fSize		= (float)(iThisSize) / 1024.0f / 1024.0f;
 			int		iSize		= fSize;
-			int		iRemainder 	= 100.0f * (fSize - floor(fSize));
+			int		iRemainder 	= 100.0f * (fSize - Q_floor(fSize));
 			Com_Printf("%20s %9d (%2d.%02dMB) in %6d blocks (%9d average)\n",
 					    psTagStrings[i],
 							  iThisSize,

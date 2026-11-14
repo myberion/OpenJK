@@ -35,6 +35,7 @@ NORETURN_PTR void (*Com_Error)( int level, const char *error, ... );
 void (*Com_Printf)( const char *msg, ... );
 
 level_locals_t	level;
+gameStats_t		g_stats;
 
 int		eventClearTime = 0;
 static int navCalcPathTime = 0;
@@ -180,8 +181,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	vmCvar_t	ckSum;
 	char serverinfo[MAX_INFO_STRING] = {0};
 
+	// g_debugSeed: a fixed seed instead of the clock's, so that a run replays the same game when fixedtime is also set
+	// before the map loads (the bench scripts' SEED, plan step 14); read here, before the cvars are registered
+	if ( trap->Cvar_VariableIntegerValue( "g_debugSeed" ) ) {
+		randomSeed = trap->Cvar_VariableIntegerValue( "g_debugSeed" );
+	}
 	Rand_Init( randomSeed );
-	srand( randomSeed );
 
 	//Init RMG to 0, it will be autoset to 1 if there is terrain on the level.
 	trap->Cvar_Set("RMG", "0");
@@ -215,8 +220,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	// set some level globals
 	memset( &level, 0, sizeof( level ) );
-	level.time = levelTime;
-	level.startTime = levelTime;
+	level.tickTime = levelTime;
+	level.time = levelTime / 50 * 50;	// the logic clock (g_local.h)
+	level.startTime = level.time;
 
 	level.follow1 = level.follow2 = -1;
 
@@ -2827,6 +2833,9 @@ void G_RunThink (gentity_t *ent) {
 	if (thinktime <= 0) {
 		goto runicarus;
 	}
+	if ( !G_GRID20_STEP ) {
+		goto runicarus;	// thinks run on the 20 Hz instants of the tick, with the level.time of sv_fps 20 (plan step 14)
+	}
 	if (thinktime > level.time) {
 		goto runicarus;
 	}
@@ -2851,8 +2860,6 @@ runicarus:
 	}
 }
 
-int g_LastFrameTime = 0;
-int g_TimeSinceLastFrame = 0;
 
 qboolean gDoSlowMoDuel = qfalse;
 int gSlowMoDuelTime = 0;
@@ -2933,6 +2940,7 @@ void G_RunFrame( int levelTime ) {
 #endif
 
 	if (level.gametype == GT_SIEGE &&
+		G_GRID20_STEP &&
 		g_siegeRespawn.integer &&
 		g_siegeRespawnCheck < level.time)
 	{ //check for a respawn wave
@@ -2962,7 +2970,7 @@ void G_RunFrame( int levelTime ) {
 
 			trap->Cvar_VariableStringBuffer("timescale", buf, sizeof(buf));
 
-			tFVal = atof(buf);
+			tFVal = Q_atof(buf);
 
 			trap->Cvar_Set("timescale", "1");
 			if (tFVal == 1.0f)
@@ -2999,7 +3007,7 @@ void G_RunFrame( int levelTime ) {
 
 				trap->Cvar_VariableStringBuffer("timescale", buf, sizeof(buf));
 
-				tFVal = atof(buf);
+				tFVal = Q_atof(buf);
 
 				trap->Cvar_Set("timescale", "1");
 				if (timeDif > 1500 && tFVal == 1.0f)
@@ -3016,8 +3024,16 @@ void G_RunFrame( int levelTime ) {
 	}
 
 	level.framenum++;
+	level.tickTime = levelTime;
 	level.previousTime = level.time;
-	level.time = levelTime;
+	level.time = levelTime / 50 * 50;	// the logic clock: the last 20 Hz instant (g_local.h)
+	level.logicFrame = ( level.time != level.previousTime || level.framenum == 1 ) ? qtrue : qfalse;
+
+	G_ScenarioFrame();
+
+	if ( !g_stats.frames++ ) {
+		g_stats.startTime = level.time;
+	}
 
 	if (g_allowNPC.integer)
 	{
@@ -3057,8 +3073,6 @@ void G_RunFrame( int levelTime ) {
 		//Look to clear out old events
 		ClearPlayerAlertEvents();
 	}
-
-	g_TimeSinceLastFrame = (level.time - g_LastFrameTime);
 
 	// get any cvar changes
 	G_UpdateCvars();
@@ -3170,156 +3184,159 @@ void G_RunFrame( int levelTime ) {
 		{
 			G_CheckClientTimeouts ( ent );
 
-			if (ent->client->inSpaceIndex && ent->client->inSpaceIndex != ENTITYNUM_NONE)
-			{ //we're in space, check for suffocating and for exiting
-                gentity_t *spacetrigger = &g_entities[ent->client->inSpaceIndex];
+			if ( G_GRID20_STEP )
+			{ // the game logic tuned on 50 ms frames runs on the 20 Hz instants of the tick, as at sv_fps 20 (plan step 14)
+				if (ent->client->inSpaceIndex && ent->client->inSpaceIndex != ENTITYNUM_NONE)
+				{ //we're in space, check for suffocating and for exiting
+	                gentity_t *spacetrigger = &g_entities[ent->client->inSpaceIndex];
 
-				if (!spacetrigger->inuse ||
-					!G_PointInBounds(ent->client->ps.origin, spacetrigger->r.absmin, spacetrigger->r.absmax))
-				{ //no longer in space then I suppose
-                    ent->client->inSpaceIndex = 0;
-				}
-				else
-				{ //check for suffocation
-                    if (ent->client->inSpaceSuffocation < level.time)
-					{ //suffocate!
-						if (ent->health > 0 && ent->takedamage)
-						{ //if they're still alive..
-							G_Damage(ent, spacetrigger, spacetrigger, NULL, ent->client->ps.origin, Q_irand(50, 70), DAMAGE_NO_ARMOR, MOD_SUICIDE);
+					if (!spacetrigger->inuse ||
+						!G_PointInBounds(ent->client->ps.origin, spacetrigger->r.absmin, spacetrigger->r.absmax))
+					{ //no longer in space then I suppose
+	                    ent->client->inSpaceIndex = 0;
+					}
+					else
+					{ //check for suffocation
+	                    if (ent->client->inSpaceSuffocation < level.time)
+						{ //suffocate!
+							if (ent->health > 0 && ent->takedamage)
+							{ //if they're still alive..
+								G_Damage(ent, spacetrigger, spacetrigger, NULL, ent->client->ps.origin, Q_irand(50, 70), DAMAGE_NO_ARMOR, MOD_SUICIDE);
 
-							if (ent->health > 0)
-							{ //did that last one kill them?
-								//play the choking sound
-								G_EntitySound(ent, CHAN_VOICE, G_SoundIndex(va( "*choke%d.wav", Q_irand( 1, 3 ) )));
+								if (ent->health > 0)
+								{ //did that last one kill them?
+									//play the choking sound
+									G_EntitySound(ent, CHAN_VOICE, G_SoundIndex(va( "*choke%d.wav", Q_irand( 1, 3 ) )));
 
-								//make them grasp their throat
-								ent->client->ps.forceHandExtend = HANDEXTEND_CHOKE;
-								ent->client->ps.forceHandExtendTime = level.time + 2000;
+									//make them grasp their throat
+									ent->client->ps.forceHandExtend = HANDEXTEND_CHOKE;
+									ent->client->ps.forceHandExtendTime = level.time + 2000;
+								}
 							}
-						}
 
-						ent->client->inSpaceSuffocation = level.time + Q_irand(100, 200);
+							ent->client->inSpaceSuffocation = level.time + Q_irand(100, 200);
+						}
 					}
 				}
-			}
 
-			if (ent->client->isHacking)
-			{ //hacking checks
-				gentity_t *hacked = &g_entities[ent->client->isHacking];
-				vec3_t angDif;
+				if (ent->client->isHacking)
+				{ //hacking checks
+					gentity_t *hacked = &g_entities[ent->client->isHacking];
+					vec3_t angDif;
 
-				VectorSubtract(ent->client->ps.viewangles, ent->client->hackingAngles, angDif);
+					VectorSubtract(ent->client->ps.viewangles, ent->client->hackingAngles, angDif);
 
-				//keep him in the "use" anim
-				if (ent->client->ps.torsoAnim != BOTH_CONSOLE1)
-				{
-					G_SetAnim( ent, NULL, SETANIM_TORSO, BOTH_CONSOLE1, SETANIM_FLAG_OVERRIDE|SETANIM_FLAG_HOLD, 0 );
-				}
-				else
-				{
-					ent->client->ps.torsoTimer = 500;
-				}
-				ent->client->ps.weaponTime = ent->client->ps.torsoTimer;
-
-				if (!(ent->client->pers.cmd.buttons & BUTTON_USE))
-				{ //have to keep holding use
-					ent->client->isHacking = 0;
-					ent->client->ps.hackingTime = 0;
-				}
-				else if (!hacked || !hacked->inuse)
-				{ //shouldn't happen, but safety first
-					ent->client->isHacking = 0;
-					ent->client->ps.hackingTime = 0;
-				}
-				else if (!G_PointInBounds( ent->client->ps.origin, hacked->r.absmin, hacked->r.absmax ))
-				{ //they stepped outside the thing they're hacking, so reset hacking time
-					ent->client->isHacking = 0;
-					ent->client->ps.hackingTime = 0;
-				}
-				else if (VectorLength(angDif) > 10.0f)
-				{ //must remain facing generally the same angle as when we start
-					ent->client->isHacking = 0;
-					ent->client->ps.hackingTime = 0;
-				}
-			}
-
-#define JETPACK_DEFUEL_RATE		200 //approx. 20 seconds of idle use from a fully charged fuel amt
-#define JETPACK_REFUEL_RATE		150 //seems fair
-			if (ent->client->jetPackOn)
-			{ //using jetpack, drain fuel
-				if (ent->client->jetPackDebReduce < level.time)
-				{
-					if (ent->client->pers.cmd.upmove > 0)
-					{ //take more if they're thrusting
-						ent->client->ps.jetpackFuel -= 2;
+					//keep him in the "use" anim
+					if (ent->client->ps.torsoAnim != BOTH_CONSOLE1)
+					{
+						G_SetAnim( ent, NULL, SETANIM_TORSO, BOTH_CONSOLE1, SETANIM_FLAG_OVERRIDE|SETANIM_FLAG_HOLD, 0 );
 					}
 					else
 					{
-						ent->client->ps.jetpackFuel--;
+						ent->client->ps.torsoTimer = 500;
 					}
+					ent->client->ps.weaponTime = ent->client->ps.torsoTimer;
 
-					if (ent->client->ps.jetpackFuel <= 0)
-					{ //turn it off
-						ent->client->ps.jetpackFuel = 0;
-						Jetpack_Off(ent);
+					if (!(ent->client->pers.cmd.buttons & BUTTON_USE))
+					{ //have to keep holding use
+						ent->client->isHacking = 0;
+						ent->client->ps.hackingTime = 0;
 					}
-					ent->client->jetPackDebReduce = level.time + JETPACK_DEFUEL_RATE;
-				}
-			}
-			else if (ent->client->ps.jetpackFuel < 100)
-			{ //recharge jetpack
-				if (ent->client->jetPackDebRecharge < level.time)
-				{
-					ent->client->ps.jetpackFuel++;
-					ent->client->jetPackDebRecharge = level.time + JETPACK_REFUEL_RATE;
-				}
-			}
-
-#define CLOAK_DEFUEL_RATE		200 //approx. 20 seconds of idle use from a fully charged fuel amt
-#define CLOAK_REFUEL_RATE		150 //seems fair
-			if (ent->client->ps.powerups[PW_CLOAKED])
-			{ //using cloak, drain battery
-				if (ent->client->cloakDebReduce < level.time)
-				{
-					ent->client->ps.cloakFuel--;
-
-					if (ent->client->ps.cloakFuel <= 0)
-					{ //turn it off
-						ent->client->ps.cloakFuel = 0;
-						Jedi_Decloak(ent);
+					else if (!hacked || !hacked->inuse)
+					{ //shouldn't happen, but safety first
+						ent->client->isHacking = 0;
+						ent->client->ps.hackingTime = 0;
 					}
-					ent->client->cloakDebReduce = level.time + CLOAK_DEFUEL_RATE;
+					else if (!G_PointInBounds( ent->client->ps.origin, hacked->r.absmin, hacked->r.absmax ))
+					{ //they stepped outside the thing they're hacking, so reset hacking time
+						ent->client->isHacking = 0;
+						ent->client->ps.hackingTime = 0;
+					}
+					else if (VectorLength(angDif) > 10.0f)
+					{ //must remain facing generally the same angle as when we start
+						ent->client->isHacking = 0;
+						ent->client->ps.hackingTime = 0;
+					}
 				}
-			}
-			else if (ent->client->ps.cloakFuel < 100)
-			{ //recharge cloak
-				if (ent->client->cloakDebRecharge < level.time)
+
+	#define JETPACK_DEFUEL_RATE		200 //approx. 20 seconds of idle use from a fully charged fuel amt
+	#define JETPACK_REFUEL_RATE		150 //seems fair
+				if (ent->client->jetPackOn)
+				{ //using jetpack, drain fuel
+					if (ent->client->jetPackDebReduce < level.time)
+					{
+						if (ent->client->pers.cmd.upmove > 0)
+						{ //take more if they're thrusting
+							ent->client->ps.jetpackFuel -= 2;
+						}
+						else
+						{
+							ent->client->ps.jetpackFuel--;
+						}
+
+						if (ent->client->ps.jetpackFuel <= 0)
+						{ //turn it off
+							ent->client->ps.jetpackFuel = 0;
+							Jetpack_Off(ent);
+						}
+						ent->client->jetPackDebReduce = level.time + JETPACK_DEFUEL_RATE;
+					}
+				}
+				else if (ent->client->ps.jetpackFuel < 100)
+				{ //recharge jetpack
+					if (ent->client->jetPackDebRecharge < level.time)
+					{
+						ent->client->ps.jetpackFuel++;
+						ent->client->jetPackDebRecharge = level.time + JETPACK_REFUEL_RATE;
+					}
+				}
+
+	#define CLOAK_DEFUEL_RATE		200 //approx. 20 seconds of idle use from a fully charged fuel amt
+	#define CLOAK_REFUEL_RATE		150 //seems fair
+				if (ent->client->ps.powerups[PW_CLOAKED])
+				{ //using cloak, drain battery
+					if (ent->client->cloakDebReduce < level.time)
+					{
+						ent->client->ps.cloakFuel--;
+
+						if (ent->client->ps.cloakFuel <= 0)
+						{ //turn it off
+							ent->client->ps.cloakFuel = 0;
+							Jedi_Decloak(ent);
+						}
+						ent->client->cloakDebReduce = level.time + CLOAK_DEFUEL_RATE;
+					}
+				}
+				else if (ent->client->ps.cloakFuel < 100)
+				{ //recharge cloak
+					if (ent->client->cloakDebRecharge < level.time)
+					{
+						ent->client->ps.cloakFuel++;
+						ent->client->cloakDebRecharge = level.time + CLOAK_REFUEL_RATE;
+					}
+				}
+
+				if (level.gametype == GT_SIEGE &&
+					ent->client->siegeClass != -1 &&
+					(bgSiegeClasses[ent->client->siegeClass].classflags & (1<<CFL_STATVIEWER)))
+				{ //see if it's time to send this guy an update of extended info
+					if (ent->client->siegeEDataSend < level.time)
+					{
+	                    G_SiegeClientExData(ent);
+						ent->client->siegeEDataSend = level.time + 1000; //once every sec seems ok
+					}
+				}
+
+				if((!level.intermissiontime)&&!(ent->client->ps.pm_flags&PMF_FOLLOW) && ent->client->sess.sessionTeam != TEAM_SPECTATOR)
 				{
-					ent->client->ps.cloakFuel++;
-					ent->client->cloakDebRecharge = level.time + CLOAK_REFUEL_RATE;
+					WP_ForcePowersUpdate(ent, &ent->client->pers.cmd );
+					WP_SaberPositionUpdate(ent, &ent->client->pers.cmd);
+					WP_SaberStartMissileBlockCheck(ent, &ent->client->pers.cmd);
 				}
 			}
 
-			if (level.gametype == GT_SIEGE &&
-				ent->client->siegeClass != -1 &&
-				(bgSiegeClasses[ent->client->siegeClass].classflags & (1<<CFL_STATVIEWER)))
-			{ //see if it's time to send this guy an update of extended info
-				if (ent->client->siegeEDataSend < level.time)
-				{
-                    G_SiegeClientExData(ent);
-					ent->client->siegeEDataSend = level.time + 1000; //once every sec seems ok
-				}
-			}
-
-			if((!level.intermissiontime)&&!(ent->client->ps.pm_flags&PMF_FOLLOW) && ent->client->sess.sessionTeam != TEAM_SPECTATOR)
-			{
-				WP_ForcePowersUpdate(ent, &ent->client->pers.cmd );
-				WP_SaberPositionUpdate(ent, &ent->client->pers.cmd);
-				WP_SaberStartMissileBlockCheck(ent, &ent->client->pers.cmd);
-			}
-
-			if (g_allowNPC.integer)
-			{
+			if (g_allowNPC.integer && G_GRID20_STEP)
+			{ // on the 20 Hz instants, as at sv_fps 20: the waypoint serves the NPCs, which think there (plan step 14)
 				//This was originally intended to only be done for client 0.
 				//Make sure it doesn't slow things down too much with lots of clients in game.
 				NAV_FindPlayerWaypoint(i);
@@ -3327,22 +3344,24 @@ void G_RunFrame( int levelTime ) {
 
 			trap->ICARUS_MaintainTaskManager(ent->s.number);
 
-			G_RunClient( ent );
 			continue;
 		}
 		else if (ent->s.eType == ET_NPC)
 		{
 			int j;
-			// turn off any expired powerups
-			for ( j = 0 ; j < MAX_POWERUPS ; j++ ) {
-				if ( ent->client->ps.powerups[ j ] < level.time ) {
-					ent->client->ps.powerups[ j ] = 0;
+			if ( G_GRID20_STEP )
+			{ // as for the clients above
+				// turn off any expired powerups
+				for ( j = 0 ; j < MAX_POWERUPS ; j++ ) {
+					if ( ent->client->ps.powerups[ j ] < level.time ) {
+						ent->client->ps.powerups[ j ] = 0;
+					}
 				}
-			}
 
-			WP_ForcePowersUpdate(ent, &ent->client->pers.cmd );
-			WP_SaberPositionUpdate(ent, &ent->client->pers.cmd);
-			WP_SaberStartMissileBlockCheck(ent, &ent->client->pers.cmd);
+				WP_ForcePowersUpdate(ent, &ent->client->pers.cmd );
+				WP_SaberPositionUpdate(ent, &ent->client->pers.cmd);
+				WP_SaberStartMissileBlockCheck(ent, &ent->client->pers.cmd);
+			}
 		}
 
 		G_RunThink( ent );
@@ -3356,7 +3375,10 @@ void G_RunFrame( int levelTime ) {
 	iTimer_ItemRun = trap->PrecisionTimer_End(timer_ItemRun);
 #endif
 
-	SiegeCheckTimers();
+	if ( G_GRID20_STEP ) {
+		SiegeCheckTimers();
+		G_ScenarioTrace();
+	}
 
 #ifdef _G_FRAME_PERFANAL
 	trap->PrecisionTimer_Start(&timer_ROFF);
@@ -3387,21 +3409,24 @@ void G_RunFrame( int levelTime ) {
 #ifdef _G_FRAME_PERFANAL
 	trap->PrecisionTimer_Start(&timer_GameChecks);
 #endif
-	// see if it is time to do a tournament restart
-	CheckTournament();
+	if ( G_GRID20_STEP )
+	{ // the level's rules on the 20 Hz instants, as at sv_fps 20 (plan step 14)
+		// see if it is time to do a tournament restart
+		CheckTournament();
 
-	// see if it is time to end the level
-	CheckExitRules();
+		// see if it is time to end the level
+		CheckExitRules();
 
-	// update to team status?
-	CheckTeamStatus();
+		// update to team status?
+		CheckTeamStatus();
 
-	// cancel vote if timed out
-	CheckVote();
+		// cancel vote if timed out
+		CheckVote();
 
-	// check team votes
-	CheckTeamVote( TEAM_RED );
-	CheckTeamVote( TEAM_BLUE );
+		// check team votes
+		CheckTeamVote( TEAM_RED );
+		CheckTeamVote( TEAM_BLUE );
+	}
 
 	// for tracking changes
 	CheckCvars();
@@ -3418,7 +3443,7 @@ void G_RunFrame( int levelTime ) {
 	//At the end of the frame, send out the ghoul2 kill queue, if there is one
 	G_SendG2KillQueue();
 
-	if (gQueueScoreMessage)
+	if (gQueueScoreMessage && G_GRID20_STEP)
 	{
 		if (gQueueScoreMessageTime < level.time)
 		{
@@ -3442,8 +3467,6 @@ void G_RunFrame( int levelTime ) {
 		iTimer_GameChecks,
 		iTimer_Queues);
 #endif
-
-	g_LastFrameTime = level.time;
 }
 
 const char *G_GetStringEdString(char *refSection, char *refName)

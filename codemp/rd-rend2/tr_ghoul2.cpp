@@ -1037,7 +1037,7 @@ void G2_CreateQuaterion(mdxaBone_t *mat, vec4_t quat)
 	// Test if ( T > 0.00000001 ) to avoid large distortions!
 	if (t > 0.00000001)
 	{
-      s = sqrt(t) * 2;
+      s = Q_sqrt(t) * 2;
       quat[0] = ( mat->matrix[1][2] - mat->matrix[2][1] ) / s;
       quat[1] = ( mat->matrix[2][0] - mat->matrix[0][2] ) / s;
       quat[2] = ( mat->matrix[0][1] - mat->matrix[1][0] ) / s;
@@ -1051,7 +1051,7 @@ void G2_CreateQuaterion(mdxaBone_t *mat, vec4_t quat)
 		// Depending on this, calculate the following:
 		if ( mat->matrix[0][0] > mat->matrix[1][1] && mat->matrix[0][0] > mat->matrix[2][2] )  {
 			// Column 0:
-			s  = sqrt( 1.0 + mat->matrix[0][0] - mat->matrix[1][1] - mat->matrix[2][2])* 2;
+			s  = Q_sqrt( 1.0 + mat->matrix[0][0] - mat->matrix[1][1] - mat->matrix[2][2])* 2;
 			quat[0] = 0.25 * s;
 			quat[1] = (mat->matrix[0][1] + mat->matrix[1][0] ) / s;
 			quat[2] = (mat->matrix[2][0] + mat->matrix[0][2] ) / s;
@@ -1059,7 +1059,7 @@ void G2_CreateQuaterion(mdxaBone_t *mat, vec4_t quat)
 
 		} else if ( mat->matrix[1][1] > mat->matrix[2][2] ) {
 			// Column 1:
-			s  = sqrt( 1.0 + mat->matrix[1][1] - mat->matrix[0][0] - mat->matrix[2][2] ) * 2;
+			s  = Q_sqrt( 1.0 + mat->matrix[1][1] - mat->matrix[0][0] - mat->matrix[2][2] ) * 2;
 			quat[0] = (mat->matrix[0][1] + mat->matrix[1][0] ) / s;
 			quat[1] = 0.25 * s;
 			quat[2] = (mat->matrix[1][2] + mat->matrix[2][1] ) / s;
@@ -1067,7 +1067,7 @@ void G2_CreateQuaterion(mdxaBone_t *mat, vec4_t quat)
 
 		} else {
 			// Column 2:
-			s  = sqrt( 1.0 + mat->matrix[2][2] - mat->matrix[0][0] - mat->matrix[1][1] ) * 2;
+			s  = Q_sqrt( 1.0 + mat->matrix[2][2] - mat->matrix[0][0] - mat->matrix[1][1] ) * 2;
 			quat[0] = (mat->matrix[2][0]+ mat->matrix[0][2] ) / s;
 			quat[1] = (mat->matrix[1][2] + mat->matrix[2][1] ) / s;
 			quat[2] = 0.25 * s;
@@ -1193,17 +1193,17 @@ void G2_TimingModel(
 						if ( newLerpFrame <= (endFrame + 1) )
 						{
 							newLerpFrame =
-								endFrame + fmod(newLerpFrame - endFrame, numFramesInAnim) -
+								endFrame + Q_fmod(newLerpFrame - endFrame, numFramesInAnim) -
 								numFramesInAnim;
 						}
 
 						// now figure out what we are lerping between delta is
 						// the fraction between this frame and the next, since
 						// the new anim is always at a .0f;
-						lerp = ceil(newLerpFrame) - newLerpFrame;
+						lerp = Q_ceil(newLerpFrame) - newLerpFrame;
 
 						// frames are easy to calculate
-						currentFrame = ceil(newLerpFrame);
+						currentFrame = Q_ceil(newLerpFrame);
 
 						// should we be creating a virtual frame?
 						if ( currentFrame <= (endFrame + 1) )
@@ -1235,7 +1235,7 @@ void G2_TimingModel(
 						if ( newLerpFrame >= endFrame )
 						{
 							newLerpFrame =
-								endFrame + fmod(newLerpFrame - endFrame, numFramesInAnim) -
+								endFrame + Q_fmod(newLerpFrame - endFrame, numFramesInAnim) -
 								numFramesInAnim;
 						}
 
@@ -1318,10 +1318,10 @@ void G2_TimingModel(
 			}
 			else
 			{
-				lerp = (ceil(newLerpFrame)-newLerpFrame);
+				lerp = (Q_ceil(newLerpFrame)-newLerpFrame);
 
 				// frames are easy to calculate
-				currentFrame = ceil(newLerpFrame);
+				currentFrame = Q_ceil(newLerpFrame);
 				if (currentFrame>bone.startFrame)
 				{
 					currentFrame=bone.startFrame;

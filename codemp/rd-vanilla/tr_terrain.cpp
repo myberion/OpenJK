@@ -342,11 +342,11 @@ void CTRLandScape::CalculateRegion(void)
 	maxs[0] = backEnd.refdef.vieworg[0] + tr.distanceCull + (size[0] * 2.0f) - offset[0];
 	maxs[1] = backEnd.refdef.vieworg[1] + tr.distanceCull + (size[1] * 2.0f) - offset[1];
 
-	mPatchMinx = Com_Clampi(0, GetBlockWidth(), floorf(mins[0] / size[0]));
-	mPatchMaxx = Com_Clampi(0, GetBlockWidth(), ceilf(maxs[0] / size[0]));
+	mPatchMinx = Com_Clampi(0, GetBlockWidth(), Q_floorf(mins[0] / size[0]));
+	mPatchMaxx = Com_Clampi(0, GetBlockWidth(), Q_ceilf(maxs[0] / size[0]));
 
-	mPatchMiny = Com_Clampi(0, GetBlockHeight(), floorf(mins[1] / size[1]));
-	mPatchMaxy = Com_Clampi(0, GetBlockHeight(), ceilf(maxs[1] / size[1]));
+	mPatchMiny = Com_Clampi(0, GetBlockHeight(), Q_floorf(mins[1] / size[1]));
+	mPatchMaxy = Com_Clampi(0, GetBlockHeight(), Q_ceilf(maxs[1] / size[1]));
 }
 
 void CTRLandScape::CalculateRealCoords(void)
@@ -438,7 +438,7 @@ void CTRLandScape::CalculateLighting(void)
 
 			// Both normalised, so -1.0 < dp < 1.0
 			dp = Com_Clampi(0.0f, 1.0f, DotProduct(direction, total));
-			dp = powf(dp, 3);
+			dp = Q_powf(dp, 3);
 			VectorScale(ambient, (1.0 - dp) * 0.5, ambient);
 			VectorMA(ambient, dp, directed, tint);
 
@@ -872,14 +872,14 @@ CTRLandScape::CTRLandScape(const char *configstring)
 
 	tr.landScape.landscape = this;
 
-	mTextureScale = (float)atof(Info_ValueForKey(configstring, "texturescale")) / common->GetTerxels();
+	mTextureScale = (float)Q_atof(Info_ValueForKey(configstring, "texturescale")) / common->GetTerxels();
 	LoadTerrainDef(Info_ValueForKey(configstring, "terrainDef"));
 
 	// To normalise the variance value to a reasonable number
 	mScalarSize = VectorLengthSquared(common->GetSize());
 
 	// Calculate and set variance depth
-	mMaxNode = (Q_log2(common->GetTerxels()) << 1) - 1;
+	mMaxNode = (Q_ilog2(common->GetTerxels()) << 1) - 1;
 
 	// Allocate space for the renderer specific data
 	mRenderMap = (CTerVert *)Z_Malloc(sizeof(CTerVert) * common->GetRealArea(), TAG_R_TERRAIN);

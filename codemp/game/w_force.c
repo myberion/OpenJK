@@ -879,6 +879,7 @@ void WP_ForcePowerStart( gentity_t *self, forcePowers_t forcePower, int override
 	{
 		return;
 	}
+	g_stats.forceStarts[forcePower]++;
 
 	if ( BG_FullBodyTauntAnim( self->client->ps.legsAnim ) )
 	{//stop taunt
@@ -4081,8 +4082,6 @@ static void RemoveTrickedEnt(forcedata_t *fd, int client)
 	}
 }
 
-extern int g_LastFrameTime;
-extern int g_TimeSinceLastFrame;
 
 static void WP_UpdateMindtrickEnts(gentity_t *self)
 {
@@ -4099,7 +4098,7 @@ static void WP_UpdateMindtrickEnts(gentity_t *self)
 			{
 				RemoveTrickedEnt(&self->client->ps.fd, i);
 			}
-			else if ((level.time - self->client->dangerTime) < g_TimeSinceLastFrame*4)
+			else if ((level.time - self->client->dangerTime) < 200) // four 20 Hz frames (was four server frames: 40 ms at 100 Hz)
 			{ //Untrick this entity if the tricker (self) fires while in his fov
 				if (trap->InPVS(ent->client->ps.origin, self->client->ps.origin) &&
 					OrgVisible(ent->client->ps.origin, self->client->ps.origin, ent->s.number))
@@ -4208,6 +4207,7 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 		if (self->client->ps.fd.forcePowerDebounce[FP_PULL] < level.time)
 		{ //This is sort of not ideal. Using the debounce value reserved for pull for this because pull doesn't need it.
 			BG_ForcePowerDrain( &self->client->ps, forcePower, 1 );
+			g_stats.forceTimerEvents[FP_GRIP]++;
 			self->client->ps.fd.forcePowerDebounce[FP_PULL] = level.time + 100;
 		}
 
@@ -4236,6 +4236,7 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 			int addTime = 400;
 
 			self->health -= 2;
+			g_stats.forceTimerEvents[FP_RAGE]++;
 
 			if (self->client->ps.fd.forcePowerLevel[FP_RAGE] == FORCE_LEVEL_1)
 			{
@@ -4285,6 +4286,7 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 			while ( self->client->force.drainDebounce < level.time )
 			{
 				ForceShootDrain( self );
+				g_stats.forceTimerEvents[FP_DRAIN]++;
 				self->client->force.drainDebounce += FORCE_DEBOUNCE_TIME;
 			}
 		}
@@ -4314,6 +4316,7 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 			while ( self->client->force.lightningDebounce < level.time )
 			{
 				ForceShootLightning( self );
+				g_stats.forceTimerEvents[FP_LIGHTNING]++;
 				BG_ForcePowerDrain( &self->client->ps, forcePower, 0 );
 				self->client->force.lightningDebounce += FORCE_DEBOUNCE_TIME;
 			}
@@ -4341,6 +4344,7 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 		if (self->client->ps.fd.forcePowerDebounce[forcePower] < level.time)
 		{
 			BG_ForcePowerDrain( &self->client->ps, forcePower, 1 );
+			g_stats.forceTimerEvents[FP_PROTECT]++;
 			if (self->client->ps.fd.forcePower < 1)
 			{
 				WP_ForcePowerStop(self, forcePower);
@@ -4353,6 +4357,7 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 		if (self->client->ps.fd.forcePowerDebounce[forcePower] < level.time)
 		{
 			BG_ForcePowerDrain( &self->client->ps, forcePower, 1 );
+			g_stats.forceTimerEvents[FP_ABSORB]++;
 			if (self->client->ps.fd.forcePower < 1)
 			{
 				WP_ForcePowerStop(self, forcePower);
@@ -4589,9 +4594,9 @@ void SeekerDroneUpdate(gentity_t *self)
 		elevated[2] += 40;
 
 		angle = ((level.time / 12) & 255) * (M_PI * 2) / 255; //magical numbers make magic happen
-		dir[0] = cos(angle) * 20;
-		dir[1] = sin(angle) * 20;
-		dir[2] = cos(angle) * 5;
+		dir[0] = Q_cos(angle) * 20;
+		dir[1] = Q_sin(angle) * 20;
+		dir[2] = Q_cos(angle) * 5;
 		VectorAdd(elevated, dir, org);
 
 		a[ROLL] = 0;
@@ -4636,9 +4641,9 @@ void SeekerDroneUpdate(gentity_t *self)
 		elevated[2] -= 55-prefig;
 
 		angle = ((level.time / 12) & 255) * (M_PI * 2) / 255; //magical numbers make magic happen
-		dir[0] = cos(angle) * 20;
-		dir[1] = sin(angle) * 20;
-		dir[2] = cos(angle) * 5;
+		dir[0] = Q_cos(angle) * 20;
+		dir[1] = Q_sin(angle) * 20;
+		dir[2] = Q_cos(angle) * 5;
 		VectorAdd(elevated, dir, org);
 
 		a[ROLL] = 0;
@@ -4704,9 +4709,9 @@ void SeekerDroneUpdate(gentity_t *self)
 		elevated[2] += 40;
 
 		angle = ((level.time / 12) & 255) * (M_PI * 2) / 255; //magical numbers make magic happen
-		dir[0] = cos(angle) * 20;
-		dir[1] = sin(angle) * 20;
-		dir[2] = cos(angle) * 5;
+		dir[0] = Q_cos(angle) * 20;
+		dir[1] = Q_sin(angle) * 20;
+		dir[2] = Q_cos(angle) * 5;
 		VectorAdd(elevated, dir, org);
 
 		//org is now where the thing should be client-side because it uses the same time-based offset
@@ -4990,6 +4995,14 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 		return;
 	}
 
+	for ( i = 0; i < NUM_FORCE_POWERS; i++ )
+	{ // gamestats: the time each power is held; this runs on the 20 Hz instants of the tick, once per 50 ms (plan step 14)
+		if ( self->client->ps.fd.forcePowersActive & ( 1 << i ) )
+		{
+			g_stats.forceActiveMsec[i] += 50;
+		}
+	}
+
 	/*
 	if (self->client->ps.fd.saberAnimLevel > self->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE])
 	{
@@ -5035,11 +5048,6 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 			self->client->sess.selectedFP = self->client->ps.fd.forcePowerSelected;
 			self->client->sess.saberLevel = self->client->ps.fd.saberAnimLevel;
 		}
-	}
-
-	if (!g_LastFrameTime)
-	{
-		g_LastFrameTime = level.time;
 	}
 
 	if (self->client->ps.forceHandExtend == HANDEXTEND_KNOCKDOWN)

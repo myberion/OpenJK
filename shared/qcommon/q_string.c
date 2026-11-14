@@ -59,13 +59,13 @@ int Q_isalpha( int c )
 
 qboolean Q_isanumber( const char *s )
 {
-	char *p;
+	const char *p;
 	double ret;
 
 	if( *s == '\0' )
 		return qfalse;
 
-	ret = strtod( s, &p );
+	ret = Q_strtod( s, &p );
 
 	if ( ret == HUGE_VAL || errno == ERANGE )
 		return qfalse;

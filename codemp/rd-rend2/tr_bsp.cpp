@@ -56,7 +56,7 @@ static void HSVtoRGB( float h, float s, float v, float rgb[3] )
 
 	h *= 5;
 
-	i = floor( h );
+	i = Q_floor( h );
 	f = h - i;
 
 	p = v * ( 1 - s );
@@ -144,7 +144,7 @@ static void R_ColorShiftLightingFloats(float in[4], float out[4], float scale, b
 	float r, g, b;
 
 	if (overbrightBits)
-		scale *= pow(2.0f, r_mapOverBrightBits->integer - tr.overbrightBits);
+		scale *= Q_pow(2.0f, r_mapOverBrightBits->integer - tr.overbrightBits);
 
 	r = in[0] * scale;
 	g = in[1] * scale;
@@ -279,14 +279,14 @@ static	void R_LoadLightmaps( world_t *worldData, lump_t *l, lump_t *surfs ) {
 
 	if (tr.worldInternalLightmapping)
 	{
-		const int targetLightmapsPerX = (int)ceilf(sqrtf(numLightmaps));
+		const int targetLightmapsPerX = (int)Q_ceilf(Q_sqrtf(numLightmaps));
 
 		int lightmapsPerX = 1;
 		while (lightmapsPerX < targetLightmapsPerX)
 			lightmapsPerX *= 2;
 
 		tr.lightmapsPerAtlasSide[0] = lightmapsPerX;
-		tr.lightmapsPerAtlasSide[1] = (int)ceilf((float)numLightmaps / lightmapsPerX);
+		tr.lightmapsPerAtlasSide[1] = (int)Q_ceilf((float)numLightmaps / lightmapsPerX);
 
 		tr.lightmapAtlasSize[0] = tr.lightmapsPerAtlasSide[0] * LIGHTMAP_WIDTH;
 		tr.lightmapAtlasSize[1] = tr.lightmapsPerAtlasSide[1] * LIGHTMAP_HEIGHT;
@@ -436,7 +436,7 @@ static	void R_LoadLightmaps( world_t *worldData, lump_t *l, lump_t *surfs ) {
 					{
 						vec4_t color;
 						int column = (j % lightmapWidth);
-						int rowIndex = (int)floor(j / lightmapHeight) * lightmapHeight;
+						int rowIndex = (int)Q_floor(j / lightmapHeight) * lightmapHeight;
 
 						int index = column + rowIndex;
 
@@ -1305,9 +1305,9 @@ int R_MergedWidthPoints(srfBspSurface_t *grid, int offset) {
 
 	for (i = 1; i < grid->width-1; i++) {
 		for (j = i + 1; j < grid->width-1; j++) {
-			if ( fabs(grid->verts[i + offset].xyz[0] - grid->verts[j + offset].xyz[0]) > .1) continue;
-			if ( fabs(grid->verts[i + offset].xyz[1] - grid->verts[j + offset].xyz[1]) > .1) continue;
-			if ( fabs(grid->verts[i + offset].xyz[2] - grid->verts[j + offset].xyz[2]) > .1) continue;
+			if ( Q_fabs(grid->verts[i + offset].xyz[0] - grid->verts[j + offset].xyz[0]) > .1) continue;
+			if ( Q_fabs(grid->verts[i + offset].xyz[1] - grid->verts[j + offset].xyz[1]) > .1) continue;
+			if ( Q_fabs(grid->verts[i + offset].xyz[2] - grid->verts[j + offset].xyz[2]) > .1) continue;
 			return qtrue;
 		}
 	}
@@ -1326,9 +1326,9 @@ int R_MergedHeightPoints(srfBspSurface_t *grid, int offset) {
 
 	for (i = 1; i < grid->height-1; i++) {
 		for (j = i + 1; j < grid->height-1; j++) {
-			if ( fabs(grid->verts[grid->width * i + offset].xyz[0] - grid->verts[grid->width * j + offset].xyz[0]) > .1) continue;
-			if ( fabs(grid->verts[grid->width * i + offset].xyz[1] - grid->verts[grid->width * j + offset].xyz[1]) > .1) continue;
-			if ( fabs(grid->verts[grid->width * i + offset].xyz[2] - grid->verts[grid->width * j + offset].xyz[2]) > .1) continue;
+			if ( Q_fabs(grid->verts[grid->width * i + offset].xyz[0] - grid->verts[grid->width * j + offset].xyz[0]) > .1) continue;
+			if ( Q_fabs(grid->verts[grid->width * i + offset].xyz[1] - grid->verts[grid->width * j + offset].xyz[1]) > .1) continue;
+			if ( Q_fabs(grid->verts[grid->width * i + offset].xyz[2] - grid->verts[grid->width * j + offset].xyz[2]) > .1) continue;
 			return qtrue;
 		}
 	}
@@ -1376,9 +1376,9 @@ void R_FixSharedVertexLodError_r( world_t *worldData, int start, srfBspSurface_t
 					if (R_MergedWidthPoints(grid2, offset2)) continue;
 					for ( l = 1; l < grid2->width-1; l++) {
 					//
-						if ( fabs(grid1->verts[k + offset1].xyz[0] - grid2->verts[l + offset2].xyz[0]) > .1) continue;
-						if ( fabs(grid1->verts[k + offset1].xyz[1] - grid2->verts[l + offset2].xyz[1]) > .1) continue;
-						if ( fabs(grid1->verts[k + offset1].xyz[2] - grid2->verts[l + offset2].xyz[2]) > .1) continue;
+						if ( Q_fabs(grid1->verts[k + offset1].xyz[0] - grid2->verts[l + offset2].xyz[0]) > .1) continue;
+						if ( Q_fabs(grid1->verts[k + offset1].xyz[1] - grid2->verts[l + offset2].xyz[1]) > .1) continue;
+						if ( Q_fabs(grid1->verts[k + offset1].xyz[2] - grid2->verts[l + offset2].xyz[2]) > .1) continue;
 						// ok the points are equal and should have the same lod error
 						grid2->widthLodError[l] = grid1->widthLodError[k];
 						touch = qtrue;
@@ -1391,9 +1391,9 @@ void R_FixSharedVertexLodError_r( world_t *worldData, int start, srfBspSurface_t
 					if (R_MergedHeightPoints(grid2, offset2)) continue;
 					for ( l = 1; l < grid2->height-1; l++) {
 					//
-						if ( fabs(grid1->verts[k + offset1].xyz[0] - grid2->verts[grid2->width * l + offset2].xyz[0]) > .1) continue;
-						if ( fabs(grid1->verts[k + offset1].xyz[1] - grid2->verts[grid2->width * l + offset2].xyz[1]) > .1) continue;
-						if ( fabs(grid1->verts[k + offset1].xyz[2] - grid2->verts[grid2->width * l + offset2].xyz[2]) > .1) continue;
+						if ( Q_fabs(grid1->verts[k + offset1].xyz[0] - grid2->verts[grid2->width * l + offset2].xyz[0]) > .1) continue;
+						if ( Q_fabs(grid1->verts[k + offset1].xyz[1] - grid2->verts[grid2->width * l + offset2].xyz[1]) > .1) continue;
+						if ( Q_fabs(grid1->verts[k + offset1].xyz[2] - grid2->verts[grid2->width * l + offset2].xyz[2]) > .1) continue;
 						// ok the points are equal and should have the same lod error
 						grid2->heightLodError[l] = grid1->widthLodError[k];
 						touch = qtrue;
@@ -1414,9 +1414,9 @@ void R_FixSharedVertexLodError_r( world_t *worldData, int start, srfBspSurface_t
 					if (R_MergedWidthPoints(grid2, offset2)) continue;
 					for ( l = 1; l < grid2->width-1; l++) {
 					//
-						if ( fabs(grid1->verts[grid1->width * k + offset1].xyz[0] - grid2->verts[l + offset2].xyz[0]) > .1) continue;
-						if ( fabs(grid1->verts[grid1->width * k + offset1].xyz[1] - grid2->verts[l + offset2].xyz[1]) > .1) continue;
-						if ( fabs(grid1->verts[grid1->width * k + offset1].xyz[2] - grid2->verts[l + offset2].xyz[2]) > .1) continue;
+						if ( Q_fabs(grid1->verts[grid1->width * k + offset1].xyz[0] - grid2->verts[l + offset2].xyz[0]) > .1) continue;
+						if ( Q_fabs(grid1->verts[grid1->width * k + offset1].xyz[1] - grid2->verts[l + offset2].xyz[1]) > .1) continue;
+						if ( Q_fabs(grid1->verts[grid1->width * k + offset1].xyz[2] - grid2->verts[l + offset2].xyz[2]) > .1) continue;
 						// ok the points are equal and should have the same lod error
 						grid2->widthLodError[l] = grid1->heightLodError[k];
 						touch = qtrue;
@@ -1429,9 +1429,9 @@ void R_FixSharedVertexLodError_r( world_t *worldData, int start, srfBspSurface_t
 					if (R_MergedHeightPoints(grid2, offset2)) continue;
 					for ( l = 1; l < grid2->height-1; l++) {
 					//
-						if ( fabs(grid1->verts[grid1->width * k + offset1].xyz[0] - grid2->verts[grid2->width * l + offset2].xyz[0]) > .1) continue;
-						if ( fabs(grid1->verts[grid1->width * k + offset1].xyz[1] - grid2->verts[grid2->width * l + offset2].xyz[1]) > .1) continue;
-						if ( fabs(grid1->verts[grid1->width * k + offset1].xyz[2] - grid2->verts[grid2->width * l + offset2].xyz[2]) > .1) continue;
+						if ( Q_fabs(grid1->verts[grid1->width * k + offset1].xyz[0] - grid2->verts[grid2->width * l + offset2].xyz[0]) > .1) continue;
+						if ( Q_fabs(grid1->verts[grid1->width * k + offset1].xyz[1] - grid2->verts[grid2->width * l + offset2].xyz[1]) > .1) continue;
+						if ( Q_fabs(grid1->verts[grid1->width * k + offset1].xyz[2] - grid2->verts[grid2->width * l + offset2].xyz[2]) > .1) continue;
 						// ok the points are equal and should have the same lod error
 						grid2->heightLodError[l] = grid1->heightLodError[k];
 						touch = qtrue;
@@ -1507,27 +1507,27 @@ int R_StitchPatches( world_t *worldData, int grid1num, int grid2num ) {
 				//
 					v1 = grid1->verts[k + offset1].xyz;
 					v2 = grid2->verts[l + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 
 					v1 = grid1->verts[k + 2 + offset1].xyz;
 					v2 = grid2->verts[l + 1 + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 					//
 					v1 = grid2->verts[l + offset2].xyz;
 					v2 = grid2->verts[l + 1 + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) < .01 &&
-							fabs(v1[1] - v2[1]) < .01 &&
-							fabs(v1[2] - v2[2]) < .01)
+					if ( Q_fabs(v1[0] - v2[0]) < .01 &&
+							Q_fabs(v1[1] - v2[1]) < .01 &&
+							Q_fabs(v1[2] - v2[2]) < .01)
 						continue;
 					//
 					//ri.Printf( PRINT_ALL, "found highest LoD crack between two patches\n" );
@@ -1551,27 +1551,27 @@ int R_StitchPatches( world_t *worldData, int grid1num, int grid2num ) {
 					//
 					v1 = grid1->verts[k + offset1].xyz;
 					v2 = grid2->verts[grid2->width * l + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 
 					v1 = grid1->verts[k + 2 + offset1].xyz;
 					v2 = grid2->verts[grid2->width * (l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 					//
 					v1 = grid2->verts[grid2->width * l + offset2].xyz;
 					v2 = grid2->verts[grid2->width * (l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) < .01 &&
-							fabs(v1[1] - v2[1]) < .01 &&
-							fabs(v1[2] - v2[2]) < .01)
+					if ( Q_fabs(v1[0] - v2[0]) < .01 &&
+							Q_fabs(v1[1] - v2[1]) < .01 &&
+							Q_fabs(v1[2] - v2[2]) < .01)
 						continue;
 					//
 					//ri.Printf( PRINT_ALL, "found highest LoD crack between two patches\n" );
@@ -1604,27 +1604,27 @@ int R_StitchPatches( world_t *worldData, int grid1num, int grid2num ) {
 				//
 					v1 = grid1->verts[grid1->width * k + offset1].xyz;
 					v2 = grid2->verts[l + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 
 					v1 = grid1->verts[grid1->width * (k + 2) + offset1].xyz;
 					v2 = grid2->verts[l + 1 + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 					//
 					v1 = grid2->verts[l + offset2].xyz;
 					v2 = grid2->verts[(l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) < .01 &&
-							fabs(v1[1] - v2[1]) < .01 &&
-							fabs(v1[2] - v2[2]) < .01)
+					if ( Q_fabs(v1[0] - v2[0]) < .01 &&
+							Q_fabs(v1[1] - v2[1]) < .01 &&
+							Q_fabs(v1[2] - v2[2]) < .01)
 						continue;
 					//
 					//ri.Printf( PRINT_ALL, "found highest LoD crack between two patches\n" );
@@ -1648,27 +1648,27 @@ int R_StitchPatches( world_t *worldData, int grid1num, int grid2num ) {
 				//
 					v1 = grid1->verts[grid1->width * k + offset1].xyz;
 					v2 = grid2->verts[grid2->width * l + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 
 					v1 = grid1->verts[grid1->width * (k + 2) + offset1].xyz;
 					v2 = grid2->verts[grid2->width * (l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 					//
 					v1 = grid2->verts[grid2->width * l + offset2].xyz;
 					v2 = grid2->verts[grid2->width * (l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) < .01 &&
-							fabs(v1[1] - v2[1]) < .01 &&
-							fabs(v1[2] - v2[2]) < .01)
+					if ( Q_fabs(v1[0] - v2[0]) < .01 &&
+							Q_fabs(v1[1] - v2[1]) < .01 &&
+							Q_fabs(v1[2] - v2[2]) < .01)
 						continue;
 					//
 					//ri.Printf( PRINT_ALL, "found highest LoD crack between two patches\n" );
@@ -1702,27 +1702,27 @@ int R_StitchPatches( world_t *worldData, int grid1num, int grid2num ) {
 				//
 					v1 = grid1->verts[k + offset1].xyz;
 					v2 = grid2->verts[l + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 
 					v1 = grid1->verts[k - 2 + offset1].xyz;
 					v2 = grid2->verts[l + 1 + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 					//
 					v1 = grid2->verts[l + offset2].xyz;
 					v2 = grid2->verts[(l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) < .01 &&
-							fabs(v1[1] - v2[1]) < .01 &&
-							fabs(v1[2] - v2[2]) < .01)
+					if ( Q_fabs(v1[0] - v2[0]) < .01 &&
+							Q_fabs(v1[1] - v2[1]) < .01 &&
+							Q_fabs(v1[2] - v2[2]) < .01)
 						continue;
 					//
 					//ri.Printf( PRINT_ALL, "found highest LoD crack between two patches\n" );
@@ -1746,27 +1746,27 @@ int R_StitchPatches( world_t *worldData, int grid1num, int grid2num ) {
 				//
 					v1 = grid1->verts[k + offset1].xyz;
 					v2 = grid2->verts[grid2->width * l + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 
 					v1 = grid1->verts[k - 2 + offset1].xyz;
 					v2 = grid2->verts[grid2->width * (l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 					//
 					v1 = grid2->verts[grid2->width * l + offset2].xyz;
 					v2 = grid2->verts[grid2->width * (l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) < .01 &&
-							fabs(v1[1] - v2[1]) < .01 &&
-							fabs(v1[2] - v2[2]) < .01)
+					if ( Q_fabs(v1[0] - v2[0]) < .01 &&
+							Q_fabs(v1[1] - v2[1]) < .01 &&
+							Q_fabs(v1[2] - v2[2]) < .01)
 						continue;
 					//
 					//ri.Printf( PRINT_ALL, "found highest LoD crack between two patches\n" );
@@ -1801,27 +1801,27 @@ int R_StitchPatches( world_t *worldData, int grid1num, int grid2num ) {
 				//
 					v1 = grid1->verts[grid1->width * k + offset1].xyz;
 					v2 = grid2->verts[l + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 
 					v1 = grid1->verts[grid1->width * (k - 2) + offset1].xyz;
 					v2 = grid2->verts[l + 1 + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 					//
 					v1 = grid2->verts[l + offset2].xyz;
 					v2 = grid2->verts[(l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) < .01 &&
-							fabs(v1[1] - v2[1]) < .01 &&
-							fabs(v1[2] - v2[2]) < .01)
+					if ( Q_fabs(v1[0] - v2[0]) < .01 &&
+							Q_fabs(v1[1] - v2[1]) < .01 &&
+							Q_fabs(v1[2] - v2[2]) < .01)
 						continue;
 					//
 					//ri.Printf( PRINT_ALL, "found highest LoD crack between two patches\n" );
@@ -1845,27 +1845,27 @@ int R_StitchPatches( world_t *worldData, int grid1num, int grid2num ) {
 				//
 					v1 = grid1->verts[grid1->width * k + offset1].xyz;
 					v2 = grid2->verts[grid2->width * l + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 
 					v1 = grid1->verts[grid1->width * (k - 2) + offset1].xyz;
 					v2 = grid2->verts[grid2->width * (l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) > .1)
+					if ( Q_fabs(v1[0] - v2[0]) > .1)
 						continue;
-					if ( fabs(v1[1] - v2[1]) > .1)
+					if ( Q_fabs(v1[1] - v2[1]) > .1)
 						continue;
-					if ( fabs(v1[2] - v2[2]) > .1)
+					if ( Q_fabs(v1[2] - v2[2]) > .1)
 						continue;
 					//
 					v1 = grid2->verts[grid2->width * l + offset2].xyz;
 					v2 = grid2->verts[grid2->width * (l + 1) + offset2].xyz;
-					if ( fabs(v1[0] - v2[0]) < .01 &&
-							fabs(v1[1] - v2[1]) < .01 &&
-							fabs(v1[2] - v2[2]) < .01)
+					if ( Q_fabs(v1[0] - v2[0]) < .01 &&
+							Q_fabs(v1[1] - v2[1]) < .01 &&
+							Q_fabs(v1[2] - v2[2]) < .01)
 						continue;
 					//
 					//ri.Printf( PRINT_ALL, "found highest LoD crack between two patches\n" );
@@ -2840,8 +2840,8 @@ void R_LoadLightGrid( world_t *worldData, lump_t *l ) {
 	wMaxs = worldData->bmodels[0].bounds[1];
 
 	for ( i = 0 ; i < 3 ; i++ ) {
-		worldData->lightGridOrigin[i] = worldData->lightGridSize[i] * ceil( wMins[i] / worldData->lightGridSize[i] );
-		maxs[i] = worldData->lightGridSize[i] * floor( wMaxs[i] / worldData->lightGridSize[i] );
+		worldData->lightGridOrigin[i] = worldData->lightGridSize[i] * Q_ceil( wMins[i] / worldData->lightGridSize[i] );
+		maxs[i] = worldData->lightGridSize[i] * Q_floor( wMaxs[i] / worldData->lightGridSize[i] );
 		worldData->lightGridBounds[i] = (maxs[i] - worldData->lightGridOrigin[i])/worldData->lightGridSize[i] + 1;
 	}
 
@@ -2998,18 +2998,18 @@ void R_LoadEntities( world_t *worldData, lump_t *l ) {
 			continue;
 		}
  		if (!Q_stricmp(keyname, "distanceCull")) {
-			sscanf(value, "%f", &tr.distanceCull );
+			Q_ScanFloats( value, &tr.distanceCull, 1 );
 			continue;
 		}
 		// check for a different grid size
 		if (!Q_stricmp(keyname, "gridsize")) {
-			sscanf(value, "%f %f %f", &w->lightGridSize[0], &w->lightGridSize[1], &w->lightGridSize[2] );
+			Q_ScanFloats( value, w->lightGridSize, 3 );
 			continue;
 		}
 
 		// check for auto exposure
 		if (!Q_stricmp(keyname, "autoExposureMinMax")) {
-			sscanf(value, "%f %f", &tr.autoExposureMinMax[0], &tr.autoExposureMinMax[1]);
+			Q_ScanFloats( value, tr.autoExposureMinMax, 2 );
 			continue;
 		}
 	}
@@ -3236,12 +3236,12 @@ void R_LoadCubemapEntities(const char *cubemapEntityName)
 
 			if (!Q_stricmp(spawnVars[i][0], "origin"))
 			{
-				sscanf(spawnVars[i][1], "%f %f %f", &origin[0], &origin[1], &origin[2]);
+				Q_ScanFloats( spawnVars[i][1], origin, 3 );
 				originSet = qtrue;
 			}
 			else if (!Q_stricmp(spawnVars[i][0], "radius"))
 			{
-				sscanf(spawnVars[i][1], "%f", &parallaxRadius);
+				Q_ScanFloats( spawnVars[i][1], &parallaxRadius, 1 );
 			}
 		}
 
@@ -3795,14 +3795,14 @@ static uint32_t R_CountSurfaceSprites(
 		const vec2_t p01 = { p1[0] - p0[0], p1[1] - p0[1] };
 		const vec2_t p02 = { p2[0] - p0[0], p2[1] - p0[1] };
 
-		const float zarea = std::fabs(p02[0] * p01[1] - p02[1] * p01[0]);
+		const float zarea = Q_fabs(p02[0] * p01[1] - p02[1] * p01[0]);
 		if (zarea <= 1.0)
 		{
 			// Triangle's area is too small to consider.
 			continue;
 		}
 
-		const float step = density * Q_rsqrt(zarea);
+		const float step = density * Q_rsqrtf(zarea);
 		for (float a = 0.0f; a < 1.0f; a += step)
 		{
 			for (float b = 0.0f, bend = (1.0f - a); b < bend; b += step)
@@ -3861,7 +3861,7 @@ static int R_CreateSurfaceSpritesVertexData(
 		const vec2_t p01 = {p1[0] - p0[0], p1[1] - p0[1]};
 		const vec2_t p02 = {p2[0] - p0[0], p2[1] - p0[1]};
 
-		const float zarea = std::fabs(p02[0]*p01[1] - p02[1]*p01[0]);
+		const float zarea = Q_fabs(p02[0]*p01[1] - p02[1]*p01[0]);
 		if ( zarea <= 1.0 )
 		{
 			// Triangle's area is too small to consider.
@@ -3872,13 +3872,13 @@ static int R_CreateSurfaceSpritesVertexData(
 		//
 		// Pick random points inside of each triangle, using barycentric
 		// coordinates.
-		const float step = density * Q_rsqrt(zarea);
+		const float step = density * Q_rsqrtf(zarea);
 		for ( float a = 0.0f; a < 1.0f; a += step )
 		{
 			for ( float b = 0.0f, bend = (1.0f - a); b < bend; b += step )
 			{
-				float x = flrand(0.0f, 1.0f)*step + a;
-				float y = flrand(0.0f, 1.0f)*step + b;
+				float x = Q_flrand(0.0f, 1.0f)*step + a;
+				float y = Q_flrand(0.0f, 1.0f)*step + b;
 				float z = 1.0f - x - y;
 
 				// Ensure we're inside the triangle bounds.
@@ -3891,7 +3891,7 @@ static int R_CreateSurfaceSpritesVertexData(
 				VectorMA(sprite.position, x, p0, sprite.position);
 				VectorMA(sprite.position, y, p1, sprite.position);
 				VectorMA(sprite.position, z, p2, sprite.position);
-				sprite.position[3] = flrand(0.0f, 1.0f);
+				sprite.position[3] = Q_flrand(0.0f, 1.0f);
 
 				if (vertexLit)
 				{
@@ -3906,19 +3906,19 @@ static int R_CreateSurfaceSpritesVertexData(
 				// x*x + y*y = 1.0
 				// => y*y = 1.0 - x*x
 				// => y = -/+sqrt(1.0 - x*x)
-				float nx = flrand(-1.0f, 1.0f);
-				float ny = std::sqrt(1.0f - nx*nx);
-				ny *= irand(0, 1) ? -1 : 1;
+				float nx = Q_flrand(-1.0f, 1.0f);
+				float ny = Q_sqrtf(1.0f - nx*nx);
+				ny *= Q_irand(0, 1) ? -1 : 1;
 
 				VectorSet(sprite.normal, nx, ny, 0.0f);
 
-				sprite.widthHeight[0] = stage->ss->width*(1.0f + (stage->ss->variance[0] * flrand(0.0f, 1.0f)));
-				sprite.widthHeight[1] = stage->ss->height*(1.0f + (stage->ss->variance[1] * flrand(0.0f, 1.0f)));
+				sprite.widthHeight[0] = stage->ss->width*(1.0f + (stage->ss->variance[0] * Q_flrand(0.0f, 1.0f)));
+				sprite.widthHeight[1] = stage->ss->height*(1.0f + (stage->ss->variance[1] * Q_flrand(0.0f, 1.0f)));
 				if (stage->ss->facing == SURFSPRITE_FACING_DOWN)
 					sprite.widthHeight[1] *= -1.0f;
 
-				sprite.skew[0] = stage->ss->height * stage->ss->vertSkew * flrand(-1.0f, 1.0f);
-				sprite.skew[1] = stage->ss->height * stage->ss->vertSkew * flrand(-1.0f, 1.0f);
+				sprite.skew[0] = stage->ss->height * stage->ss->vertSkew * Q_flrand(-1.0f, 1.0f);
+				sprite.skew[1] = stage->ss->height * stage->ss->vertSkew * Q_flrand(-1.0f, 1.0f);
 
 				sprites->push_back(sprite);
 				sprites->push_back(sprite);

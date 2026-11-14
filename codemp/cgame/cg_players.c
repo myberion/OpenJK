@@ -2177,7 +2177,7 @@ static void _PlayerFootStep( const vec3_t origin,
 	}
 	if (soundType < FOOTSTEP_TOTAL)
 	{
-	 	trap->S_StartSound( NULL, cent->currentState.clientNum, CHAN_BODY, cgs.media.footsteps[soundType][rand()&3] );
+	 	trap->S_StartSound( NULL, cent->currentState.clientNum, CHAN_BODY, cgs.media.footsteps[soundType][Q_irand( 0, 3 )] );
 	}
 
 	if ( cg_footsteps.integer < 4 )
@@ -2523,7 +2523,7 @@ void CG_PlayerAnimEvents( int animFileIndex, int eventFileIndex, qboolean torso,
 	{
 		animEvents = bgAllEvents[eventFileIndex].legsAnimEvents;
 	}
-	if ( fabs((float)(oldFrame-frame)) > 1 )
+	if ( Q_fabs((float)(oldFrame-frame)) > 1 )
 	{//given a range, see if keyFrame falls in that range
 		int oldAnim, anim;
 		if ( torso )
@@ -2590,12 +2590,12 @@ void CG_PlayerAnimEvents( int animFileIndex, int eventFileIndex, qboolean torso,
 		{//exact match
 			match = qtrue;
 		}
-		else if ( fabs((float)(oldFrame-frame)) > 1 /*&& cg_reliableAnimSounds.integer*/ )
+		else if ( Q_fabs((float)(oldFrame-frame)) > 1 /*&& cg_reliableAnimSounds.integer*/ )
 		{//given a range, see if keyFrame falls in that range
 			if ( inSameAnim )
 			{//if changed anims altogether, sorry, the sound is lost
-				if ( fabs((float)(oldFrame-animEvents[i].keyFrame)) <= 3
-					 || fabs((float)(frame-animEvents[i].keyFrame)) <= 3 )
+				if ( Q_fabs((float)(oldFrame-animEvents[i].keyFrame)) <= 3
+					 || Q_fabs((float)(frame-animEvents[i].keyFrame)) <= 3 )
 				{//must be at least close to the keyframe
 					if ( animBackward )
 					{//animation plays backwards
@@ -2736,7 +2736,7 @@ void CG_TriggerAnimSounds( centity_t *cent )
 	if (trap->G2API_GetBoneFrame(cent->ghoul2, "model_root", cg.time, &currentFrame, cgs.gameModels, 0))
 	{
 		// the above may have failed, not sure what to do about it, current frame will be zero in that case
-		curFrame = floor( currentFrame );
+		curFrame = Q_floor( currentFrame );
 	}
 	if ( curFrame != cent->pe.legs.frame )
 	{
@@ -2754,7 +2754,7 @@ void CG_TriggerAnimSounds( centity_t *cent )
 
 	if (trap->G2API_GetBoneFrame(cent->ghoul2, "lower_lumbar", cg.time, &currentFrame, cgs.gameModels, 0))
 	{
-		curFrame = floor( currentFrame );
+		curFrame = Q_floor( currentFrame );
 	}
 	if ( curFrame != cent->pe.torso.frame )
 	{
@@ -3582,7 +3582,7 @@ qboolean CG_RagDoll(centity_t *cent, vec3_t forcedAngles)
 		if (!inSomething)
 		{
 			int anim = (cent->currentState.legsAnim);
-			int dur = (bgAllAnims[cent->localAnimIndex].anims[anim].numFrames-1) * fabs((float)(bgAllAnims[cent->localAnimIndex].anims[anim].frameLerp));
+			int dur = (bgAllAnims[cent->localAnimIndex].anims[anim].numFrames-1) * Q_fabs((float)(bgAllAnims[cent->localAnimIndex].anims[anim].frameLerp));
 			int i = 0;
 			int boltChecks[5];
 			vec3_t boltPoints[5];
@@ -3881,7 +3881,7 @@ qboolean CG_RagDoll(centity_t *cent, vec3_t forcedAngles)
 							dVel[2] = 0;
 
 							//Factor in a random velocity
-							VectorSet(rVel, flrand(-0.1f, 0.1f), flrand(-0.1f, 0.1f), flrand(0.1f, 0.5));
+							VectorSet(rVel, Q_flrand(-0.1f, 0.1f), Q_flrand(-0.1f, 0.1f), Q_flrand(0.1f, 0.5));
 							VectorScale(rVel, 8.0f, rVel);
 
 							VectorAdd(dVel, rVel, dVel);
@@ -4141,9 +4141,9 @@ qboolean CG_G2PlayerHeadAnims( centity_t *cent )
 	{
 		if (!ci->facial_blink)
 		{	// set the timers
-			ci->facial_blink = cg.time + flrand(4000.0, 8000.0);
-			ci->facial_frown = cg.time + flrand(6000.0, 10000.0);
-			ci->facial_aux = cg.time + flrand(6000.0, 10000.0);
+			ci->facial_blink = cg.time + Q_flrand(4000.0, 8000.0);
+			ci->facial_frown = cg.time + Q_flrand(6000.0, 10000.0);
+			ci->facial_aux = cg.time + Q_flrand(6000.0, 10000.0);
 		}
 
 		//are we blinking?
@@ -4151,7 +4151,7 @@ qboolean CG_G2PlayerHeadAnims( centity_t *cent )
 		{	// yes, check if we are we done blinking ?
 			if (-(ci->facial_blink) < cg.time)
 			{	// yes, so reset blink timer
-				ci->facial_blink = cg.time + flrand(4000.0, 8000.0);
+				ci->facial_blink = cg.time + Q_flrand(4000.0, 8000.0);
 				CG_G2SetHeadBlink( cent, qfalse );	//stop the blink
 			}
 		}
@@ -4183,7 +4183,7 @@ qboolean CG_G2PlayerHeadAnims( centity_t *cent )
 			{	//yes
 				if (-(ci->facial_aux) < cg.time)// are we done auxing ?
 				{	// yes, reset aux timer
-					ci->facial_aux = cg.time + flrand(7000.0, 10000.0);
+					ci->facial_aux = cg.time + Q_flrand(7000.0, 10000.0);
 				}
 				else
 				{	// not yet, so choose aux
@@ -4206,7 +4206,7 @@ qboolean CG_G2PlayerHeadAnims( centity_t *cent )
 				{	// yes,
 					if (-(ci->facial_frown) < cg.time)//are we done frowning ?
 					{	// yes, reset frown timer
-						ci->facial_frown = cg.time + flrand(7000.0, 10000.0);
+						ci->facial_frown = cg.time + Q_flrand(7000.0, 10000.0);
 					}
 					else
 					{	// not yet, so choose frown
@@ -4501,7 +4501,7 @@ static void CG_PlayerPowerups( centity_t *cent, refEntity_t *torso ) {
 
 	// quad gives a dlight
 	if ( powerups & ( 1 << PW_QUAD ) )
-		trap->R_AddLightToScene( cent->lerpOrigin, 200 + (rand()&31), 0.2f, 0.2f, 1 );
+		trap->R_AddLightToScene( cent->lerpOrigin, 200 + (Q_irand( 0, 31 )), 0.2f, 0.2f, 1 );
 
 	if (cent->currentState.eType == ET_NPC)
 		assert(cent->npcClient);
@@ -4509,18 +4509,18 @@ static void CG_PlayerPowerups( centity_t *cent, refEntity_t *torso ) {
 	// redflag
 	if ( powerups & ( 1 << PW_REDFLAG ) ) {
 		CG_PlayerFlag( cent, cgs.media.redFlagModel );
-		trap->R_AddLightToScene( cent->lerpOrigin, 200 + (rand()&31), 1.0, 0.2f, 0.2f );
+		trap->R_AddLightToScene( cent->lerpOrigin, 200 + (Q_irand( 0, 31 )), 1.0, 0.2f, 0.2f );
 	}
 
 	// blueflag
 	if ( powerups & ( 1 << PW_BLUEFLAG ) ) {
 		CG_PlayerFlag( cent, cgs.media.blueFlagModel );
-		trap->R_AddLightToScene( cent->lerpOrigin, 200 + (rand()&31), 0.2f, 0.2f, 1.0 );
+		trap->R_AddLightToScene( cent->lerpOrigin, 200 + (Q_irand( 0, 31 )), 0.2f, 0.2f, 1.0 );
 	}
 
 	// neutralflag
 	if ( powerups & ( 1 << PW_NEUTRALFLAG ) ) {
-		trap->R_AddLightToScene( cent->lerpOrigin, 200 + (rand()&31), 1.0, 1.0, 1.0 );
+		trap->R_AddLightToScene( cent->lerpOrigin, 200 + (Q_irand( 0, 31 )), 1.0, 1.0, 1.0 );
 	}
 
 	// haste leaves smoke trails
@@ -5037,7 +5037,7 @@ static void CG_ForcePushBodyBlur( centity_t *cent )
 static void CG_ForceGripEffect( vec3_t org )
 {
 	localEntity_t	*ex;
-	float wv = sin( cg.time * 0.004f ) * 0.08f + 0.1f;
+	float wv = Q_sin( cg.time * 0.004f ) * 0.08f + 0.1f;
 
 	ex = CG_AllocLocalEntity();
 	ex->leType = LE_PUFF;
@@ -5809,7 +5809,7 @@ void CG_AddGhoul2Mark(int shader, float size, vec3_t start, vec3_t end, int entn
 	goreSkin.entNum      = entnum;
 	goreSkin.SSize		 = size;
 	goreSkin.TSize		 = size;
-	goreSkin.theta		 = flrand(0.0f,6.28f);
+	goreSkin.theta		 = Q_flrand(0.0f,6.28f);
 	goreSkin.shader		 = shader;
 
 	if (!scale[0] && !scale[1] && !scale[2])
@@ -5932,14 +5932,18 @@ void CG_SaberCompWork(vec3_t start, vec3_t end, centity_t *owner, int saberNum, 
 										}
 									}
 								}
-								CG_AddGhoul2Mark(markShader, flrand(3.0f, 4.0f),
-									trace.endpos, ePos, trace.entityNum, trEnt->lerpOrigin, trEnt->lerpAngles[YAW],
-									trEnt->ghoul2, trEnt->modelScale, Q_irand(5000, 10000));
+								{
+									const float size = Q_flrand(3.0f, 4.0f); // drawn before the lifetime on every compiler
+									CG_AddGhoul2Mark(markShader, size,
+										trace.endpos, ePos, trace.entityNum, trEnt->lerpOrigin, trEnt->lerpAngles[YAW],
+										trEnt->ghoul2, trEnt->modelScale, Q_irand(5000, 10000));
+								}
 								if ( weaponMarkShader )
 								{
 									vec3_t splashBackDir;
+									const float size = Q_flrand(0.5f, 2.0f); // drawn before the lifetime on every compiler
 									VectorScale( ePos, -1 , splashBackDir );
-									CG_AddGhoul2Mark(weaponMarkShader, flrand(0.5f, 2.0f),
+									CG_AddGhoul2Mark(weaponMarkShader, size,
 										trace.endpos, splashBackDir, owner->currentState.clientNum, owner->lerpOrigin, owner->lerpAngles[YAW],
 										owner->ghoul2, owner->modelScale, Q_irand(5000, 10000));
 								}
@@ -6698,9 +6702,9 @@ void CG_AddLightningBeam(vec3_t start, vec3_t end)
 	VectorMA( b.start, 0.6666f * len, dir, c2 );
 
 	// get some chaos values that really aren't very chaotic :)
-	s1 = sin( cg.time * 0.005f ) * 2 + Q_flrand(-1.0f, 1.0f) * 0.2f;
-	s2 = sin( cg.time * 0.001f );
-	s3 = sin( cg.time * 0.011f );
+	s1 = Q_sin( cg.time * 0.005f ) * 2 + Q_flrand(-1.0f, 1.0f) * 0.2f;
+	s2 = Q_sin( cg.time * 0.001f );
+	s3 = Q_sin( cg.time * 0.011f );
 
 	VectorSet( chaos, len * 0.01f * s1,
 						len * 0.02f * s2,
@@ -6755,7 +6759,7 @@ void CG_AddRandomLightning(vec3_t start, vec3_t end)
 	VectorCopy(start, inOrg);
 	VectorCopy(end, outOrg);
 
-	if ( rand() & 1 )
+	if ( Q_irand( 0, 1 ) )
 	{
 		outOrg[0] += Q_irand(0, 24);
 		inOrg[0] += Q_irand(0, 8);
@@ -6766,7 +6770,7 @@ void CG_AddRandomLightning(vec3_t start, vec3_t end)
 		inOrg[0] -= Q_irand(0, 8);
 	}
 
-	if ( rand() & 1 )
+	if ( Q_irand( 0, 1 ) )
 	{
 		outOrg[1] += Q_irand(0, 24);
 		inOrg[1] += Q_irand(0, 8);
@@ -6777,7 +6781,7 @@ void CG_AddRandomLightning(vec3_t start, vec3_t end)
 		inOrg[1] -= Q_irand(0, 8);
 	}
 
-	if ( rand() & 1 )
+	if ( Q_irand( 0, 1 ) )
 	{
 		outOrg[2] += Q_irand(0, 50);
 		inOrg[2] += Q_irand(0, 40);
@@ -8492,7 +8496,7 @@ void CG_Player( centity_t *cent ) {
 		VectorClear(cent->modelScale);
 	}
 
-	if ((cg_smoothClients.integer || cent->currentState.heldByClient) && (cent->currentState.groundEntityNum >= ENTITYNUM_WORLD || cent->currentState.eType == ET_TERRAIN) &&
+	if (cent->currentState.heldByClient && (cent->currentState.groundEntityNum >= ENTITYNUM_WORLD || cent->currentState.eType == ET_TERRAIN) &&
 		!(cent->currentState.eFlags2 & EF2_HYPERSPACE) && cg.predictedPlayerState.m_iVehicleNum != cent->currentState.number)
 	{ //always smooth when being thrown
 		vec3_t			posDif;
@@ -9136,9 +9140,9 @@ void CG_Player( centity_t *cent ) {
 							 //don't show in first person?
 
 		angle = ((cg.time / 12) & 255) * (M_PI * 2) / 255;
-		dir[0] = cos(angle) * 20;
-		dir[1] = sin(angle) * 20;
-		dir[2] = cos(angle) * 5;
+		dir[0] = Q_cos(angle) * 20;
+		dir[1] = Q_sin(angle) * 20;
+		dir[2] = Q_cos(angle) * 5;
 		VectorAdd(elevated, dir, seeker.origin);
 
 		VectorCopy(seeker.origin, seekorg);
@@ -9159,9 +9163,9 @@ void CG_Player( centity_t *cent ) {
 			elevated[2] -= 55-prefig;
 
 			angle = ((cg.time / 12) & 255) * (M_PI * 2) / 255;
-			dir[0] = cos(angle) * 20;
-			dir[1] = sin(angle) * 20;
-			dir[2] = cos(angle) * 5;
+			dir[0] = Q_cos(angle) * 20;
+			dir[1] = Q_sin(angle) * 20;
+			dir[2] = Q_cos(angle) * 5;
 			VectorAdd(elevated, dir, seeker.origin);
 		}
 		else if (cent->currentState.genericenemyindex != ENTITYNUM_NONE && cent->currentState.genericenemyindex != -1)
@@ -9179,7 +9183,7 @@ void CG_Player( centity_t *cent ) {
 
 		if (!successchange)
 		{
-			angles[0] = sin(angle) * 30;
+			angles[0] = Q_sin(angle) * 30;
 			angles[1] = (angle * 180 / M_PI) + 90;
 			if (angles[1] > 360)
 				angles[1] -= 360;
@@ -9784,12 +9788,12 @@ void CG_Player( centity_t *cent ) {
 				if (renderedHolos == 0)
 				{
 					angle = ((cg.time / 8) & 255) * (M_PI * 2) / 255;
-					dir[0] = cos(angle) * 20;
-					dir[1] = sin(angle) * 20;
-					dir[2] = cos(angle) * 20;
+					dir[0] = Q_cos(angle) * 20;
+					dir[1] = Q_sin(angle) * 20;
+					dir[2] = Q_cos(angle) * 20;
 					VectorAdd(elevated, dir, holoRef.origin);
 
-					angles[0] = sin(angle) * 30;
+					angles[0] = Q_sin(angle) * 30;
 					angles[1] = (angle * 180 / M_PI) + 90;
 					if (angles[1] > 360)
 						angles[1] -= 360;
@@ -9801,12 +9805,12 @@ void CG_Player( centity_t *cent ) {
 					angle = ((cg.time / 8) & 255) * (M_PI * 2) / 255 + M_PI;
 					if (angle > M_PI * 2)
 						angle -= (float)M_PI * 2;
-					dir[0] = sin(angle) * 20;
-					dir[1] = cos(angle) * 20;
-					dir[2] = cos(angle) * 20;
+					dir[0] = Q_sin(angle) * 20;
+					dir[1] = Q_cos(angle) * 20;
+					dir[2] = Q_cos(angle) * 20;
 					VectorAdd(elevated, dir, holoRef.origin);
 
-					angles[0] = cos(angle - 0.5 * M_PI) * 30;
+					angles[0] = Q_cos(angle - 0.5 * M_PI) * 30;
 					angles[1] = 360 - (angle * 180 / M_PI);
 					if (angles[1] > 360)
 						angles[1] -= 360;
@@ -9818,8 +9822,8 @@ void CG_Player( centity_t *cent ) {
 					angle = ((cg.time / 6) & 255) * (M_PI * 2) / 255 + 0.5 * M_PI;
 					if (angle > M_PI * 2)
 						angle -= (float)M_PI * 2;
-					dir[0] = sin(angle) * 20;
-					dir[1] = cos(angle) * 20;
+					dir[0] = Q_sin(angle) * 20;
+					dir[1] = Q_cos(angle) * 20;
 					dir[2] = 0;
 					VectorAdd(elevated, dir, holoRef.origin);
 
@@ -9843,7 +9847,7 @@ void CG_Player( centity_t *cent ) {
 					holoCenter[1] = holoRef.origin[1] + holoRef.axis[2][1]*18;
 					holoCenter[2] = holoRef.origin[2] + holoRef.axis[2][2]*18;
 
-					wv = sin( cg.time * 0.004f ) * 0.08f + 0.1f;
+					wv = Q_sin( cg.time * 0.004f ) * 0.08f + 0.1f;
 
 					VectorCopy(holoCenter, fxSArgs.origin);
 					VectorClear(fxSArgs.vel);
@@ -10318,7 +10322,7 @@ stillDoSaber:
 				efOrg[1] = boltMatrix.matrix[1][3];
 				efOrg[2] = boltMatrix.matrix[2][3];
 
-				wv = sin( cg.time * 0.003f ) * 0.08f + 0.1f;
+				wv = Q_sin( cg.time * 0.003f ) * 0.08f + 0.1f;
 
 				//trap->FX_AddSprite( NULL, efOrg, NULL, NULL, 8.0f, 8.0f, wv, wv, 0.0f, 0.0f, 1.0f, cgs.media.yellowSaberGlowShader, 0x08000000 );
 				VectorCopy(efOrg, fxSArgs.origin);
@@ -10866,7 +10870,7 @@ stillDoSaber:
 		legs.shaderRGBA[1] = legs.shaderRGBA[2] = 0;
 		legs.shaderRGBA[3] = 255;
 
-		if ( rand() & 1 )
+		if ( Q_irand( 0, 1 ) )
 		{
 			legs.customShader = cgs.media.electricBodyShader;
 		}
@@ -10902,7 +10906,7 @@ stillDoSaber:
 		legs.shaderRGBA[0] = 255;
 		legs.shaderRGBA[1] = 255;
 		legs.shaderRGBA[2] = 255;
-		legs.shaderRGBA[3] = 10.0f+(sin((float)(cg.time/4))*128.0f);//112.0 * ((cent->damageTime - cg.time) / MIN_SHIELD_TIME) + Q_flrand(0.0f, 1.0f)*16;
+		legs.shaderRGBA[3] = 10.0f+(Q_sin((float)(cg.time/4))*128.0f);//112.0 * ((cent->damageTime - cg.time) / MIN_SHIELD_TIME) + Q_flrand(0.0f, 1.0f)*16;
 
 		legs.renderfx &= ~RF_RGB_TINT;
 		legs.renderfx &= ~RF_FORCE_ENT_ALPHA;
@@ -11071,7 +11075,7 @@ stillDoSaber:
 
 			if ( dif < 500 )
 			{
-				brightness = floor((dif - 500.0f) / 500.0f * 255.0f );
+				brightness = Q_floor((dif - 500.0f) / 500.0f * 255.0f );
 			}
 
 			legs.renderfx &= ~RF_FORCE_ENT_ALPHA;
@@ -11081,7 +11085,7 @@ stillDoSaber:
 			legs.shaderRGBA[0] = legs.shaderRGBA[1] = legs.shaderRGBA[2] = brightness;
 			legs.shaderRGBA[3] = 255;
 
-			if ( rand() & 1 )
+			if ( Q_irand( 0, 1 ) )
 			{
 				legs.customShader = cgs.media.electricBodyShader;
 			}

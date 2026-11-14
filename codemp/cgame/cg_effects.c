@@ -48,7 +48,7 @@ void CG_BubbleTrail( vec3_t start, vec3_t end, float spacing ) {
 	len = VectorNormalize (vec);
 
 	// advance a random amount first
-	i = rand() % (int)spacing;
+	i = Q_irand( 0, (int)spacing - 1 );
 	VectorMA( move, i, vec, move );
 
 	VectorScale (vec, spacing, vec);
@@ -779,7 +779,7 @@ void CG_MiscModelExplosion( vec3_t mins, vec3_t maxs, int size, material_t chunk
 		VectorSubtract( org, mid, dir );
 		VectorNormalize( dir );
 
-		if ( effect2 && effect2[0] && ( rand() & 1 ))
+		if ( effect2 && effect2[0] && ( Q_irand( 0, 1 ) ))
 		{
 			trap->FX_PlayEffectID( eID2, org, dir, -1, -1, qfalse );
 		}
@@ -926,7 +926,7 @@ void CG_Chunks( int owner, vec3_t origin, const vec3_t normal, const vec3_t mins
 				chunkModel = cgs.media.chunkModels[CHUNK_METAL1][Q_irand(0, 3)];
 				break;
 			case MAT_METAL3:
-				if ( rand() & 1 )
+				if ( Q_irand( 0, 1 ) )
 				{
 					chunkModel = cgs.media.chunkModels[CHUNK_METAL1][Q_irand(0, 3)];
 				}
@@ -959,7 +959,7 @@ void CG_Chunks( int owner, vec3_t origin, const vec3_t normal, const vec3_t mins
 			// Move out from center of thing, otherwise you can end up things moving across the brush in an undesirable direction.  Visually looks wrong
 			VectorSubtract( re->origin, origin, dir );
 			VectorNormalize( dir );
-			VectorScale( dir, flrand( speed * 0.5f, speed * 1.25f ) * speedMod, le->pos.trDelta );
+			VectorScale( dir, Q_flrand( speed * 0.5f, speed * 1.25f ) * speedMod, le->pos.trDelta );
 
 			// Angular Velocity
 			VectorSet( le->angles.trBase, Q_flrand(0.0f, 1.0f) * 360, Q_flrand(0.0f, 1.0f) * 360, Q_flrand(0.0f, 1.0f) * 360 );
@@ -979,7 +979,7 @@ void CG_Chunks( int owner, vec3_t origin, const vec3_t normal, const vec3_t mins
 			le->leBounceSoundType = bounce;
 
 			// Make sure that we have the desired start size set
-			le->radius = flrand( baseScale * 0.75f, baseScale * 1.25f );
+			le->radius = Q_flrand( baseScale * 0.75f, baseScale * 1.25f );
 			re->nonNormalizedAxes = qtrue;
 			AxisCopy( axisDefault, re->axis ); // could do an angles to axis, but this is cheaper and works ok
 			for( k = 0; k < 3; k++ )
@@ -1061,12 +1061,12 @@ localEntity_t *CG_MakeExplosion( vec3_t origin, vec3_t dir,
 	}
 
 	// skew the time a bit so they aren't all in sync
-	offset = rand() & 63;
+	offset = Q_irand( 0, 63 );
 
 	ex = CG_AllocLocalEntity();
 	if ( isSprite ) {
 		ex->leType = LE_SPRITE_EXPLOSION;
-		ex->refEntity.rotation = rand() % 360;
+		ex->refEntity.rotation = Q_irand( 0, 359 );
 		ex->radius = scale;
 		VectorScale( dir, 16, tmpVec );
 		VectorAdd( tmpVec, origin, newOrigin );
@@ -1082,7 +1082,7 @@ localEntity_t *CG_MakeExplosion( vec3_t origin, vec3_t dir,
 		else
 		{
 			if ( !(flags & LEF_NO_RANDOM_ROTATE) )
-				ang = rand() % 360;
+				ang = Q_irand( 0, 359 );
 			VectorCopy( dir, ex->refEntity.axis[0] );
 			RotateAroundDirection( ex->refEntity.axis, ang );
 		}
@@ -1201,8 +1201,19 @@ void CG_SurfaceExplosion( vec3_t origin, vec3_t normal, float radius, float shak
 
 	for ( i = 0; i < NUM_EXPLOSIONS-1; i ++)
 	{
-		VectorSet( new_org, (origin[0] + (16 + (Q_flrand(-1.0f, 1.0f) * 8))*Q_flrand(-1.0f, 1.0f)), (origin[1] + (16 + (Q_flrand(-1.0f, 1.0f) * 8))*Q_flrand(-1.0f, 1.0f)), (origin[2] + (16 + (Q_flrand(-1.0f, 1.0f) * 8))*Q_flrand(-1.0f, 1.0f)) );
-		le = CG_MakeExplosion( new_org, direction, cgs.media.explosionModel, 6, cgs.media.surfaceExplosionShader, 300 + (rand() & 99), qfalse, radius * 0.05f + (Q_flrand(-1.0f, 1.0f) *0.3f), 0);
+		// the draws one after the other, left to right: a compiler may evaluate the operands of one expression and
+		// the arguments of one call in any order
+		int k, msec;
+		float scale;
+
+		for ( k = 0; k < 3; k++ )
+		{
+			const float extent = 16 + (Q_flrand(-1.0f, 1.0f) * 8);
+			new_org[k] = origin[k] + extent*Q_flrand(-1.0f, 1.0f);
+		}
+		msec = 300 + ( Q_irand( 0, 32767 ) & 99 );
+		scale = radius * 0.05f + (Q_flrand(-1.0f, 1.0f) *0.3f);
+		le = CG_MakeExplosion( new_org, direction, cgs.media.explosionModel, 6, cgs.media.surfaceExplosionShader, msec, qfalse, scale, 0);
 	}
 
 	//Shake the camera

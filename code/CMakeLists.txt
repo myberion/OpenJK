@@ -162,7 +162,7 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 		"${SPDir}/qcommon/common.cpp"
 		"${SPDir}/qcommon/cvar.cpp"
 
-		"${SPDir}/qcommon/files.cpp"
+		"${SPDir}/qcommon/files_engine.h"
 
 		"${SPDir}/qcommon/md4.cpp"
 		"${SPDir}/qcommon/msg.cpp"
@@ -193,6 +193,10 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 		"${SPDir}/qcommon/ojk_saved_game_helper.h"
 		"${SPDir}/qcommon/ojk_saved_game_helper_fwd.h"
 		"${SPDir}/qcommon/ojk_scope_guard.h"
+		"${SharedDir}/qcommon/files.cpp"
+		"${SharedDir}/qcommon/files.h"
+		"${SharedDir}/qcommon/q_pk3.cpp"
+		"${SharedDir}/qcommon/q_pk3.h"
 
 		${SharedCommonFiles}
 		)
@@ -365,13 +369,8 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 	source_group("sys" FILES ${SPEngineSysFiles})
 	set(SPEngineFiles ${SPEngineFiles} ${SPEngineSysFiles})
 
-    # Transparently use our bundled minizip.
-    list(APPEND SPEngineIncludeDirectories ${MINIZIP_INCLUDE_DIRS})
-    list(APPEND SPEngineLibraries          ${MINIZIP_LIBRARIES})
-
-    # Transparently use either bundled or system zlib.
-    list(APPEND SPEngineIncludeDirectories ${ZLIB_INCLUDE_DIR})
-    list(APPEND SPEngineLibraries          ${ZLIB_LIBRARIES})
+    # The library that inflates the pk3 files, vendored (lib/zlib-ng) and known to shared/qcommon/q_pk3.cpp only.
+    list(APPEND SPEngineLibraries zlib-ng)
 
 	# project macro so we can invoke it twice: for jk2 and for ja
 	function(add_sp_project ProjectName Label SPDirName InstallDir Component)
@@ -441,7 +440,7 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 		set_target_properties(${ProjectName} PROPERTIES INCLUDE_DIRECTORIES "${SPEngineIncludeDirectories}")
 		set_target_properties(${ProjectName} PROPERTIES PROJECT_LABEL ${Label})
 		if(SPEngineLibraries)
-			target_link_libraries(${ProjectName} ${SPEngineLibraries})
+			target_link_libraries(${ProjectName} ${SPEngineLibraries} qlibm)
 		endif(SPEngineLibraries)
 	endfunction(add_sp_project)
 	if(BuildSPEngine)

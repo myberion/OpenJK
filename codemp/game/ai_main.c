@@ -625,15 +625,15 @@ void BotInputToUserCommand(bot_input_t *bi, usercmd_t *ucmd, int delta_angles[3]
 	//set the view independent movement
 	f = DotProduct(forward, bi->dir);
 	r = DotProduct(right, bi->dir);
-	u = fabs(forward[2]) * bi->dir[2];
-	m = fabs(f);
+	u = Q_fabs(forward[2]) * bi->dir[2];
+	m = Q_fabs(f);
 
-	if (fabs(r) > m) {
-		m = fabs(r);
+	if (Q_fabs(r) > m) {
+		m = Q_fabs(r);
 	}
 
-	if (fabs(u) > m) {
-		m = fabs(u);
+	if (Q_fabs(u) > m) {
+		m = Q_fabs(u);
 	}
 
 	if (m > 0) {
@@ -1517,7 +1517,7 @@ void WPTouchRoutine(bot_state_t *bs)
 
 		if (gWPArray[lastNum] && gWPArray[lastNum]->inuse && gWPArray[lastNum]->index && bs->isCamping < level.time)
 		{
-			bs->isCamping = level.time + rand()%15000 + 30000;
+			bs->isCamping = level.time + Q_irand( 0, 14999 ) + 30000;
 			bs->wpCamping = bs->wpCurrent;
 			bs->wpCampingTo = gWPArray[lastNum];
 
@@ -4814,25 +4814,25 @@ void BotAimOffsetGoalAngles(bot_state_t *bs)
 		return;
 	}
 
-	if (rand()%10 <= 5)
+	if (Q_irand( 0, 9 ) <= 5)
 	{
-		bs->aimOffsetAmtYaw = rand()%(int)accVal;
+		bs->aimOffsetAmtYaw = Q_irand( 0, (int)accVal - 1 );
 	}
 	else
 	{
-		bs->aimOffsetAmtYaw = -(rand()%(int)accVal);
+		bs->aimOffsetAmtYaw = -(Q_irand( 0, (int)accVal - 1 ));
 	}
 
-	if (rand()%10 <= 5)
+	if (Q_irand( 0, 9 ) <= 5)
 	{
-		bs->aimOffsetAmtPitch = rand()%(int)accVal;
+		bs->aimOffsetAmtPitch = Q_irand( 0, (int)accVal - 1 );
 	}
 	else
 	{
-		bs->aimOffsetAmtPitch = -(rand()%(int)accVal);
+		bs->aimOffsetAmtPitch = -(Q_irand( 0, (int)accVal - 1 ));
 	}
 
-	bs->aimOffsetTime = level.time + rand()%500 + 200;
+	bs->aimOffsetTime = level.time + Q_irand( 0, 499 ) + 200;
 }
 
 //do we want to alt fire with this weapon?
@@ -5098,7 +5098,7 @@ int BotFallbackNavigation(bot_state_t *bs)
 	}
 	else
 	{
-		bs->goalAngles[YAW] = rand()%360;
+		bs->goalAngles[YAW] = Q_irand( 0, 359 );
 	}
 
 	return 0;
@@ -6167,7 +6167,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 		bs->wpSeenTime = 0;
 		bs->wpDirection = 0;
 
-		if (rand()%10 < 5 &&
+		if (Q_irand( 0, 9 ) < 5 &&
 			(!bs->doChat || bs->chatTime < level.time))
 		{
 			trap->EA_Attack(bs->client);
@@ -6364,7 +6364,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 
 	if (BotUseInventoryItem(bs))
 	{
-		if (rand()%10 < 5)
+		if (Q_irand( 0, 9 ) < 5)
 		{
 			trap->EA_Use(bs->client);
 		}
@@ -7455,7 +7455,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 
 	if (bs->cur_ps.saberLockTime > level.time)
 	{
-		if (rand()%10 < 5)
+		if (Q_irand( 0, 9 ) < 5)
 		{
 			bs->doAttack = 1;
 		}
@@ -7565,8 +7565,8 @@ int BotAIStartFrame(int time) {
 	elapsed_time = time - local_time;
 	local_time = time;
 
-	if (elapsed_time > BOT_THINK_TIME) thinktime = elapsed_time;
-	else thinktime = BOT_THINK_TIME;
+	// the bots think on the 20 Hz instants of the tick, every 50 ms as at sv_fps 20, where the AI was tuned (plan step 14)
+	thinktime = 50;
 
 	// execute scheduled bot AI
 	for( i = 0; i < MAX_CLIENTS; i++ ) {
@@ -7574,28 +7574,52 @@ int BotAIStartFrame(int time) {
 			continue;
 		}
 		//
-		botstates[i]->botthink_residual += elapsed_time;
-		//
-		if ( botstates[i]->botthink_residual >= thinktime ) {
-			botstates[i]->botthink_residual -= thinktime;
+		if ( time / 50 != ( time - elapsed_time ) / 50 ) {
 
-			if (g_entities[i].client->pers.connected == CON_CONNECTED) {
+			if (g_entities[i].client->pers.connected == CON_CONNECTED && !G_ScenarioControls(i)) {
 				BotAI(i, (float) thinktime / 1000);
+			}
+			else if (G_ScenarioControls(i)) {
+				char buf[1024];
+
+				while (trap->BotGetServerCommand(i, buf, sizeof(buf))) {
+					;	// a scripted bot reads its server commands as BotAI does, which keeps it from timing out
+				}
 			}
 		}
 	}
 
-	// execute bot user commands every frame
-	for( i = 0; i < MAX_CLIENTS; i++ ) {
-		if( !botstates[i] || !botstates[i]->inuse ) {
-			continue;
-		}
-		if( g_entities[i].client->pers.connected != CON_CONNECTED ) {
-			continue;
-		}
+	{ //the bot user commands: one every 10 ms, the tick, each run as a player's is when it arrives (plan step 14); the engine
+	  //calls this before every tick, and the commands of all the bots run in the order of their times
+		static int botCmdTime[MAX_CLIENTS];
+		const int until = time + TICK_MSEC;	// up to the coming tick's time, as a player's commands arrive before it
+		int t, first = until + 1;
 
-		BotUpdateInput(botstates[i], time, elapsed_time);
-		trap->BotUserCommand(botstates[i]->client, &botstates[i]->lastucmd);
+		for( i = 0; i < MAX_CLIENTS; i++ ) {
+			if( !botstates[i] || !botstates[i]->inuse || g_entities[i].client->pers.connected != CON_CONNECTED ) {
+				continue;
+			}
+			if (botCmdTime[i] <= 0 || botCmdTime[i] > until || time - botCmdTime[i] > 200)
+			{ //first command, a restart of the level time, or a long stall (with timescale below 1 a tick is shorter
+			  //than 10 ms, and the last command can be ahead of time: no restart)
+				botCmdTime[i] = time - 10;
+			}
+			first = Q_min( first, botCmdTime[i] + 10 );
+		}
+		for( t = first; t <= until; t++ ) {
+			for( i = 0; i < MAX_CLIENTS; i++ ) {
+				if( !botstates[i] || !botstates[i]->inuse || g_entities[i].client->pers.connected != CON_CONNECTED
+					|| botCmdTime[i] + 10 != t ) {
+					continue;
+				}
+				botCmdTime[i] = t;
+				if (!G_ScenarioCommand(botstates[i]->client, t, &botstates[i]->lastucmd))
+				{ //a scripted scenario plays this bot (g_scenario.c)
+					BotUpdateInput(botstates[i], t, 10);
+				}
+				trap->BotUserCommand(botstates[i]->client, &botstates[i]->lastucmd);
+			}
+		}
 	}
 
 	return qtrue;

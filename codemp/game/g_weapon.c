@@ -1643,7 +1643,11 @@ void WP_flechette_alt_blow( gentity_t *ent )
 static void WP_CreateFlechetteBouncyThing( vec3_t start, vec3_t fwd, gentity_t *self )
 //------------------------------------------------------------------------------
 {
-	gentity_t	*missile = CreateMissile( start, fwd, 700 + Q_flrand(0.0f, 1.0f) * 700, 1500 + Q_flrand(0.0f, 1.0f) * 2000, self, qtrue );
+	// the two draws in this order on every compiler: the order in which a call's arguments are evaluated is
+	// unspecified (MSVC and clang differed)
+	const float	speed = 700 + Q_flrand(0.0f, 1.0f) * 700;
+	const float	life = 1500 + Q_flrand(0.0f, 1.0f) * 2000;
+	gentity_t	*missile = CreateMissile( start, fwd, speed, life, self, qtrue );
 
 	missile->think = WP_flechette_alt_blow;
 
@@ -1884,7 +1888,6 @@ void rocketThink( gentity_t *ent )
 
 		VectorScale( newdir, vel * 0.5f, ent->s.pos.trDelta );
 		VectorCopy( newdir, ent->movedir );
-		SnapVector( ent->s.pos.trDelta );			// save net bandwidth
 		VectorCopy( ent->r.currentOrigin, ent->s.pos.trBase );
 		ent->s.pos.trTime = level.time;
 	}
@@ -2035,7 +2038,6 @@ void thermalDetonatorExplode( gentity_t *ent )
 
 		BG_EvaluateTrajectory( &ent->s.pos, level.time, origin );
 		origin[2] += 8;
-		SnapVector( origin );
 		G_SetOrigin( ent, origin );
 
 		ent->s.eType = ET_GENERAL;
@@ -2144,7 +2146,6 @@ gentity_t *WP_FireThermalDetonator( gentity_t *ent, qboolean altFire )
 	bolt->s.pos.trTime = level.time;		// move a bit on the very first frame
 	VectorCopy( start, bolt->s.pos.trBase );
 
-	SnapVector( bolt->s.pos.trDelta );			// save net bandwidth
 	VectorCopy (start, bolt->r.currentOrigin);
 
 	VectorCopy( start, bolt->pos2 );
@@ -2223,11 +2224,11 @@ qboolean WP_LobFire( gentity_t *self, vec3_t start, vec3_t target, vec3_t mins, 
 			VectorCopy( start, lastPos );
 
 			//This may be kind of wasteful, especially on long throws... use larger steps?  Divide the travelTime into a certain hard number of slices?  Trace just to apex and down?
-			for ( elapsedTime = timeStep; elapsedTime < floor(travelTime)+timeStep; elapsedTime += timeStep )
+			for ( elapsedTime = timeStep; elapsedTime < Q_floor(travelTime)+timeStep; elapsedTime += timeStep )
 			{
 				if ( (float)elapsedTime > travelTime )
 				{//cap it
-					elapsedTime = floor( travelTime );
+					elapsedTime = Q_floor( travelTime );
 				}
 				BG_EvaluateTrajectory( &tr, level.time + elapsedTime, testPos );
 				trap->Trace( &trace, lastPos, mins, maxs, testPos, ignoreEntNum, clipmask, qfalse, 0, 0 );
@@ -2269,7 +2270,7 @@ qboolean WP_LobFire( gentity_t *self, vec3_t start, vec3_t target, vec3_t mins, 
 						break;
 					}
 				}
-				if ( elapsedTime == floor( travelTime ) )
+				if ( elapsedTime == Q_floor( travelTime ) )
 				{//reached end, all clear
 					break;
 				}
@@ -2591,18 +2592,15 @@ void CreateLaserTrap( gentity_t *laserTrap, vec3_t start, gentity_t *owner )
 
 	laserTrap->s.pos.trTime = level.time;		// move a bit on the very first frame
 	VectorCopy( start, laserTrap->s.pos.trBase );
-	SnapVector( laserTrap->s.pos.trBase );			// save net bandwidth
-
-	SnapVector( laserTrap->s.pos.trDelta );			// save net bandwidth
 	VectorCopy (start, laserTrap->r.currentOrigin);
 
 	laserTrap->s.apos.trType = TR_GRAVITY;
 	laserTrap->s.apos.trTime = level.time;
-	laserTrap->s.apos.trBase[YAW] = rand()%360;
-	laserTrap->s.apos.trBase[PITCH] = rand()%360;
-	laserTrap->s.apos.trBase[ROLL] = rand()%360;
+	laserTrap->s.apos.trBase[YAW] = Q_irand( 0, 359 );
+	laserTrap->s.apos.trBase[PITCH] = Q_irand( 0, 359 );
+	laserTrap->s.apos.trBase[ROLL] = Q_irand( 0, 359 );
 
-	if (rand()%10 < 5)
+	if (Q_irand( 0, 9 ) < 5)
 	{
 		laserTrap->s.apos.trBase[YAW] = -laserTrap->s.apos.trBase[YAW];
 	}
@@ -2926,11 +2924,11 @@ void drop_charge (gentity_t *self, vec3_t start, vec3_t dir)
 
 	bolt->s.apos.trType = TR_GRAVITY;
 	bolt->s.apos.trTime = level.time;
-	bolt->s.apos.trBase[YAW] = rand()%360;
-	bolt->s.apos.trBase[PITCH] = rand()%360;
-	bolt->s.apos.trBase[ROLL] = rand()%360;
+	bolt->s.apos.trBase[YAW] = Q_irand( 0, 359 );
+	bolt->s.apos.trBase[PITCH] = Q_irand( 0, 359 );
+	bolt->s.apos.trBase[ROLL] = Q_irand( 0, 359 );
 
-	if (rand()%10 < 5)
+	if (Q_irand( 0, 9 ) < 5)
 	{
 		bolt->s.apos.trBase[YAW] = -bolt->s.apos.trBase[YAW];
 	}
@@ -3560,29 +3558,6 @@ void WP_FireMelee( gentity_t *ent, qboolean alt_fire )
 ////////////////////////////////////////////////////////////////////////////
 
 
-/*
-======================
-SnapVectorTowards
-
-Round a vector to integers for more efficient network
-transmission, but make sure that it rounds towards a given point
-rather than blindly truncating.  This prevents it from truncating
-into a wall.
-======================
-*/
-void SnapVectorTowards( vec3_t v, vec3_t to ) {
-	int		i;
-
-	for ( i = 0 ; i < 3 ; i++ ) {
-		if ( to[i] <= v[i] ) {
-			v[i] = floorf( v[i] );
-		} else {
-			v[i] = ceilf( v[i] );
-		}
-	}
-}
-
-
 //======================================================================
 
 
@@ -3654,9 +3629,6 @@ void CalcMuzzlePoint ( gentity_t *ent, const vec3_t inForward, const vec3_t inRi
 			muzzlePoint[2] += ent->client->ps.viewheight + muzzleOffPoint[2];
 		}
 	}
-
-	// snap to integer coordinates for more efficient network bandwidth usage
-	SnapVector( muzzlePoint );
 }
 
 extern void G_MissileImpact( gentity_t *ent, trace_t *trace );
@@ -4052,7 +4024,7 @@ void WP_GetVehicleCamPos( gentity_t *ent, gentity_t *pilot, vec3_t camPos )
 	if ( ent->client->ps.hackingTime )
 	{
 		thirdPersonHorzOffset += (((float)ent->client->ps.hackingTime)/MAX_STRAFE_TIME) * -80.0f;
-		thirdPersonRange += fabs(((float)ent->client->ps.hackingTime)/MAX_STRAFE_TIME) * 100.0f;
+		thirdPersonRange += Q_fabs(((float)ent->client->ps.hackingTime)/MAX_STRAFE_TIME) * 100.0f;
 	}
 
 	if ( ent->m_pVehicle->m_pVehicleInfo->cameraPitchDependantVertOffset )
@@ -4489,6 +4461,9 @@ FireWeapon
 int BG_EmplacedView(vec3_t baseAngles, vec3_t angles, float *newYaw, float constraint);
 
 void FireWeapon( gentity_t *ent, qboolean altFire ) {
+	if ( ent->s.weapon >= 0 && ent->s.weapon < WP_NUM_WEAPONS ) {
+		g_stats.shots[ent->s.weapon][altFire ? 1 : 0]++;
+	}
 	// track shots taken for accuracy tracking. melee weapons are not tracked.
 	if( ent->s.weapon != WP_SABER && ent->s.weapon != WP_STUN_BATON && ent->s.weapon != WP_MELEE )
 	{

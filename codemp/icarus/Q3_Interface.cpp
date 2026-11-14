@@ -214,7 +214,7 @@ static float Q3_CheckStringCounterIncrement( const char *string )
 		if ( string[1] )
 		{
 			numString = (char *)&string[1];
-			val = atof( numString );
+			val = Q_atof( numString );
 		}
 	}
 	else if ( string[0] == '-' )
@@ -222,7 +222,7 @@ static float Q3_CheckStringCounterIncrement( const char *string )
 		if ( string[1] )
 		{
 			numString = (char *)&string[1];
-			val = atof( numString ) * -1;
+			val = Q_atof( numString ) * -1;
 		}
 	}
 
@@ -372,7 +372,7 @@ void Q3_SetVar( int taskID, int entID, const char *type_name, const char *data )
 			}
 			else
 			{
-				float_data = atof((char *) data);
+				float_data = Q_atof((char *) data);
 			}
 			Q3_SetFloatVariable( type_name, float_data );
 			break;
@@ -456,8 +456,8 @@ static int Q3_Evaluate( int p1Type, const char *p1, int p2Type, const char *p2, 
 	switch ( p1Type )
 	{
 	case TK_FLOAT:
-		sscanf( p1, "%f", &f1 );
-		sscanf( p2, "%f", &f2 );
+		Q_ScanFloats( p1, &f1, 1 );
+		Q_ScanFloats( p2, &f2, 1 );
 		break;
 
 	case TK_INT:
@@ -466,8 +466,8 @@ static int Q3_Evaluate( int p1Type, const char *p1, int p2Type, const char *p2, 
 		break;
 
 	case TK_VECTOR:
-		sscanf( p1, "%f %f %f", &v1[0], &v1[1], &v1[2] );
-		sscanf( p2, "%f %f %f", &v2[0], &v2[1], &v2[2] );
+		Q_ScanFloats( p1, v1, 3 );
+		Q_ScanFloats( p2, v2, 3 );
 		break;
 
 	case TK_STRING:

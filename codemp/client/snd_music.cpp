@@ -212,7 +212,7 @@ static qboolean Music_ParseMusic(CGenericParser2 &Parser, MusicData_t *MusicData
 
 				//if (!Q_strncmp(psKey,sKEY_MARKER,strlen(sKEY_MARKER)))	// for now, assume anything is a marker
 				{
-					MusicFile.MusicEntryTimes[psKey] = atof(psValue);
+					MusicFile.MusicEntryTimes[psKey] = Q_atof(psValue);
 					bEntryFound = qtrue;						// harmless to keep setting
 				}
 			}
@@ -254,7 +254,7 @@ static qboolean Music_ParseMusic(CGenericParser2 &Parser, MusicData_t *MusicData
 					if (!Q_strncmp(psKey,sKEY_TIME,strlen(sKEY_TIME)))
 					{
 						MusicExitTime_t MusicExitTime;
-										MusicExitTime.fTime		= atof(psValue);
+										MusicExitTime.fTime		= Q_atof(psValue);
 										MusicExitTime.iExitPoint= iThisExitPointIndex;
 
 						// new check, don't keep this this exit point if it's within 1.5 seconds either way of an entry point...
@@ -264,7 +264,7 @@ static qboolean Music_ParseMusic(CGenericParser2 &Parser, MusicData_t *MusicData
 						{
 							float fThisEntryTime = (*itEntryTimes).second;
 
-							if (Q_fabs(fThisEntryTime - MusicExitTime.fTime) < 1.5f)
+							if (Q_fabsf(fThisEntryTime - MusicExitTime.fTime) < 1.5f)
 							{
 //								bTooCloseToEntryPoint = qtrue;	// not sure about this, ignore for now
 								break;
@@ -951,7 +951,7 @@ qboolean Music_AllowedToTransition( float			fPlayingTimeElapsed,
 		{
 			MusicExitTimes_t::iterator pExitTime = it;
 
-			if ( Q_fabs(pExitTime->fTime - fPlayingTimeElapsed) <= fTimeEpsilon )
+			if ( Q_fabsf(pExitTime->fTime - fPlayingTimeElapsed) <= fTimeEpsilon )
 			{
 				// got an exit point!, work out feedback params...
 				//
@@ -1092,7 +1092,7 @@ float Music_GetRandomEntryTime( MusicState_e eMusicState )
 			static int	iPrevRandomNumber = -1;
 			static int	iCallCount = 0;
 						iCallCount++;
-			int iRandomEntryNum = (rand()+iCallCount) % (MusicFile.MusicEntryTimes.size());	// legal range
+			int iRandomEntryNum = (Q_irand( 0, 32767 )+iCallCount) % (MusicFile.MusicEntryTimes.size());	// legal range
 			if (iRandomEntryNum == iPrevRandomNumber && MusicFile.MusicEntryTimes.size()>1)
 			{
 				iRandomEntryNum += 1;

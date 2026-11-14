@@ -25,7 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #define	CGAME_API_VERSION		2
 
-#define	CMD_BACKUP			64
+#define	CMD_BACKUP			256		// 2.56 s of commands at one per tick (plan step 14)
 #define	CMD_MASK			(CMD_BACKUP - 1)
 // allow a lot of command backups for very fast systems
 // multiple commands may be combined into a single packet, so this
@@ -42,6 +42,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 typedef struct snapshot_s {
 	int				snapFlags;			// SNAPFLAG_RATE_DELAYED, etc
 	int				ping;
+	qboolean		inputMarginValid;	// the server measured how early it got the command of this snapshot's tick
+	int				inputMargin;		// that margin in ms (negative: the command came after its tick)
 
 	int				serverTime;		// server time the message is valid for (in msec)
 

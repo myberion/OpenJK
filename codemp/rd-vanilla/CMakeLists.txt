@@ -86,10 +86,8 @@ set(MPVanillaRendererRdCommonFiles
 	"${MPDir}/rd-common/tr_common.h"
 	"${MPDir}/rd-common/tr_font.cpp"
 	"${MPDir}/rd-common/tr_font.h"
-	"${MPDir}/rd-common/tr_image_load.cpp"
-	"${MPDir}/rd-common/tr_image_jpg.cpp"
-	"${MPDir}/rd-common/tr_image_tga.cpp"
-	"${MPDir}/rd-common/tr_image_png.cpp"
+	"${SharedDir}/rd-common/tr_image_load.cpp"
+	"${SharedDir}/rd-common/tr_image_codec.cpp"
 	"${MPDir}/rd-common/tr_noise.cpp"
 	"${MPDir}/rd-common/tr_public.h"
 	"${MPDir}/rd-common/tr_types.h")
@@ -110,22 +108,8 @@ set(MPVanillaRendererCommonSafeFiles
 source_group("common/safe" FILES ${MPVanillaRendererCommonSafeFiles})
 set(MPVanillaRendererFiles ${MPVanillaRendererFiles} ${MPVanillaRendererCommonSafeFiles})
 
-# Transparently use either bundled or system libjpeg.
-list(APPEND MPVanillaRendererIncludeDirectories ${JPEG_INCLUDE_DIR})
-list(APPEND MPVanillaRendererLibraries          ${JPEG_LIBRARIES})
-
-# Transparently use either bundled or system libpng.  Order is important --
-# libpng used zlib, so it must come before it on the linker command line.
-list(APPEND MPVanillaRendererIncludeDirectories ${PNG_INCLUDE_DIRS})
-list(APPEND MPVanillaRendererLibraries          ${PNG_LIBRARIES})
-
-# Transparently use either bundled or system zlib.
-list(APPEND MPVanillaRendererIncludeDirectories ${ZLIB_INCLUDE_DIR})
-list(APPEND MPVanillaRendererLibraries          ${ZLIB_LIBRARIES})
-
-# Transparently use our bundled minizip.
-list(APPEND MPVanillaRendererIncludeDirectories ${MINIZIP_INCLUDE_DIRS})
-list(APPEND MPVanillaRendererLibraries          ${MINIZIP_LIBRARIES})
+# The image libraries, vendored and compiled inside shared/rd-common/tr_image_codec.cpp: Wuffs decodes, stb_image_write writes.
+list(APPEND MPVanillaRendererIncludeDirectories "${CMAKE_SOURCE_DIR}/lib/wuffs" "${CMAKE_SOURCE_DIR}/lib/stb")
 
 find_package(OpenGL REQUIRED)
 set(MPVanillaRendererIncludeDirectories ${MPVanillaRendererIncludeDirectories} ${OPENGL_INCLUDE_DIR})
@@ -165,4 +149,4 @@ set_property(TARGET ${MPVanillaRenderer} APPEND PROPERTY COMPILE_OPTIONS ${OPENJ
 
 set_target_properties(${MPVanillaRenderer} PROPERTIES INCLUDE_DIRECTORIES "${MPVanillaRendererIncludeDirectories}")
 set_target_properties(${MPVanillaRenderer} PROPERTIES PROJECT_LABEL "MP Vanilla Renderer")
-target_link_libraries(${MPVanillaRenderer} ${MPVanillaRendererLibraries})
+target_link_libraries(${MPVanillaRenderer} ${MPVanillaRendererLibraries} qlibm)

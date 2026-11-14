@@ -74,7 +74,7 @@ void Remote_MaintainHeight( void )
 	{
 		NPCS.NPC->client->ps.velocity[2] *= VELOCITY_DECAY;
 
-		if ( fabs( NPCS.NPC->client->ps.velocity[2] ) < 2 )
+		if ( Q_fabs( NPCS.NPC->client->ps.velocity[2] ) < 2 )
 		{
 			NPCS.NPC->client->ps.velocity[2] = 0;
 		}
@@ -90,9 +90,9 @@ void Remote_MaintainHeight( void )
 			dif = (NPCS.NPC->enemy->r.currentOrigin[2] +  Q_irand( 0, NPCS.NPC->enemy->r.maxs[2]+8 )) - NPCS.NPC->r.currentOrigin[2];
 
 			// cap to prevent dramatic height shifts
-			if ( fabs( dif ) > 2 )
+			if ( Q_fabs( dif ) > 2 )
 			{
-				if ( fabs( dif ) > 24 )
+				if ( Q_fabs( dif ) > 24 )
 				{
 					dif = ( dif < 0 ? -24 : 24 );
 				}
@@ -119,7 +119,7 @@ void Remote_MaintainHeight( void )
 		{
 			dif = goal->r.currentOrigin[2] - NPCS.NPC->r.currentOrigin[2];
 
-			if ( fabs( dif ) > 24 )
+			if ( Q_fabs( dif ) > 24 )
 			{
 				dif = ( dif < 0 ? -24 : 24 );
 				NPCS.NPC->client->ps.velocity[2] = (NPCS.NPC->client->ps.velocity[2]+dif)/2;
@@ -132,7 +132,7 @@ void Remote_MaintainHeight( void )
 	{
 		NPCS.NPC->client->ps.velocity[0] *= VELOCITY_DECAY;
 
-		if ( fabs( NPCS.NPC->client->ps.velocity[0] ) < 1 )
+		if ( Q_fabs( NPCS.NPC->client->ps.velocity[0] ) < 1 )
 		{
 			NPCS.NPC->client->ps.velocity[0] = 0;
 		}
@@ -142,7 +142,7 @@ void Remote_MaintainHeight( void )
 	{
 		NPCS.NPC->client->ps.velocity[1] *= VELOCITY_DECAY;
 
-		if ( fabs( NPCS.NPC->client->ps.velocity[1] ) < 1 )
+		if ( Q_fabs( NPCS.NPC->client->ps.velocity[1] ) < 1 )
 		{
 			NPCS.NPC->client->ps.velocity[1] = 0;
 		}
@@ -168,7 +168,7 @@ void Remote_Strafe( void )
 
 	// Pick a random strafe direction, then check to see if doing a strafe would be
 	//	reasonable valid
-	dir = ( rand() & 1 ) ? -1 : 1;
+	dir = ( Q_irand( 0, 1 ) ) ? -1 : 1;
 	VectorMA( NPCS.NPC->r.currentOrigin, REMOTE_STRAFE_DIS * dir, right, end );
 
 	trap->Trace( &tr, NPCS.NPC->r.currentOrigin, NULL, NULL, end, NPCS.NPC->s.number, MASK_SOLID, qfalse, 0, 0 );
@@ -333,7 +333,7 @@ void Remote_Attack( void )
 	// Rate our distance to the target, and our visibilty
 	distance	= (int) DistanceHorizontalSquared( NPCS.NPC->r.currentOrigin, NPCS.NPC->enemy->r.currentOrigin );
 	visible		= NPC_ClearLOS4( NPCS.NPC->enemy );
-	idealDist	= MIN_DISTANCE_SQR+(MIN_DISTANCE_SQR*flrand( 0, 1 ));
+	idealDist	= MIN_DISTANCE_SQR+(MIN_DISTANCE_SQR*Q_flrand( 0, 1 ));
 	advance		= (qboolean)(distance > idealDist*1.25);
 	retreat		= (qboolean)(distance < idealDist*0.75);
 

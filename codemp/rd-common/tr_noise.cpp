@@ -53,13 +53,14 @@ float GetNoiseTime( int t )
 void R_NoiseInit( void )
 {
 	int i;
+	qrand_t rng; // the same table every time, from a fixed seed
 
-	srand( 1001 );
+	Q_RandSeed( &rng, 1001 );
 
 	for ( i = 0; i < NOISE_SIZE; i++ )
 	{
-		s_noise_table[i] = ( float ) ( ( ( rand() / ( float ) RAND_MAX ) * 2.0 - 1.0 ) );
-		s_noise_perm[i] = ( unsigned char ) ( rand() / ( float ) RAND_MAX * 255 );
+		s_noise_table[i] = Q_RandFloat( &rng, -1.0f, 1.0f );
+		s_noise_perm[i] = ( unsigned char ) Q_RandInt( &rng, 0, 255 );
 	}
 }
 
@@ -72,13 +73,13 @@ float R_NoiseGet4f( float x, float y, float z, float t )
 	float back[4];
 	float fvalue, bvalue, value[2], finalvalue;
 
-	ix = ( int ) floor( x );
+	ix = ( int ) Q_floor( x );
 	fx = x - ix;
-	iy = ( int ) floor( y );
+	iy = ( int ) Q_floor( y );
 	fy = y - iy;
-	iz = ( int ) floor( z );
+	iz = ( int ) Q_floor( z );
 	fz = z - iz;
-	it = ( int ) floor( t );
+	it = ( int ) Q_floor( t );
 	ft = t - it;
 
 	for ( i = 0; i < 2; i++ )

@@ -23,6 +23,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include "q_platform.h"
+#include "q_libm.h"
+#include "q_rand.h"
 
 
 #if defined(__cplusplus)
@@ -59,19 +61,7 @@ void NormalToLatLong( const vec3_t normal, byte bytes[2] );
 //      RANDOM NUMBER GENERATION
 //
 ///////////////////////////////////////////////////////////////////////////
-#define QRAND_MAX 32768
-
-int   Q_rand( int *seed );
-float Q_random( int *seed );
-float Q_crandom( int *seed );
-
-void  Rand_Init( int seed );
-float Q_flrand( float min, float max );
-int   Q_irand( int value1, int value2 );
-float flrand( float min, float max );
-int   irand( int min, int max );
-
-float erandom( float mean );
+// q_rand.h
 
 
 ///////////////////////////////////////////////////////////////////////////
@@ -88,7 +78,7 @@ float erandom( float mean );
 #define DEG2RAD( a ) ( ( (a) * PI_DIV_180 ) )
 #define RAD2DEG( a ) ( ( (a) * INV_PI_DIV_180 ) )
 
-#define SQRTFAST( x ) ( (x) * Q_rsqrt( x ) )
+#define SQRTFAST( x ) ( (x) * Q_rsqrtf( x ) )
 
 #define Q_min(x,y) ((x)<(y)?(x):(y))
 #define Q_max(x,y) ((x)>(y)?(x):(y))
@@ -112,14 +102,8 @@ float Com_Clamp( float min, float max, float value );
 int Com_AbsClampi( int min, int max, int value );
 float Com_AbsClamp( float min, float max, float value );
 
-float Q_rsqrt( float number );
-float Q_fabs( float f );
 
-float Q_acos(float c);
-float Q_asin(float c);
-float Q_powf ( float x, int y );
-qboolean Q_isnan (float f);
-int Q_log2( int val );
+int Q_ilog2( int val );
 
 float LerpAngle(float from, float to, float frac);
 float AngleSubtract( float a1, float a2 );
@@ -232,6 +216,10 @@ void VectorCopy2( const vec2_t vecIn, vec2_t vecOut );
 ///////////////////////////////////////////////////////////////////////////
 extern vec3_t vec3_origin;
 
+// The small helpers are inline (they were functions of q_math.c, called through the linker from every loop of the
+// collision and model code: DotProduct alone was 11.5 % of a server tick's samples; plan step 14, part 7). The
+// bodies and their semantics are unchanged, an output that aliases an input included.
+
 #define VectorScaleM(v, factor, dst) \
 	(dst)[0] = (v[0]) * (factor), \
 	(dst)[1] = (v[1]) * (factor), \
@@ -243,30 +231,83 @@ extern vec3_t vec3_origin;
 #define VectorClearM(dst) \
 	memset((dst), 0, sizeof((dst)[0]) * 3)
 
-void VectorAdd( const vec3_t vec1, const vec3_t vec2, vec3_t vecOut );
-void VectorSubtract( const vec3_t vec1, const vec3_t vec2, vec3_t vecOut );
-void VectorScale( const vec3_t vecIn, float scale, vec3_t vecOut );
-void VectorMA( const vec3_t vec1, float scale, const vec3_t vec2, vec3_t vecOut );
-void VectorSet( vec3_t vec, float x, float y, float z );
-void VectorClear( vec3_t vec );
-void VectorCopy( const vec3_t vecIn, vec3_t vecOut );
-float VectorLength( const vec3_t vec );
-float VectorLengthSquared( const vec3_t vec );
+static QINLINE void VectorAdd( const vec3_t vec1, const vec3_t vec2, vec3_t vecOut ) {
+	vecOut[0] = vec1[0]+vec2[0];
+	vecOut[1] = vec1[1]+vec2[1];
+	vecOut[2] = vec1[2]+vec2[2];
+}
+static QINLINE void VectorSubtract( const vec3_t vec1, const vec3_t vec2, vec3_t vecOut ) {
+	vecOut[0] = vec1[0]-vec2[0];
+	vecOut[1] = vec1[1]-vec2[1];
+	vecOut[2] = vec1[2]-vec2[2];
+}
+static QINLINE void VectorScale( const vec3_t vecIn, float scale, vec3_t vecOut ) {
+	vecOut[0] = vecIn[0]*scale;
+	vecOut[1] = vecIn[1]*scale;
+	vecOut[2] = vecIn[2]*scale;
+}
+static QINLINE void VectorMA( const vec3_t vec1, float scale, const vec3_t vec2, vec3_t vecOut ) {
+	vecOut[0] = vec1[0] + scale*vec2[0];
+	vecOut[1] = vec1[1] + scale*vec2[1];
+	vecOut[2] = vec1[2] + scale*vec2[2];
+}
+static QINLINE void VectorSet( vec3_t vec, float x, float y, float z ) {
+	vec[0]=x; vec[1]=y; vec[2]=z;
+}
+static QINLINE void VectorClear( vec3_t vec ) {
+	vec[0] = vec[1] = vec[2] = 0.0f;
+}
+static QINLINE void VectorCopy( const vec3_t vecIn, vec3_t vecOut ) {
+	vecOut[0] = vecIn[0];
+	vecOut[1] = vecIn[1];
+	vecOut[2] = vecIn[2];
+}
+// lengths in double: the squares of floats are exact there, and the result is rounded to float once
+static QINLINE float VectorLength( const vec3_t vec ) {
+	return (float)Q_sqrt( (double)vec[0]*vec[0] + (double)vec[1]*vec[1] + (double)vec[2]*vec[2] );
+}
+static QINLINE float VectorLengthSquared( const vec3_t vec ) {
+	return (float)( (double)vec[0]*vec[0] + (double)vec[1]*vec[1] + (double)vec[2]*vec[2] );
+}
 void VectorNormalizeFast( vec3_t vec );
 float VectorNormalize( vec3_t vec );
 float VectorNormalize2( const vec3_t vec, vec3_t vecOut );
 void VectorAdvance( const vec3_t veca, const float scale, const vec3_t vecb, vec3_t vecc);
-void VectorInc( vec3_t vec );
-void VectorDec( vec3_t vec );
-void VectorInverse( vec3_t vec );
-void CrossProduct( const vec3_t vec1, const vec3_t vec2, vec3_t vecOut );
-float DotProduct( const vec3_t vec1, const vec3_t vec2 );
-qboolean VectorCompare( const vec3_t vec1, const vec3_t vec2 );
+static QINLINE void VectorInc( vec3_t vec ) {
+	vec[0] += 1.0f; vec[1] += 1.0f; vec[2] += 1.0f;
+}
+static QINLINE void VectorDec( vec3_t vec ) {
+	vec[0] -= 1.0f; vec[1] -= 1.0f; vec[2] -= 1.0f;
+}
+static QINLINE void VectorInverse( vec3_t vec ) {
+	vec[0] = -vec[0]; vec[1] = -vec[1]; vec[2] = -vec[2];
+}
+static QINLINE void CrossProduct( const vec3_t vec1, const vec3_t vec2, vec3_t vecOut ) {
+	vecOut[0] = vec1[1]*vec2[2] - vec1[2]*vec2[1];
+	vecOut[1] = vec1[2]*vec2[0] - vec1[0]*vec2[2];
+	vecOut[2] = vec1[0]*vec2[1] - vec1[1]*vec2[0];
+}
+static QINLINE float DotProduct( const vec3_t vec1, const vec3_t vec2 ) {
+	return vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2];
+}
+static QINLINE qboolean VectorCompare( const vec3_t vec1, const vec3_t vec2 ) {
+	return (qboolean)(vec1[0] == vec2[0] && vec1[1] == vec2[1] && vec1[2] == vec2[2]);
+}
 qboolean VectorCompare2( const vec3_t v1, const vec3_t v2 );
 
 void SnapVector( float *v );
-float Distance( const vec3_t p1, const vec3_t p2 );
-float DistanceSquared( const vec3_t p1, const vec3_t p2 );
+static QINLINE float Distance( const vec3_t p1, const vec3_t p2 ) {
+	vec3_t	v;
+
+	VectorSubtract( p2, p1, v );
+	return VectorLength( v );
+}
+static QINLINE float DistanceSquared( const vec3_t p1, const vec3_t p2 ) {
+	vec3_t	v;
+
+	VectorSubtract( p2, p1, v );
+	return VectorLengthSquared( v );
+}
 float DistanceHorizontal( const vec3_t p1, const vec3_t p2 );
 float DistanceHorizontalSquared( const vec3_t p1, const vec3_t p2 );
 void MakeNormalVectors( const vec3_t forward, vec3_t right, vec3_t up);

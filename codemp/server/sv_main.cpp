@@ -27,15 +27,11 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "ghoul2/ghoul2_shared.h"
 #include "sv_gameapi.h"
 
+#include <chrono>
+
 serverStatic_t	svs;				// persistant server info
 server_t		sv;					// local server
 
-cvar_t	*sv_snapsMin;			// minimum snapshots/sec a client can request, also limited by sv_snapsMax
-cvar_t	*sv_snapsMax;			// maximum snapshots/sec a client can request, also limited by sv_fps
-cvar_t	*sv_snapsPolicy;		// 0-2
-cvar_t	*sv_fps = NULL;				// time rate for running non-clients
-cvar_t	*sv_timeout;			// seconds without any message
-cvar_t	*sv_zombietime;			// seconds to sink messages after disconnect
 cvar_t	*sv_rconPassword;		// password for remote server commands
 cvar_t	*sv_privatePassword;	// password for the privateClient slots
 cvar_t	*sv_maxclients;
@@ -46,22 +42,18 @@ cvar_t	*sv_master[MAX_MASTER_SERVERS];		// master server ip address
 cvar_t	*sv_reconnectlimit;		// minimum seconds between connect messages
 cvar_t	*sv_showghoultraces;	// report ghoul2 traces
 cvar_t	*sv_showloss;			// report when usercmds are lost
-cvar_t	*sv_padPackets;			// add nop bytes to messages
+cvar_t	*sv_netcodecCompare;		// debug: also code each message in the legacy format, print the byte ratio
+cvar_t	*sv_netcodecMaxBytes;		// debug: the largest message the server codes, below MAX_MSGLEN
 cvar_t	*sv_killserver;			// menu system can set to 1 to shut server down
 cvar_t	*sv_mapname;
 cvar_t	*sv_mapChecksum;
 cvar_t	*sv_serverid;
-cvar_t	*sv_ratePolicy;		// 1-2
-cvar_t	*sv_clientRate;
-cvar_t	*sv_minRate;
-cvar_t	*sv_maxRate;
 cvar_t	*sv_minPing;
 cvar_t	*sv_maxPing;
 cvar_t	*sv_gametype;
 cvar_t	*sv_pure;
 cvar_t	*sv_floodProtect;
 cvar_t	*sv_floodProtectSlow;
-cvar_t	*sv_lanForceRate; // dedicated 1 (LAN) server forces local client rates to 99999 (bug #491)
 cvar_t	*sv_needpass;
 cvar_t	*sv_filterCommands; // strict filtering on commands (1: strip ['\r', '\n'], 2: also strip ';')
 cvar_t	*sv_autoDemo;
@@ -778,6 +770,68 @@ void SV_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
 
 //============================================================================
 
+// The server's CPU time since the last svnetstats, in microseconds (plan step 14: what a higher tick rate costs). A
+// server frame is the work of SV_Frame from the pings to the snapshots sent; the game frames, the bots and the
+// snapshots are parts of it, and so are the players' commands (with their movement), which run in the ticks. Client
+// packets are decoded when they arrive, outside the frames.
+enum svCost_t { SV_COST_FRAME, SV_COST_GAME, SV_COST_BOTS, SV_COST_COMMANDS, SV_COST_SNAPSHOTS, SV_COST_PACKETS, SV_COST_COUNT };
+
+static struct {
+	int			calls[SV_COST_COUNT];
+	long long	sum[SV_COST_COUNT];
+	long long	max[SV_COST_COUNT];
+	int			framesOverInterval;	// server frames that took longer than the interval between frames
+	long long	since;				// when the statistics started (SV_Microseconds), 0 before the first measure
+} s_cost;
+
+long long SV_Microseconds( void ) {
+	return (long long)std::chrono::duration_cast<std::chrono::microseconds>(
+		std::chrono::steady_clock::now().time_since_epoch() ).count();
+}
+
+// Adds the time since start to a part and returns it.
+static long long SV_CostAdd( svCost_t part, long long start ) {
+	const long long now = SV_Microseconds();
+	const long long t = now - start;
+	if ( !s_cost.since ) {
+		s_cost.since = start;
+	}
+	s_cost.calls[part]++;
+	s_cost.sum[part] += t;
+	s_cost.max[part] = Q_max( s_cost.max[part], t );
+	return t;
+}
+
+void SV_CostStats( void ) {
+	static const char *const names[SV_COST_COUNT] = { "server frames", "game frames", "bot frames", "player commands",
+		"snapshots sent", "client packets" };
+	const long long now = SV_Microseconds();
+	const double seconds = s_cost.since ? ( now - s_cost.since ) / 1e6 : 0.0;
+	int humans = 0, bots = 0;
+
+	for ( int i = 0; i < sv_maxclients->integer; i++ ) {
+		const client_t *cl = &svs.clients[i];
+		if ( cl->state < CS_CONNECTED ) {
+			continue;
+		}
+		if ( cl->netchan.remoteAddress.type == NA_BOT ) {
+			bots++;
+		} else {
+			humans++;
+		}
+	}
+	Com_Printf( "server CPU over %.1f s, %d humans, %d bots:", seconds, humans, bots );
+	for ( int i = 0; i < SV_COST_COUNT; i++ ) {
+		Com_Printf( " %s %d, %.1f us each, max %lld us;", names[i], s_cost.calls[i],
+			s_cost.calls[i] ? (double)s_cost.sum[i] / s_cost.calls[i] : 0.0, s_cost.max[i] );
+	}
+	const long long busy = s_cost.sum[SV_COST_FRAME] + s_cost.sum[SV_COST_PACKETS];
+	Com_Printf( " %d server frames longer than the interval; %.2f %% of one core\n", s_cost.framesOverInterval,
+		seconds > 0.0 ? busy / ( seconds * 1e4 ) : 0.0 );
+	Com_Memset( &s_cost, 0, sizeof( s_cost ) );
+	s_cost.since = now;
+}
+
 /*
 =================
 SV_ReadPackets
@@ -829,7 +883,9 @@ void SV_PacketEvent( const netadr_t *from, msg_t *msg ) {
 			// reliable message, but they don't do any other processing
 			if (cl->state != CS_ZOMBIE) {
 				cl->lastPacketTime = svs.time;	// don't timeout
+				const long long start = SV_Microseconds();
 				SV_ExecuteClientMessage( cl, msg );
+				SV_CostAdd( SV_COST_PACKETS, start );
 			}
 		}
 		return;
@@ -872,11 +928,11 @@ void SV_CalcPings( void ) {
 
 		total = 0;
 		count = 0;
-		for ( j = 0 ; j < PACKET_BACKUP ; j++ ) {
-			if ( cl->frames[j].messageAcked <= 0 ) {
+		for ( j = 0 ; j < SV_PING_WINDOW ; j++ ) {
+			if ( !cl->pingTimes[j].isAcked ) {
 				continue;
 			}
-			delta = cl->frames[j].messageAcked - cl->frames[j].messageSent;
+			delta = cl->pingTimes[j].acked - cl->pingTimes[j].sent;
 			count++;
 			total += delta;
 		}
@@ -899,9 +955,10 @@ void SV_CalcPings( void ) {
 ==================
 SV_CheckTimeouts
 
-If a packet has not been received from a client for timeout->integer
-seconds, drop the conneciton.  Server time is used instead of
-realtime to avoid dropping the local client while debugging.
+If a packet has not been received from a client for TIMEOUT_ACTIVE
+seconds (TIMEOUT_CONNECTING while it loads the map), drop the conneciton.
+Server time is used instead of realtime to avoid dropping the local client
+while debugging.
 
 When a client is normally dropped, the client_t goes into a zombie state
 for a few seconds to make sure any final reliable message gets resent
@@ -914,10 +971,10 @@ void SV_CheckTimeouts( void ) {
 	int			droppoint;
 	int			zombiepoint;
 
-	droppoint = svs.time - 1000 * sv_timeout->integer;
-	zombiepoint = svs.time - 1000 * sv_zombietime->integer;
+	zombiepoint = svs.time - 1000 * SV_ZOMBIE_TIME;
 
 	for (i=0,cl=svs.clients ; i < sv_maxclients->integer ; i++,cl++) {
+		droppoint = svs.time - 1000 * ( cl->state == CS_ACTIVE ? TIMEOUT_ACTIVE : TIMEOUT_CONNECTING );
 		// message times may be wrong across a changelevel
 		if (cl->lastPacketTime > svs.time) {
 			cl->lastPacketTime = svs.time;
@@ -983,9 +1040,7 @@ SV_CheckCvars
 ==================
 */
 void SV_CheckCvars( void ) {
-	static int lastModHostname = -1, lastModFramerate = -1, lastModSnapsMin = -1, lastModSnapsMax = -1;
-	static int lastModSnapsPolicy = -1, lastModRatePolicy = -1, lastModClientRate = -1;
-	static int lastModMaxRate = -1, lastModMinRate = -1;
+	static int lastModHostname = -1;
 	qboolean changed = qfalse;
 
 	if ( sv_hostname->modificationCount != lastModHostname ) {
@@ -1008,107 +1063,6 @@ void SV_CheckCvars( void ) {
 			Cvar_Set("sv_hostname", hostname );
 		}
 	}
-
-	// check limits on client "rate" values based on server settings
-	if ( sv_clientRate->modificationCount != lastModClientRate ||
-		 sv_minRate->modificationCount != lastModMinRate ||
-		 sv_maxRate->modificationCount != lastModMaxRate ||
-		 sv_ratePolicy->modificationCount != lastModRatePolicy )
-	{
-		sv_clientRate->modificationCount = lastModClientRate;
-		sv_maxRate->modificationCount = lastModMaxRate;
-		sv_minRate->modificationCount = lastModMinRate;
-		sv_ratePolicy->modificationCount = lastModRatePolicy;
-
-		if (sv_ratePolicy->integer == 1)
-		{
-			// NOTE: what if server sets some dumb sv_clientRate value?
-			client_t *cl = NULL;
-			int i = 0;
-
-			for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++) {
-				// if the client is on the same subnet as the server and we aren't running an
-				// internet public server, assume they don't need a rate choke
-				if (Sys_IsLANAddress(&cl->netchan.remoteAddress) && com_dedicated->integer != 2 && sv_lanForceRate->integer == 1) {
-					cl->rate = 100000;	// lans should not rate limit
-				}
-				else {
-					int val = sv_clientRate->integer;
-					if (val != cl->rate) {
-						cl->rate = val;
-					}
-				}
-			}
-		}
-		else if (sv_ratePolicy->integer == 2)
-		{
-			// NOTE: what if server sets some dumb sv_clientRate value?
-			client_t *cl = NULL;
-			int i = 0;
-
-			for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++) {
-				// if the client is on the same subnet as the server and we aren't running an
-				// internet public server, assume they don't need a rate choke
-				if (Sys_IsLANAddress(&cl->netchan.remoteAddress) && com_dedicated->integer != 2 && sv_lanForceRate->integer == 1) {
-					cl->rate = 100000;	// lans should not rate limit
-				}
-				else {
-					int val = cl->rate;
-					if (!val) {
-						val = sv_maxRate->integer;
-					}
-					val = Com_Clampi( 1000, 90000, val );
-					val = Com_Clampi( sv_minRate->integer, sv_maxRate->integer, val );
-					if (val != cl->rate) {
-						cl->rate = val;
-					}
-				}
-			}
-		}
-	}
-
-	// check limits on client "snaps" value based on server framerate and snapshot rate
-	if ( sv_fps->modificationCount != lastModFramerate ||
-		 sv_snapsMin->modificationCount != lastModSnapsMin ||
-		 sv_snapsMax->modificationCount != lastModSnapsMax ||
-		 sv_snapsPolicy->modificationCount != lastModSnapsPolicy )
-	{
-		lastModFramerate = sv_fps->modificationCount;
-		lastModSnapsMin = sv_snapsMin->modificationCount;
-		lastModSnapsMax = sv_snapsMax->modificationCount;
-		lastModSnapsPolicy = sv_snapsPolicy->modificationCount;
-
-		if (sv_snapsPolicy->integer == 1)
-		{
-			client_t *cl = NULL;
-			int i = 0;
-
-			for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++) {
-				int val = 1000 / sv_fps->integer;
-				if (val != cl->snapshotMsec) {
-					// Reset last sent snapshot so we avoid desync between server frame time and snapshot send time
-					cl->nextSnapshotTime = -1;
-					cl->snapshotMsec = val;
-				}
-			}
-		}
-		else if (sv_snapsPolicy->integer == 2)
-		{
-			client_t *cl = NULL;
-			int i = 0;
-			int minSnaps = Com_Clampi(1, sv_snapsMax->integer, sv_snapsMin->integer); // between 1 and sv_snapsMax ( 1 <-> 40 )
-			int maxSnaps = Q_min(sv_fps->integer, sv_snapsMax->integer); // can't produce more than sv_fps snapshots/sec, but can send less than sv_fps snapshots/sec
-
-			for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++) {
-				int val = 1000 / Com_Clampi(minSnaps, maxSnaps, cl->wishSnaps);
-				if (val != cl->snapshotMsec) {
-					// Reset last sent snapshot so we avoid desync between server frame time and snapshot send time
-					cl->nextSnapshotTime = -1;
-					cl->snapshotMsec = val;
-				}
-			}
-		}
-	}
 }
 
 /*
@@ -1119,19 +1073,10 @@ Return time in millseconds until processing of the next server frame.
 */
 int SV_FrameMsec()
 {
-	if(sv_fps)
-	{
-		int frameMsec;
-
-		frameMsec = 1000.0f / sv_fps->value;
-
-		if(frameMsec < sv.timeResidual)
-			return 0;
-		else
-			return frameMsec - sv.timeResidual;
-	}
+	if(TICK_MSEC < sv.timeResidual)
+		return 0;
 	else
-		return 1;
+		return TICK_MSEC - sv.timeResidual;
 }
 
 /*
@@ -1163,20 +1108,20 @@ void SV_Frame( int msec ) {
 	}
 
 	// if it isn't time for the next frame, do nothing
-	if ( sv_fps->integer < 1 ) {
-		Cvar_Set( "sv_fps", "10" );
-	}
-	frameMsec = 1000 / sv_fps->integer * com_timescale->value;
+	frameMsec = TICK_MSEC * com_timescale->value;
 	// don't let it scale below 1ms
 	if(frameMsec < 1)
 	{
-		Cvar_Set("timescale", va("%f", sv_fps->integer / 1000.0f));
+		Cvar_Set("timescale", va("%f", 1.0f / TICK_MSEC));
 		frameMsec = 1;
 	}
 
 	sv.timeResidual += msec;
-
-	if (!com_dedicated->integer) SV_BotFrame( sv.time + sv.timeResidual );
+	if ( sv.timeResidual > SV_MAX_CATCHUP_TICKS * frameMsec ) {
+		Com_Printf( "Hitch: %d msec of game time dropped, at most %d ticks run at once\n",
+			sv.timeResidual - SV_MAX_CATCHUP_TICKS * frameMsec, SV_MAX_CATCHUP_TICKS );
+		sv.timeResidual = SV_MAX_CATCHUP_TICKS * frameMsec;
+	}
 
 	// if time is about to hit the 32nd bit, kick all clients
 	// and clear sv.time, rather
@@ -1184,12 +1129,6 @@ void SV_Frame( int msec ) {
 	// 2giga-milliseconds = 23 days, so it won't be too often
 	if ( svs.time > 0x70000000 ) {
 		SV_Shutdown( "Restarting server due to time wrapping" );
-		Cbuf_AddText( va( "map %s\n", Cvar_VariableString( "mapname" ) ) );
-		return;
-	}
-	// this can happen considerably earlier when lots of clients play and the map doesn't change
-	if ( svs.nextSnapshotEntities >= 0x7FFFFFFE - svs.numSnapshotEntities ) {
-		SV_Shutdown( "Restarting server due to numSnapshotEntities wrapping" );
 		Cbuf_AddText( va( "map %s\n", Cvar_VariableString( "mapname" ) ) );
 		return;
 	}
@@ -1216,23 +1155,37 @@ void SV_Frame( int msec ) {
 		startTime = 0;	// quite a compiler warning
 	}
 
+	const long long frameStart = SV_Microseconds();
+
 	// update ping based on the all received frames
 	SV_CalcPings();
 
-	if (com_dedicated->integer) SV_BotFrame( sv.time );
-
 	// run the game simulation in chunks
 	while ( sv.timeResidual >= frameMsec ) {
+		// the bots' AI and their commands up to the coming tick, then the players' commands up to it (plan step 14)
+		const long long botStart = SV_Microseconds();
+		SV_BotFrame( sv.time );
+		SV_CostAdd( SV_COST_BOTS, botStart );
+		const long long commandsStart = SV_Microseconds();
+		SV_RunClientCommands( sv.time + frameMsec, frameMsec );
+		SV_CostAdd( SV_COST_COMMANDS, commandsStart );
+
 		sv.timeResidual -= frameMsec;
 		svs.time += frameMsec;
 		sv.time += frameMsec;
 
 		// let everything in the world think and move
+		const long long start = SV_Microseconds();
 		GVM_RunFrame( sv.time );
+		SV_CostAdd( SV_COST_GAME, start );
 	}
 
 	//rww - RAGDOLL_BEGIN
-	re->G2API_SetTime(sv.time,0);
+	// The game starts its ghoul2 animations at its logic clock, the last 20 Hz instant (game/g_local.h), and its bolts and
+	// model traces are evaluated at the time set here: the logic instant of the frame just run, so a 20 Hz instant
+	// evaluates the animations at the previous instant, 50 ms earlier, as every frame did at sv_fps 20 (plan step 14).
+	// With sv.time it was one tick earlier, and at 100 Hz the blades ran 40 ms ahead of their sv_fps 20 path.
+	re->G2API_SetTime( sv.time / 50 * 50, 0 );
 	//rww - RAGDOLL_END
 
 	if ( com_speeds->integer ) {
@@ -1243,7 +1196,12 @@ void SV_Frame( int msec ) {
 	SV_CheckTimeouts();
 
 	// send messages back to the clients
+	const long long sendStart = SV_Microseconds();
 	SV_SendClientMessages();
+	SV_CostAdd( SV_COST_SNAPSHOTS, sendStart );
+	if ( SV_CostAdd( SV_COST_FRAME, frameStart ) > frameMsec * 1000LL ) {
+		s_cost.framesOverInterval++;
+	}
 
 	SV_CheckCvars();
 

@@ -884,6 +884,11 @@ typedef enum {
 #define	SNAPFLAG_NOT_ACTIVE		2	// snapshot used during connection and for zombies
 #define SNAPFLAG_SERVERCOUNT	4	// toggled every map_restart so transitions can be detected
 
+// The fixed simulation tick in milliseconds, shared by the server, the client and the game module (plan step 14; it
+// replaces the sv_fps cvar): the server runs a game frame and sends a snapshot every tick, and every 20 Hz instant, where
+// the game's logic runs (game/g_local.h), is a tick.
+#define	TICK_MSEC				10
+
 //
 // per-level limits
 //

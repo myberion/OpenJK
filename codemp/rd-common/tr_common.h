@@ -60,14 +60,9 @@ qboolean R_ImageLoader_Add( const char *extension, ImageLoaderFn imageLoader );
 // Load an image from file.
 void R_LoadImage( const char *shortname, byte **pic, int *width, int *height );
 
-// Load raw image data from TGA image.
-void LoadTGA( const char *name, byte **pic, int *width, int *height );
-
-// Load raw image data from JPEG image.
-void LoadJPG( const char *filename, byte **pic, int *width, int *height );
-
-// Load raw image data from PNG image.
-void LoadPNG( const char *filename, byte **data, int *width, int *height );
+// Decode an image file held in memory (JPEG, PNG or TGA, told from its content) to RGBA from R_ImageMalloc; NULL after
+// a warning when it cannot. shared/rd-common/tr_image_codec.cpp, the only file that knows the image libraries.
+byte *R_DecodeImage( const char *name, const byte *file, int length, int *width, int *height );
 
 
 /*
@@ -75,13 +70,17 @@ void LoadPNG( const char *filename, byte **data, int *width, int *height );
  Image saving
 ================================================================================
 */
-// Convert raw image data to JPEG format and store in buffer.
-size_t RE_SaveJPGToBuffer( byte *buffer, size_t bufSize, int quality, int image_width, int image_height, byte *image_buffer, int padding );
+// Convert raw image data to JPEG format and store in buffer. The rows' padding is removed in place: image_buffer is changed.
+size_t RE_SaveJPGToBuffer( byte *buffer, size_t bufSize, int quality, int image_width, int image_height, byte *image_buffer, int padding, bool flip_vertical );
 
 // Save raw image data as JPEG image file.
 void RE_SaveJPG( const char * filename, int quality, int image_width, int image_height, byte *image_buffer, int padding );
 
 // Save raw image data as PNG image file.
 int RE_SavePNG( const char *filename, byte *buf, size_t width, size_t height, int byteDepth );
+
+// The memory of the images the shared image files allocate (shared/rd-common), in this renderer's allocator.
+inline byte *R_ImageMalloc( int size, qboolean zero ) { return (byte *)Z_Malloc( size, TAG_TEMP_WORKSPACE, zero ); }
+inline void R_ImageFree( void *ptr ) { Z_Free( ptr ); }
 
 #endif

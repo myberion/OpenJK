@@ -114,17 +114,46 @@ NET
 
 #define NET_ENABLEV4		0x01
 
-#define	PACKET_BACKUP	32	// number of old messages that must be kept on client and
-							// server for delta comrpession and ping estimation
+// The input margin of a snapshot (plan step 14, part 4c): how early the client's command of the snapshot's tick reached
+// the server, in ms (negative: after its tick). It travels as a byte: to the millisecond up to INPUT_MARGIN_FINE
+// either way, in steps of INPUT_MARGIN_STEP beyond (up to 568 ms), so that a client sets its command clock in one
+// round trip after a connection or a hitch.
+#define	INPUT_MARGIN_NONE	( -128 )	// on the wire: the server measured no margin since its last snapshot
+#define	INPUT_MARGIN_FINE	64
+#define	INPUT_MARGIN_STEP	8
+static inline int Net_MarginToWire( int msec ) {
+	const int a = msec < 0 ? -msec : msec;
+	int w = a <= INPUT_MARGIN_FINE ? a : INPUT_MARGIN_FINE + ( a - INPUT_MARGIN_FINE + INPUT_MARGIN_STEP / 2 ) / INPUT_MARGIN_STEP;
+	if ( w > 127 ) {
+		w = 127;
+	}
+	return msec < 0 ? -w : w;
+}
+static inline int Net_MarginFromWire( int w ) {
+	const int a = w < 0 ? -w : w;
+	const int msec = a <= INPUT_MARGIN_FINE ? a : INPUT_MARGIN_FINE + ( a - INPUT_MARGIN_FINE ) * INPUT_MARGIN_STEP;
+	return w < 0 ? -msec : msec;
+}
+
+#define	PACKET_BACKUP	128	// number of old messages that must be kept on client and
+							// server for delta comrpession: a snapshot is coded against one the
+							// client holds up to 125 messages back, 1.25 s of round trip at a
+							// message per tick (32 in OpenJK; plan step 14, part 5)
 #define	PACKET_MASK		(PACKET_BACKUP-1)
 
 #define	MAX_PACKET_USERCMDS		32		// max number of usercmd_t in a packet
+
+// Network settings fixed rather than set by cvars (plan step 11, docs_rewrite/modernization/surveys/network-settings.md)
+#define	MAX_PACKET_RATE			100		// client packets per second: one per tick (TICK_MSEC); the server decodes no more
+#define	TIMEOUT_CONNECTING		60		// seconds without a packet before either side drops a connection not yet in the game
+#define	TIMEOUT_ACTIVE			30		// seconds without a packet before either side drops a connection in the game
 
 #define	MAX_SNAPSHOT_ENTITIES	256
 
 #define	PORT_ANY			-1
 
-#define	MAX_RELIABLE_COMMANDS	128			// max string commands buffered for restransmit
+#define	MAX_RELIABLE_COMMANDS	256			// max string commands buffered for restransmit; the message codec codes the
+										// server commands against earlier ones and needs both sides to keep 256 (netcodec::engine::kMinCommands)
 
 typedef enum {
 	NS_CLIENT,
@@ -147,7 +176,7 @@ qboolean	NET_IsLocalAddress (const netadr_t *adr);
 const char	*NET_AdrToString (const netadr_t *a);
 qboolean	NET_StringToAdr ( const char *s, netadr_t *a);
 qboolean	NET_GetLoopPacket (netsrc_t sock, netadr_t *net_from, msg_t *net_message);
-void		NET_Sleep(int msec);
+void		NET_Sleep(int usec);
 
 void		Sys_SendPacket( int length, const void *data, const netadr_t *to );
 //Does NOT parse port numbers, only base addresses.
@@ -364,6 +393,7 @@ void Cbuf_ExecuteText( int exec_when, const char *text );
 // this can be used in place of either Cbuf_AddText or Cbuf_InsertText
 
 void Cbuf_Execute (void);
+qboolean Cbuf_Waiting( void );
 // Pulls off \n terminated lines of text from the command buffer and sends
 // them through Cmd_ExecuteString.  Stops when the buffer is empty.
 // Normally called once per frame, but may be explicitly invoked.
@@ -546,167 +576,15 @@ extern uint32_t cvar_modifiedFlags;
 // etc, variables have been modified since the last check.  The bit
 // can then be cleared to allow another change detection.
 
-/*
-==============================================================
-
-FILESYSTEM
-
-No stdio calls should be used by any part of the game, because
-we need to deal with all sorts of directory and seperator char
-issues.
-==============================================================
-*/
-
-// referenced flags
-// these are in loop specific order so don't change the order
-#define FS_GENERAL_REF	0x01
-#define FS_UI_REF		0x02
-#define FS_CGAME_REF	0x04
-#define FS_GAME_REF		0x08
-// number of id paks that will never be autodownloaded from base
-#define NUM_ID_PAKS		9
-
-#define	MAX_FILE_HANDLES	64
-
+// the file system: one interface (shared/qcommon/files.h) and one implementation (shared/qcommon/files.cpp) for
+// the multiplayer and the single-player engines; the name of this engine's configuration file first
 #ifdef DEDICATED
 #	define Q3CONFIG_CFG PRODUCT_NAME "_server.cfg"
 #else
 #	define Q3CONFIG_CFG PRODUCT_NAME ".cfg"
 #endif
 
-qboolean FS_Initialized();
-
-void	FS_InitFilesystem (void);
-void	FS_Shutdown( qboolean closemfp, qboolean keepModuleFiles = qfalse );
-
-qboolean	FS_ConditionalRestart( int checksumFeed );
-void	FS_Restart( int checksumFeed, qboolean inPlace = qfalse );
-// shutdown and restart the filesystem so changes to fs_gamedir can take effect
-
-char	**FS_ListFiles( const char *directory, const char *extension, int *numfiles );
-// directory should not have either a leading or trailing /
-// if extension is "/", only subdirectories will be returned
-// the returned files will not include any directories or /
-
-void	FS_FreeFileList( char **fileList );
-//rwwRMG - changed to fileList to not conflict with list type
-
-void FS_Remove( const char *osPath );
-void FS_HomeRemove( const char *homePath );
-
-void FS_Rmdir( const char *osPath, qboolean recursive );
-void FS_HomeRmdir( const char *homePath, qboolean recursive );
-
-qboolean FS_FileExists( const char *file );
-
-char   *FS_BuildOSPath( const char *base, const char *game, const char *qpath );
-qboolean FS_CompareZipChecksum(const char *zipfile);
-
-int		FS_GetFileList(  const char *path, const char *extension, char *listbuf, int bufsize );
-int		FS_GetModList(  char *listbuf, int bufsize );
-
-fileHandle_t	FS_FOpenFileWrite( const char *qpath, qboolean safe=qtrue );
-// will properly create any needed paths and deal with seperater character issues
-
-int		FS_filelength( fileHandle_t f );
-fileHandle_t FS_SV_FOpenFileWrite( const char *filename );
-fileHandle_t FS_SV_FOpenFileAppend( const char *filename );
-int		FS_SV_FOpenFileRead( const char *filename, fileHandle_t *fp );
-void	FS_SV_Rename( const char *from, const char *to, qboolean safe );
-long		FS_FOpenFileRead( const char *qpath, fileHandle_t *file, qboolean uniqueFILE );
-// if uniqueFILE is true, then a new FILE will be fopened even if the file
-// is found in an already open pak file.  If uniqueFILE is false, you must call
-// FS_FCloseFile instead of fclose, otherwise the pak FILE would be improperly closed
-// It is generally safe to always set uniqueFILE to true, because the majority of
-// file IO goes through FS_ReadFile, which Does The Right Thing already.
-
-int		FS_FileIsInPAK(const char *filename, int *pChecksum );
-// returns 1 if a file is in the PAK file, otherwise -1
-
-qboolean FS_FindPureDLL(const char *name);
-
-int		FS_Write( const void *buffer, int len, fileHandle_t f );
-
-int		FS_Read( void *buffer, int len, fileHandle_t f );
-// properly handles partial reads and reads from other dlls
-
-void	FS_FCloseFile( fileHandle_t f );
-// note: you can't just fclose from another DLL, due to MS libc issues
-
-long		FS_ReadFile( const char *qpath, void **buffer );
-// returns the length of the file
-// a null buffer will just return the file length without loading
-// as a quick check for existance. -1 length == not present
-// A 0 byte will always be appended at the end, so string ops are safe.
-// the buffer should be considered read-only, because it may be cached
-// for other uses.
-
-void	FS_ForceFlush( fileHandle_t f );
-// forces flush on files we're writing to.
-
-void	FS_FreeFile( void *buffer );
-// frees the memory returned by FS_ReadFile
-
-void	FS_WriteFile( const char *qpath, const void *buffer, int size );
-// writes a complete file, creating any subdirectories needed
-
-int		FS_filelength( fileHandle_t f );
-// doesn't work for files that are opened from a pack file
-
-int		FS_FTell( fileHandle_t f );
-// where are we?
-
-void	FS_Flush( fileHandle_t f );
-
-void	FS_FilenameCompletion( const char *dir, const char *ext, qboolean stripExt, callbackFunc_t callback, qboolean allowNonPureFilesOnDisk );
-
-const char *FS_GetCurrentGameDir(bool emptybase=false);
-
-#ifdef MACOS_X
-bool FS_LoadMachOBundle( const char *name );
-#endif
-
-void 	QDECL FS_Printf( fileHandle_t f, const char *fmt, ... );
-// like fprintf
-
-int		FS_FOpenFileByMode( const char *qpath, fileHandle_t *f, fsMode_t mode );
-// opens a file for reading, writing, or appending depending on the value of mode
-
-int		FS_Seek( fileHandle_t f, long offset, int origin );
-// seek on a file
-
-qboolean FS_FilenameCompare( const char *s1, const char *s2 );
-
-const char *FS_LoadedPakNames( void );
-const char *FS_LoadedPakChecksums( void );
-const char *FS_LoadedPakPureChecksums( void );
-// Returns a space separated string containing the checksums of all loaded pk3 files.
-// Servers with sv_pure set will get this string and pass it to clients.
-
-const char *FS_ReferencedPakNames( void );
-const char *FS_ReferencedPakChecksums( void );
-const char *FS_ReferencedPakPureChecksums( void );
-// Returns a space separated string containing the checksums of all loaded
-// AND referenced pk3 files. Servers with sv_pure set will get this string
-// back from clients for pure validation
-
-void FS_ClearPakReferences( int flags );
-// clears referenced booleans on loaded pk3s
-
-void FS_PureServerSetReferencedPaks( const char *pakSums, const char *pakNames );
-void FS_PureServerSetLoadedPaks( const char *pakSums, const char *pakNames );
-// If the string is empty, all data sources will be allowed.
-// If not empty, only pk3 files that match one of the space
-// separated checksums will be checked for files, with the
-// sole exception of .cfg files.
-
-qboolean FS_CheckDirTraversal(const char *checkdir);
-qboolean FS_idPak( char *pak, char *base );
-qboolean FS_ComparePaks( char *neededpaks, int len, qboolean dlstring );
-void FS_Rename( const char *from, const char *to );
-
-qboolean FS_WriteToTemporaryFile( const void *data, size_t dataLength, char **tempFileName );
-const char *FS_MV_VerifyDownloadPath(const char *pk3file);
+#include "qcommon/files.h"
 
 
 /*
@@ -926,6 +804,10 @@ void CL_Init( void );
 void CL_Disconnect( qboolean showMainMenu );
 void CL_Shutdown( void );
 void CL_Frame( int msec );
+
+// the client's command of a tick, made between two frames (Com_Frame, cl_input.cpp)
+int CL_NextCommandMsec( void );
+qboolean CL_InputTick( void );
 qboolean CL_GameCommand( void );
 void CL_KeyEvent (int key, qboolean down, unsigned time);
 
@@ -1043,14 +925,9 @@ int		Huff_getBit( byte *fout, int *offset);
 
 extern huffman_t clientHuffTables;
 
-#define	SV_ENCODE_START		4
-#define SV_DECODE_START		12
-#define	CL_ENCODE_START		12
-#define CL_DECODE_START		4
-
 inline int Round(float value)
 {
-	return((int)floorf(value + 0.5f));
+	return((int)Q_floorf(value + 0.5f));
 }
 
 // Persistent data store API

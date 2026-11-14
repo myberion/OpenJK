@@ -77,7 +77,7 @@ static void gencoef()		/* gen coef for N=32 (31 coefs) */
    {
 	   coef32 = dct_coef_addr();
 
-	   pi = 4.0 * atan(1.0);
+	   pi = 4.0 * Q_atan(1.0);
 	   n = 16;
 	   k = 0;
 	   for (i = 0; i < 5; i++, n = n / 2)
@@ -86,7 +86,7 @@ static void gencoef()		/* gen coef for N=32 (31 coefs) */
 		  for (p = 0; p < n; p++, k++)
 		  {
 		 t = (pi / (4 * n)) * (2 * p + 1);
-		 coef32[k] = (float) (0.50 / cos(t));
+		 coef32[k] = (float) (0.50 / Q_cos(t));
 		  }
 	   }
    }

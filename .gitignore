@@ -194,3 +194,10 @@ compile_commands.json
 #############
 [Bb]uild*/
 cmake-build-*
+
+*.dm_26
+# client packets recorded by the server (sv_recordClientPackets): player names and chat
+*.jkcp
+
+# netcodec traces generated from the recordings (docs_rewrite/modernization/tools/python/export_*.py)
+docs_rewrite/modernization/data/traces/

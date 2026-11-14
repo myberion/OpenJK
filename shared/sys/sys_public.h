@@ -113,7 +113,7 @@ void	Sys_Print( const char *msg );
 
 // Sys_Milliseconds should only be used for profiling purposes,
 // any game related timing information should come from event timestamps
-int		Sys_Milliseconds (bool baseTime = false);
+int		Sys_Milliseconds (void);
 int		Sys_Milliseconds2(void);
 void	Sys_Sleep( int msec );
 

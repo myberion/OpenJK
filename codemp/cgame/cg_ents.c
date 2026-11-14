@@ -1472,7 +1472,7 @@ Ghoul2 Insert End
 		val = (1.0f - (float)(cent->currentState.time - cg.time) / 3200.0f ) * 0.3f;
 
 		ent.customShader = trap->R_RegisterShader( "gfx/effects/turretflashdie" );
-		ent.shaderRGBA[0] = (sin( cg.time * 0.04f ) * val * 0.4f + val) * 255;
+		ent.shaderRGBA[0] = (Q_sin( cg.time * 0.04f ) * val * 0.4f + val) * 255;
 		ent.shaderRGBA[1] = ent.shaderRGBA[2] = 0;
 
 		ent.shaderRGBA[3] = 100;
@@ -1603,7 +1603,7 @@ Ghoul2 Insert End
 					ent.shaderRGBA[0] = 255;
 					ent.shaderRGBA[1] = ent.shaderRGBA[2] = 0;
 					ent.shaderRGBA[3] = 255;
-					if ( rand() & 1 )
+					if ( Q_irand( 0, 1 ) )
 					{
 						ent.customShader = cgs.media.electricBodyShader;
 					}
@@ -1648,7 +1648,7 @@ Ghoul2 Insert End
 
 		ent.customShader = cgs.media.solidWhite;
 		ent.renderfx = RF_RGB_TINT;
-		wv = sin( cg.time * 0.003f ) * 0.08f + 0.1f;
+		wv = Q_sin( cg.time * 0.003f ) * 0.08f + 0.1f;
 		ent.shaderRGBA[0] = wv * 255;
 		ent.shaderRGBA[1] = wv * 255;
 		ent.shaderRGBA[2] = wv * 0;
@@ -1685,7 +1685,7 @@ Ghoul2 Insert End
 
 		ent.customShader = cgs.media.solidWhite;
 		ent.renderfx = RF_RGB_TINT;
-		wv = sin( cg.time * 0.005f ) * 0.08f + 0.1f; //* 0.08f + 0.1f;
+		wv = Q_sin( cg.time * 0.005f ) * 0.08f + 0.1f; //* 0.08f + 0.1f;
 
 		if (cent->currentState.trickedentindex3 == 1)
 		{ //dark
@@ -1730,7 +1730,7 @@ Ghoul2 Insert End
 
 		org[2] += 18;
 
-		wv = sin( cg.time * 0.002f ) * 0.08f + 0.1f; //* 0.08f + 0.1f;
+		wv = Q_sin( cg.time * 0.002f ) * 0.08f + 0.1f; //* 0.08f + 0.1f;
 
 		VectorCopy(org, fxSArgs.origin);
 		VectorClear(fxSArgs.vel);
@@ -1988,7 +1988,7 @@ Ghoul2 Insert End
 			ent.shaderRGBA[0] = 200;
 			ent.shaderRGBA[1] = 200;
 			ent.shaderRGBA[2] = 200;
-			ent.shaderRGBA[3] = 150 + sin(cg.time*0.01)*30;
+			ent.shaderRGBA[3] = 150 + Q_sin(cg.time*0.01)*30;
 		}
 		else
 		{
@@ -2027,7 +2027,7 @@ Ghoul2 Insert End
 	{
 		// items bob up and down continuously
 		scale = 0.005 + cent->currentState.number * 0.00001;
-		cent->lerpOrigin[2] += 4 + cos( ( cg.time + 1000 ) *  scale ) * 4;
+		cent->lerpOrigin[2] += 4 + Q_cos( ( cg.time + 1000 ) *  scale ) * 4;
 	}
 	else
 	{
@@ -2688,7 +2688,7 @@ Ghoul2 Insert End
 
 		ent.customShader = cgs.media.solidWhite;
 		ent.renderfx = RF_RGB_TINT;
-		wv = sin( cg.time * 0.003f ) * 0.08f + 0.1f;
+		wv = Q_sin( cg.time * 0.003f ) * 0.08f + 0.1f;
 		ent.shaderRGBA[0] = wv * 255;
 		ent.shaderRGBA[1] = wv * 255;
 		ent.shaderRGBA[2] = wv * 0;
@@ -3002,10 +3002,30 @@ CG_AdjustPositionForMover
 Also called by client movement prediction code
 =========================
 */
-void CG_AdjustPositionForMover( const vec3_t in, int moverNum, int fromTime, int toTime, vec3_t out ) {
+// how far a mover moves between two times; zero if moverNum is not a mover
+static void CG_MoverMove( int moverNum, int fromTime, int toTime, vec3_t delta ) {
 	centity_t	*cent;
-	vec3_t	oldOrigin, origin, deltaOrigin;
-	vec3_t	oldAngles, angles, deltaAngles;
+	vec3_t	oldOrigin, origin;
+
+	VectorClear( delta );
+	if ( moverNum <= 0 || moverNum >= ENTITYNUM_MAX_NORMAL ) {
+		return;
+	}
+
+	cent = &cg_entities[ moverNum ];
+	if ( cent->currentState.eType != ET_MOVER ) {
+		return;
+	}
+
+	BG_EvaluateTrajectory( &cent->currentState.pos, fromTime, oldOrigin );
+	BG_EvaluateTrajectory( &cent->currentState.pos, toTime, origin );
+	VectorSubtract( origin, oldOrigin, delta );
+
+	// FIXME: origin change when on a rotating object
+}
+
+void CG_AdjustPositionForMover( const vec3_t in, int moverNum, int fromTime, int toTime, vec3_t out ) {
+	vec3_t	deltaOrigin;
 
 	if ( cg.predictedPlayerState.persistant[PERS_TEAM] == TEAM_SPECTATOR )
 	{
@@ -3013,29 +3033,18 @@ void CG_AdjustPositionForMover( const vec3_t in, int moverNum, int fromTime, int
 		return;
 	}
 
-	if ( moverNum <= 0 || moverNum >= ENTITYNUM_MAX_NORMAL ) {
-		VectorCopy( in, out );
-		return;
-	}
-
-	cent = &cg_entities[ moverNum ];
-	if ( cent->currentState.eType != ET_MOVER ) {
-		VectorCopy( in, out );
-		return;
-	}
-
-	BG_EvaluateTrajectory( &cent->currentState.pos, fromTime, oldOrigin );
-	BG_EvaluateTrajectory( &cent->currentState.apos, fromTime, oldAngles );
-
-	BG_EvaluateTrajectory( &cent->currentState.pos, toTime, origin );
-	BG_EvaluateTrajectory( &cent->currentState.apos, toTime, angles );
-
-	VectorSubtract( origin, oldOrigin, deltaOrigin );
-	VectorSubtract( angles, oldAngles, deltaAngles );
-
+	CG_MoverMove( moverNum, fromTime, toTime, deltaOrigin );
 	VectorAdd( in, deltaOrigin, out );
+}
 
-	// FIXME: origin change when on a rotating object
+// An entity standing on a mover is moved with it by the server on the 20 Hz instants only (CG_MoverTime), so a
+// snapshot holds a position that steps every 50 ms while the mover is drawn along its trajectory: the position is
+// carried from the last instant to the snapshot's time, and the entity rides the mover as it is drawn
+void CG_CarryWithMover( vec3_t origin, int moverNum, int serverTime ) {
+	vec3_t	delta;
+
+	CG_MoverMove( moverNum, CG_MoverTime( serverTime ), serverTime, delta );
+	VectorAdd( origin, delta, origin );
 }
 
 /*
@@ -3061,6 +3070,9 @@ static void CG_InterpolateEntityPosition( centity_t *cent ) {
 	BG_EvaluateTrajectory( &cent->currentState.pos, cg.snap->serverTime, current );
 	BG_EvaluateTrajectory( &cent->nextState.pos, cg.nextSnap->serverTime, next );
 
+	CG_CarryWithMover( current, cent->currentState.groundEntityNum, cg.snap->serverTime );
+	CG_CarryWithMover( next, cent->nextState.groundEntityNum, cg.nextSnap->serverTime );
+
 	cent->lerpOrigin[0] = current[0] + f * ( next[0] - current[0] );
 	cent->lerpOrigin[1] = current[1] + f * ( next[1] - current[1] );
 	cent->lerpOrigin[2] = current[2] + f * ( next[2] - current[2] );
@@ -3082,13 +3094,12 @@ CG_CalcEntityLerpPositions
 void CG_CalcEntityLerpPositions( centity_t *cent ) {
 	qboolean goAway = qfalse;
 
-	// if this player does not want to see extrapolated players
-	if ( !cg_smoothClients.integer ) {
-		// make sure the clients use TR_INTERPOLATE
-		if ( (cent->currentState.number != cg.clientNum && cent->currentState.number < MAX_CLIENTS) || cent->currentState.eType == ET_NPC ) {
-			cent->currentState.pos.trType = TR_INTERPOLATE;
-			cent->nextState.pos.trType = TR_INTERPOLATE;
-		}
+	// The other players and the NPCs are drawn between the positions of two snapshots, never carried forward by the
+	// velocity the server sends with them (cg_smoothClients 0 of OpenJK, the cvar removed; plan step 14, part 6):
+	// while the next snapshot is missing they stay at their last position
+	if ( (cent->currentState.number != cg.clientNum && cent->currentState.number < MAX_CLIENTS) || cent->currentState.eType == ET_NPC ) {
+		cent->currentState.pos.trType = TR_INTERPOLATE;
+		cent->nextState.pos.trType = TR_INTERPOLATE;
 	}
 
 	if (cg.predictedPlayerState.m_iVehicleNum &&
@@ -3198,8 +3209,11 @@ void CG_CalcEntityLerpPositions( centity_t *cent ) {
 	// adjust for riding a mover if it wasn't rolled into the predicted
 	// player state
 	if ( cent->currentState.number != cg.clientNum ) {
-		CG_AdjustPositionForMover( cent->lerpOrigin, cent->currentState.groundEntityNum,
-		cg.snap->serverTime, cg.time, cent->lerpOrigin );
+		vec3_t	delta;
+
+		// from where the server has the mover (CG_MoverTime), for a spectator too
+		CG_MoverMove( cent->currentState.groundEntityNum, CG_MoverTime( cg.snap->serverTime ), cg.time, delta );
+		VectorAdd( cent->lerpOrigin, delta, cent->lerpOrigin );
 	}
 }
 
@@ -3619,7 +3633,7 @@ void CG_ROFF_NotetrackCallback( centity_t *cent, const char *notetrack)
 				i = 0;
 				goto defaultoffsetposition;
 			}
-			parsedOffset[posoffsetGathered] = atof(t);
+			parsedOffset[posoffsetGathered] = Q_atof(t);
 			posoffsetGathered++;
 		}
 
@@ -3663,7 +3677,7 @@ defaultoffsetposition:
 						break;
 					}
 
-					parsedAngles[anglesGathered] = atof(t);
+					parsedAngles[anglesGathered] = Q_atof(t);
 					anglesGathered++;
 				}
 

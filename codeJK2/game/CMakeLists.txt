@@ -312,3 +312,4 @@ set_target_properties(${JK2SPGame} PROPERTIES PROJECT_LABEL "JK2 SP Game Library
 if(JK2SPGameLibraries)
 	target_link_libraries(${JK2SPGame} ${JK2SPGameLibraries})
 endif(JK2SPGameLibraries)
+target_link_libraries(${JK2SPGame} qlibm)

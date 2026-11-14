@@ -91,7 +91,7 @@ void R2D2_TurnAnims ( void )
 
 	turndelta = AngleDelta(NPCS.NPC->r.currentAngles[YAW], NPCS.NPCInfo->desiredYaw);
 
-	if ((fabs(turndelta) > 20) && ((NPCS.NPC->client->NPC_class == CLASS_R2D2) || (NPCS.NPC->client->NPC_class == CLASS_R5D2)))
+	if ((Q_fabs(turndelta) > 20) && ((NPCS.NPC->client->NPC_class == CLASS_R2D2) || (NPCS.NPC->client->NPC_class == CLASS_R5D2)))
 	{
 		anim = NPCS.NPC->client->ps.legsAnim;
 		if (turndelta<0)
@@ -143,7 +143,7 @@ void Droid_Patrol( void )
 
 		if( NPCS.NPC->client && NPCS.NPC->client->NPC_class == CLASS_MOUSE )
 		{
-			NPCS.NPCInfo->desiredYaw += sin(level.time*.5) * 25; // Weaves side to side a little
+			NPCS.NPCInfo->desiredYaw += Q_sin(level.time*.5) * 25; // Weaves side to side a little
 
 			if (TIMER_Done(NPCS.NPC,"patrolNoise"))
 			{
@@ -213,7 +213,7 @@ void Droid_Run( void )
 		{
 			if (NPC_MoveToGoal( qfalse ))
 			{
-				NPCS.NPCInfo->desiredYaw += sin(level.time*.5) * 5; // Weaves side to side a little
+				NPCS.NPCInfo->desiredYaw += Q_sin(level.time*.5) * 5; // Weaves side to side a little
 			}
 		}
 	}

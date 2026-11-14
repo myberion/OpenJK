@@ -744,7 +744,7 @@ void NPC_BSFollowLeader (void)
 	}
 }
 #define	APEX_HEIGHT		200.0f
-#define	PARA_WIDTH		(sqrt(APEX_HEIGHT)+sqrt(APEX_HEIGHT))
+#define	PARA_WIDTH		(Q_sqrt(APEX_HEIGHT)+Q_sqrt(APEX_HEIGHT))
 #define	JUMP_SPEED		200.0f
 void NPC_BSJump (void)
 {
@@ -827,7 +827,7 @@ void NPC_BSJump (void)
 		//FIXME: length of xy will change curve of parabola, need to account for this
 		//somewhere... PARA_WIDTH
 
-		z = (sqrt(apexHeight + z) - sqrt(apexHeight));
+		z = (Q_sqrt(apexHeight + z) - Q_sqrt(apexHeight));
 
 		assert(z >= 0);
 
@@ -849,7 +849,7 @@ void NPC_BSJump (void)
 
 		//Now we have the apex, aim for it
 		height = apex[2] - NPCS.NPC->r.currentOrigin[2];
-		time = sqrt( height / ( .5 * NPCS.NPC->client->ps.gravity ) );
+		time = Q_sqrt( height / ( .5 * NPCS.NPC->client->ps.gravity ) );
 		if ( !time )
 		{
 //			Com_Printf("ERROR no time in jump\n");
@@ -1080,7 +1080,7 @@ void NPC_BSSearch (void)
 						trap->Nav_GetNodePosition( nextWp, branchPos );
 
 						VectorSubtract( branchPos, NPCS.NPCInfo->tempGoal->r.currentOrigin, lookDir );
-						NPCS.NPCInfo->desiredYaw = AngleNormalize360( vectoyaw( lookDir ) + flrand( -45, 45 ) );
+						NPCS.NPCInfo->desiredYaw = AngleNormalize360( vectoyaw( lookDir ) + Q_flrand( -45, 45 ) );
 					}
 
 					//pick an angle +-45 degrees off of the dir of a random branch
@@ -1199,9 +1199,9 @@ void NPC_BSNoClip ( void )
 		rDot = DotProduct(right, dir) * 127;
 		uDot = DotProduct(up, dir) * 127;
 
-		NPCS.ucmd.forwardmove = floor(fDot);
-		NPCS.ucmd.rightmove = floor(rDot);
-		NPCS.ucmd.upmove = floor(uDot);
+		NPCS.ucmd.forwardmove = Q_floor(fDot);
+		NPCS.ucmd.rightmove = Q_floor(rDot);
+		NPCS.ucmd.upmove = Q_floor(uDot);
 	}
 	else
 	{
@@ -1274,7 +1274,7 @@ void NPC_BSWander (void)
 						trap->Nav_GetNodePosition( nextWp, branchPos );
 
 						VectorSubtract( branchPos, NPCS.NPCInfo->tempGoal->r.currentOrigin, lookDir );
-						NPCS.NPCInfo->desiredYaw = AngleNormalize360( vectoyaw( lookDir ) + flrand( -45, 45 ) );
+						NPCS.NPCInfo->desiredYaw = AngleNormalize360( vectoyaw( lookDir ) + Q_flrand( -45, 45 ) );
 					}
 				}
 			}
@@ -1523,7 +1523,7 @@ void NPC_BSFlee( void )
 
 					VectorSubtract( branchPos, NPCS.NPC->r.currentOrigin, runDir );
 					VectorNormalize( runDir );
-					if ( DotProduct( runDir, dangerDir ) > flrand( 0, 0.5 ) )
+					if ( DotProduct( runDir, dangerDir ) > Q_flrand( 0, 0.5 ) )
 					{//don't run toward danger
 						continue;
 					}

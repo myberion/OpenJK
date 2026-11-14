@@ -602,7 +602,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 			double pitch;
 
 			// Note that the camera pitch has already been capped off to 89.
-			pitch = Q_fabs(cameraFocusAngles[PITCH]);
+			pitch = Q_fabsf(cameraFocusAngles[PITCH]);
 
 			// The higher the pitch, the larger the factor, so as you look up, it damps a lot less.
 			pitch /= 89.0;
@@ -616,7 +616,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 		double pitch;
 
 		// Note that the camera pitch has already been capped off to 89.
-		pitch = Q_fabs(cameraFocusAngles[PITCH]);
+		pitch = Q_fabsf(cameraFocusAngles[PITCH]);
 
 		// The higher the pitch, the larger the factor, so as you look up, it damps a lot less.
 		pitch /= 89.0;

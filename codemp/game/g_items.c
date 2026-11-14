@@ -353,11 +353,11 @@ void CreateShield(gentity_t *ent)
 
 	if ( level.gametype == GT_SIEGE )
 	{
-		ent->health = ceil((float)(SHIELD_SIEGE_HEALTH*1));
+		ent->health = Q_ceil((float)(SHIELD_SIEGE_HEALTH*1));
 	}
 	else
 	{
-		ent->health = ceil((float)(SHIELD_HEALTH*1));
+		ent->health = Q_ceil((float)(SHIELD_HEALTH*1));
 	}
 
 	ent->s.time = ent->health;//???
@@ -436,7 +436,7 @@ qboolean PlaceShield(gentity_t *playerent)
 			shield = G_Spawn();
 
 			// Figure out what direction the shield is facing.
-			if (fabs(fwd[0]) > fabs(fwd[1]))
+			if (Q_fabs(fwd[0]) > Q_fabs(fwd[1]))
 			{	// shield is north/south, facing east.
 				shield->s.angles[YAW] = 0;
 			}
@@ -882,14 +882,14 @@ void pas_think( gentity_t *ent )
 	else
 	{
 		// no enemy, so make us slowly sweep back and forth as if searching for a new one
-		diffYaw = sin( level.time * 0.0001f + ent->count ) * 2.0f;
+		diffYaw = Q_sin( level.time * 0.0001f + ent->count ) * 2.0f;
 	}
 
-	if ( fabs(diffYaw) > 0.25f )
+	if ( Q_fabs(diffYaw) > 0.25f )
 	{
 		moved = qtrue;
 
-		if ( fabs(diffYaw) > 10.0f )
+		if ( Q_fabs(diffYaw) > 10.0f )
 		{
 			// cap max speed
 			ent->speed += (diffYaw > 0.0f) ? -10.0f : 10.0f;
@@ -902,11 +902,11 @@ void pas_think( gentity_t *ent )
 	}
 
 
-	if ( fabs(diffPitch) > 0.25f )
+	if ( Q_fabs(diffPitch) > 0.25f )
 	{
 		moved = qtrue;
 
-		if ( fabs(diffPitch) > 4.0f )
+		if ( Q_fabs(diffPitch) > 4.0f )
 		{
 			// cap max speed
 			ent->random += (diffPitch > 0.0f) ? -4.0f : 4.0f;
@@ -2335,7 +2335,7 @@ void RespawnItem( gentity_t *ent ) {
 		for (count = 0, ent = master; ent; ent = ent->teamchain, count++)
 			;
 
-		choice = rand() % count;
+		choice = Q_irand( 0, count - 1 );
 
 		for (count = 0, ent = master; count < choice; ent = ent->teamchain, count++)
 			;
@@ -3220,6 +3220,10 @@ void G_RunItem( gentity_t *ent ) {
 	trace_t		tr;
 	int			contents;
 	int			mask;
+
+	if ( !G_GRID20_STEP ) {
+		return;	// items move and think on the 20 Hz instants, as at sv_fps 20 (plan step 14, g_local.h)
+	}
 
 	// if groundentity has been set to ENTITYNUM_NONE, it may have been pushed off an edge
 	if ( ent->s.groundEntityNum == ENTITYNUM_NONE ) {

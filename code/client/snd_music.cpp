@@ -277,7 +277,7 @@ static qboolean Music_ParseMusic( gsl::czstring filename, const CGenericParser2&
 						{
 							float fThisEntryTime = item.second;
 
-							if( Q_fabs( fThisEntryTime - MusicExitTime.fTime ) < 1.5f )
+							if( Q_fabsf( fThisEntryTime - MusicExitTime.fTime ) < 1.5f )
 							{
 								//								bTooCloseToEntryPoint = true;	// not sure about this, ignore for now
 								break;
@@ -836,7 +836,7 @@ qboolean Music_AllowedToTransition( float			fPlayingTimeElapsed,
 		{
 			MusicExitTimes_t::iterator pExitTime = it;
 
-			if ( Q_fabs(pExitTime->fTime - fPlayingTimeElapsed) <= fTimeEpsilon )
+			if ( Q_fabsf(pExitTime->fTime - fPlayingTimeElapsed) <= fTimeEpsilon )
 			{
 				// got an exit point!, work out feedback params...
 				//

@@ -211,11 +211,6 @@ void CG_ParseServerinfo( void ) {
 	trap->Cvar_Set("cg_siegeTeam2", Info_ValueForKey(info, "g_siegeTeam2"));
 
 	Q_strncpyz( cgs.voteString, CG_ConfigString( CS_VOTE_STRING ), sizeof( cgs.voteString ) );
-
-	// synchronise our expected snaps/sec with the server's framerate
-	i = atoi( Info_ValueForKey( info, "sv_fps" ) );
-	if ( i )
-		trap->Cvar_Set( "snaps", va( "%i", i ) );
 }
 
 /*

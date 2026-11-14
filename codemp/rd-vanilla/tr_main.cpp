@@ -472,7 +472,7 @@ static void SetFarClip( void )
 	// Bring in the zFar to the distanceCull distance
 	// The sky renders at zFar so need to move it out a little
 	// ...and make sure there is a minimum zfar to prevent problems
-	tr.viewParms.zFar = Com_Clamp(2048.0f, tr.distanceCull * (1.732), sqrtf( farthestCornerDistance ));
+	tr.viewParms.zFar = Com_Clamp(2048.0f, tr.distanceCull * (1.732), Q_sqrtf( farthestCornerDistance ));
 
 	/*
 	if (r_shadows->integer == 2)
@@ -502,10 +502,10 @@ void R_SetupProjection( void ) {
 	zNear	= r_znear->value;
 	zFar	= tr.viewParms.zFar;
 
-	ymax = zNear * tan( tr.refdef.fov_y * M_PI / 360.0f );
+	ymax = zNear * Q_tanpif( tr.refdef.fov_y / 360.0f );
 	ymin = -ymax;
 
-	xmax = zNear * tan( tr.refdef.fov_x * M_PI / 360.0f );
+	xmax = zNear * Q_tanpif( tr.refdef.fov_x / 360.0f );
 	xmin = -xmax;
 
 	width = xmax - xmin;
@@ -546,8 +546,8 @@ void R_SetupFrustum (void) {
 	float	ang;
 
 	ang = tr.viewParms.fovX / 180 * M_PI * 0.5f;
-	xs = sin( ang );
-	xc = cos( ang );
+	xs = Q_sin( ang );
+	xc = Q_cos( ang );
 
 	VectorScale( tr.viewParms.ori.axis[0], xs, tr.viewParms.frustum[0].normal );
 	VectorMA( tr.viewParms.frustum[0].normal, xc, tr.viewParms.ori.axis[1], tr.viewParms.frustum[0].normal );
@@ -556,8 +556,8 @@ void R_SetupFrustum (void) {
 	VectorMA( tr.viewParms.frustum[1].normal, -xc, tr.viewParms.ori.axis[1], tr.viewParms.frustum[1].normal );
 
 	ang = tr.viewParms.fovY / 180 * M_PI * 0.5f;
-	xs = sin( ang );
-	xc = cos( ang );
+	xs = Q_sin( ang );
+	xc = Q_cos( ang );
 
 	VectorScale( tr.viewParms.ori.axis[0], xs, tr.viewParms.frustum[2].normal );
 	VectorMA( tr.viewParms.frustum[2].normal, xc, tr.viewParms.ori.axis[2], tr.viewParms.frustum[2].normal );
@@ -747,7 +747,7 @@ qboolean R_GetPortalOrientations( drawSurf_t *drawSurf, int entityNum,
 				CrossProduct( camera->axis[0], camera->axis[1], camera->axis[2] );
 			} else {
 				// bobbing rotate, with skinNum being the rotation offset
-				d = sin( tr.refdef.time * 0.003f );
+				d = Q_sin( tr.refdef.time * 0.003f );
 				d = e->e.skinNum + d * 4;
 				VectorCopy( camera->axis[1], transformed );
 				RotatePointAroundVector( camera->axis[1], camera->axis[0], transformed, d );

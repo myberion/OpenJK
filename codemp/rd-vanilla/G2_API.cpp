@@ -148,6 +148,19 @@ void G2_DEBUG_RemovePtrFromTracker(CGhoul2Info_v *g2)
 }
 #endif
 
+// The cvar "dedicated", found once: G2_SetupModelPointers, which every ghoul2 call goes through, looked it up by
+// its name each time (plan step 14, part 7).
+static int G2_Dedicated( void )
+{
+	static cvar_t *dedicated;
+
+	if ( !dedicated )
+	{
+		dedicated = ri.Cvar_Get( "dedicated", "0", 0, "" );
+	}
+	return dedicated->integer;
+}
+
 qboolean G2_SetupModelPointers(CGhoul2Info *ghlInfo);
 qboolean G2_SetupModelPointers(CGhoul2Info_v &ghoul2);
 qboolean G2_TestModelPointers(CGhoul2Info *ghlInfo);
@@ -240,7 +253,7 @@ qboolean G2API_OverrideServerWithClientData(CGhoul2Info_v& ghoul2, int modelInde
 	CGhoul2Info *serverInstance = &ghoul2[modelIndex];
 	CGhoul2Info *clientInstance;
 
-	if (ri.Cvar_VariableIntegerValue( "dedicated" ))
+	if (G2_Dedicated())
 	{ //No client to get from!
 		return qfalse;
 	}
@@ -2821,7 +2834,7 @@ qboolean G2_TestModelPointers(CGhoul2Info *ghlInfo) // returns true if the model
 	ghlInfo->mValid=false;
 	if (ghlInfo->mModelindex != -1)
 	{
-		if (ri.Cvar_VariableIntegerValue( "dedicated" ) ||
+		if (G2_Dedicated() ||
 			(G2_ShouldRegisterServer())) //supreme hackery!
 		{
 			ghlInfo->mModel = RE_RegisterServerModel(ghlInfo->mFileName);
@@ -2912,7 +2925,7 @@ qboolean G2_SetupModelPointers(CGhoul2Info *ghlInfo) // returns true if the mode
 		// RJ - experimental optimization!
 		if (!ghlInfo->mModel || 1)
 		{
-			if (ri.Cvar_VariableIntegerValue( "dedicated" ) ||
+			if (G2_Dedicated() ||
 				(G2_ShouldRegisterServer())) //supreme hackery!
 			{
 				ghlInfo->mModel = RE_RegisterServerModel(ghlInfo->mFileName);

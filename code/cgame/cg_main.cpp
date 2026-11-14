@@ -334,7 +334,6 @@ vmCvar_t	cg_g2Marks;
 vmCvar_t	fx_expensivePhysics;
 vmCvar_t	cg_debugHealthBars;
 
-vmCvar_t	cg_smoothCamera;
 vmCvar_t	cg_speedTrail;
 vmCvar_t	cg_fovViewmodel;
 vmCvar_t	cg_fovViewmodelAdjust;
@@ -453,7 +452,6 @@ static cvarTable_t cvarTable[] = {
 	{ &fx_expensivePhysics, "fx_expensivePhysics", "1", CVAR_ARCHIVE },
 	{ &cg_debugHealthBars,	"cg_debugHealthBars",	"0", CVAR_CHEAT },
 
-	{ &cg_smoothCamera, "cg_smoothCamera", "1", CVAR_ARCHIVE },
 	{ &cg_speedTrail, "cg_speedTrail", "1", CVAR_ARCHIVE },
 	{ &cg_fovViewmodel, "cg_fovViewmodel", "0", CVAR_ARCHIVE },
 	{ &cg_fovViewmodelAdjust, "cg_fovViewmodelAdjust", "1", CVAR_ARCHIVE },

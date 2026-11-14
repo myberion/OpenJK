@@ -83,9 +83,9 @@ static void AddSkyPolygon (int nump, vec3_t vecs)
 	{
 		VectorAdd (vp, v, v);
 	}
-	av[0] = fabs(v[0]);
-	av[1] = fabs(v[1]);
-	av[2] = fabs(v[2]);
+	av[0] = Q_fabs(v[0]);
+	av[1] = Q_fabs(v[1]);
+	av[2] = Q_fabs(v[2]);
 	if (av[0] > av[1] && av[0] > av[2])
 	{
 		if (v[0] < 0)
@@ -505,10 +505,10 @@ static void DrawSkyBox( shader_t *shader )
 		int sky_mins_subd[2], sky_maxs_subd[2];
 		int s, t;
 
-		sky_mins[0][i] = floor( sky_mins[0][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
-		sky_mins[1][i] = floor( sky_mins[1][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
-		sky_maxs[0][i] = ceil( sky_maxs[0][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
-		sky_maxs[1][i] = ceil( sky_maxs[1][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
+		sky_mins[0][i] = Q_floor( sky_mins[0][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
+		sky_mins[1][i] = Q_floor( sky_mins[1][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
+		sky_maxs[0][i] = Q_ceil( sky_maxs[0][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
+		sky_maxs[1][i] = Q_ceil( sky_maxs[1][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
 
 		if ( ( sky_mins[0][i] >= sky_maxs[0][i] ) ||
 			 ( sky_mins[1][i] >= sky_maxs[1][i] ) )
@@ -625,10 +625,10 @@ static void FillCloudBox( const shader_t *shader, int stage )
 		int s, t;
 		const float MIN_T = -HALF_SKY_SUBDIVISIONS;
 
-		sky_mins[0][i] = floor( sky_mins[0][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
-		sky_mins[1][i] = floor( sky_mins[1][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
-		sky_maxs[0][i] = ceil( sky_maxs[0][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
-		sky_maxs[1][i] = ceil( sky_maxs[1][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
+		sky_mins[0][i] = Q_floor( sky_mins[0][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
+		sky_mins[1][i] = Q_floor( sky_mins[1][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
+		sky_maxs[0][i] = Q_ceil( sky_maxs[0][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
+		sky_maxs[1][i] = Q_ceil( sky_maxs[1][i] * HALF_SKY_SUBDIVISIONS ) / HALF_SKY_SUBDIVISIONS;
 
 		if ( ( sky_mins[0][i] >= sky_maxs[0][i] ) ||
 			 ( sky_mins[1][i] >= sky_maxs[1][i] ) )
@@ -752,7 +752,7 @@ void R_InitSkyTexCoords( float heightCloud )
 				// compute parametric value 'p' that intersects with cloud layer
 				p = ( 1.0f / ( 2 * DotProduct( skyVec, skyVec ) ) ) *
 					( -2 * skyVec[2] * radiusWorld +
-					   2 * sqrt( SQR( skyVec[2] ) * SQR( radiusWorld ) +
+					   2 * Q_sqrt( SQR( skyVec[2] ) * SQR( radiusWorld ) +
 					             2 * SQR( skyVec[0] ) * radiusWorld * heightCloud +
 								 SQR( skyVec[0] ) * SQR( heightCloud ) +
 								 2 * SQR( skyVec[1] ) * radiusWorld * heightCloud +
@@ -769,8 +769,8 @@ void R_InitSkyTexCoords( float heightCloud )
 				// compute vector from world origin to intersection point 'v'
 				VectorNormalize( v );
 
-				sRad = Q_acos( v[0] );
-				tRad = Q_acos( v[1] );
+				sRad = Q_acosf( v[0] );
+				tRad = Q_acosf( v[1] );
 
 				s_cloudTexCoords[i][t][s][0] = sRad;
 				s_cloudTexCoords[i][t][s][1] = tRad;

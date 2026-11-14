@@ -60,33 +60,16 @@ cmake_dependent_option(BuildSymbolServer "Build WIP Windows Symbol Server (exper
 
 # Configure the use of bundled libraries.  By default, we assume the user is on
 # a platform that does not require any bundling.
-#
-# Note that we always use the bundled copy of minizip, since it is modified to
-# use Z_Malloc.
 
 set(UseInternalOpenALDefault OFF)
-set(UseInternalZlibDefault   OFF)
-set(UseInternalPNGDefault    OFF)
-set(UseInternalJPEGDefault   OFF)
 set(UseInternalSDL2Default   OFF)
 
 if(UseInternalLibs OR WIN32)
   set(UseInternalOpenALDefault ON)
-  set(UseInternalZlibDefault   ON)
-  set(UseInternalPNGDefault    ON)
-  set(UseInternalJPEGDefault   ON)
   set(UseInternalSDL2Default   ON)
 endif()
 
-if(APPLE)
-  set(UseInternalJPEGDefault ON)
-  set(UseInternalPNGDefault  ON)
-endif()
-
 option(UseInternalOpenAL "If set, use bundled OpenAL."  ${UseInternalOpenALDefault})
-option(UseInternalZlib   "If set, use bundled zlib."    ${UseInternalZlibDefault})
-option(UseInternalPNG    "If set, use bundled libpng."  ${UseInternalPNGDefault})
-option(UseInternalJPEG   "If set, use bundled libjpeg." ${UseInternalJPEGDefault})
 option(UseInternalSDL2   "If set, use bundled SDL2."    ${UseInternalSDL2Default})
 
 # This option won't appear on non-Apple platforms.
@@ -273,6 +256,11 @@ elseif (("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU") OR ("${CMAKE_C_COMPILER_ID}" M
 	# enable somewhat modern C++
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
+	# the same floating-point results on every compiler and target: no fused multiply-add contracted from a separate
+	# multiply and add (MSVC's /fp:precise does not contract); docs_rewrite/modernization/surveys/deterministic-math.md
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffp-contract=off")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffp-contract=off")
+
 	if("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-comment")
@@ -372,11 +360,24 @@ set(SharedCommonFiles
 	"${SharedDir}/qcommon/q_color.c"
 	"${SharedDir}/qcommon/q_math.h"
 	"${SharedDir}/qcommon/q_math.c"
+	"${SharedDir}/qcommon/q_rand.h"
+	"${SharedDir}/qcommon/q_rand.c"
 	"${SharedDir}/qcommon/q_string.h"
 	"${SharedDir}/qcommon/q_string.c"
 	"${SharedDir}/qcommon/q_platform.h"
 	"${CMAKE_BINARY_DIR}/shared/qcommon/q_version.h"
 	)
+# The math functions whose results IEEE 754 does not fix (shared/qcommon/q_libm.h, included by q_math.h), the same
+# bits on every platform: LLVM libc's correctly rounded functions (lib/llvm-libc, C++17 inside). Every binary built
+# with SharedCommonFiles links it.
+add_library(qlibm STATIC "${SharedDir}/qcommon/q_libm.h" "${SharedDir}/qcommon/q_libm.cpp")
+target_include_directories(qlibm PRIVATE "${CMAKE_SOURCE_DIR}/lib/llvm-libc")
+target_compile_definitions(qlibm PRIVATE ${SharedDefines})   # ARCH_STRING and the others, for q_platform.h
+# an explicit flag: the -std=c++11 of CMAKE_CXX_FLAGS wins when the compiler's default already satisfies cxx_std_17
+target_compile_options(qlibm PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/std:c++17,-std=c++17>)
+set_target_properties(qlibm PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden
+	VISIBILITY_INLINES_HIDDEN ON)
+
 set(SharedCommonSafeFiles
 	"${SharedDir}/qcommon/safe/gsl.h"
 	"${SharedDir}/qcommon/safe/string.cpp"
@@ -390,26 +391,23 @@ set(SharedCommonSafeFiles
 # Adding all of the projects
 #
 #=============================================================================
-if(UseInternalJPEG)
-  add_subdirectory(lib/jpeg-9a)
-else()
-  find_package(JPEG REQUIRED)
-endif()
-
-if(UseInternalZlib)
-  add_subdirectory(lib/zlib)
-else()
-  find_package(ZLIB REQUIRED)
-endif()
-
-if(UseInternalPNG)
-  add_subdirectory(lib/libpng)
-else()
-  find_package(PNG REQUIRED)
-endif()
-
-# Always use bundled minizip (sets MINIZIP_{LIBRARIES,INCLUDE_DIR})
-add_subdirectory(lib/minizip)
+# zlib-ng, vendored (lib/zlib-ng/README.md): it inflates the pk3 files, for shared/qcommon/q_pk3.cpp only, under
+# its own names (zng_...). Built by its own CMake file on every platform; in a function, so that the settings of
+# its build stay out of this project's.
+function(openjk_add_zlib_ng)
+	set(BUILD_SHARED_LIBS OFF)
+	set(BUILD_TESTING OFF)
+	set(SKIP_INSTALL_ALL ON)
+	set(WITH_GZFILEOP OFF)
+	# its CMake file includes CPack as this project did already: its package description goes to its own folder,
+	# not over this project's
+	unset(CPack_CMake_INCLUDED)
+	set(CPACK_OUTPUT_CONFIG_FILE "${CMAKE_BINARY_DIR}/lib/zlib-ng/CPackConfig.cmake")
+	set(CPACK_SOURCE_OUTPUT_CONFIG_FILE "${CMAKE_BINARY_DIR}/lib/zlib-ng/CPackSourceConfig.cmake")
+	add_subdirectory(lib/zlib-ng EXCLUDE_FROM_ALL)
+	set_target_properties(zlib-ng PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endfunction()
+openjk_add_zlib_ng()
 
 # Add projects
 add_subdirectory(${SPDir})

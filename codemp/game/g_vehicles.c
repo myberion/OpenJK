@@ -536,14 +536,14 @@ qboolean VEH_TryEject( Vehicle_t *pVeh,
 		fBias += 0.2f;
 	}
 	VectorCopy( ent->r.currentOrigin, vExitPos );
-	fVehDiag = sqrtf( ( parent->r.maxs[0] * parent->r.maxs[0] ) + ( parent->r.maxs[1] * parent->r.maxs[1] ) );
+	fVehDiag = Q_sqrtf( ( parent->r.maxs[0] * parent->r.maxs[0] ) + ( parent->r.maxs[1] * parent->r.maxs[1] ) );
 	VectorCopy( ent->r.maxs, vEntMaxs );
 	if ( ent->s.number < MAX_CLIENTS )
 	{//for some reason, in MP, player client mins and maxs are never stored permanently, just set to these hardcoded numbers in PMove
 		vEntMaxs[0] = 15;
 		vEntMaxs[1] = 15;
 	}
-	fEntDiag = sqrtf( ( vEntMaxs[0] * vEntMaxs[0] ) + ( vEntMaxs[1] * vEntMaxs[1] ) );
+	fEntDiag = Q_sqrtf( ( vEntMaxs[0] * vEntMaxs[0] ) + ( vEntMaxs[1] * vEntMaxs[1] ) );
 	vVehLeaveDir[0] *= ( fVehDiag + fEntDiag ) * fBias;	// x
 	vVehLeaveDir[1] *= ( fVehDiag + fEntDiag ) * fBias;	// y
 	vVehLeaveDir[2] *= ( fVehDiag + fEntDiag ) * fBias;
@@ -2249,13 +2249,13 @@ void G_VehicleSetDamageLocFlags( gentity_t *veh, int impactDir, int deathPoint )
 			{
 				perc = 0.99f;
 			}
-			lightDamagePoint = ceil( deathPoint*perc*0.25f );
-			heavyDamagePoint = ceil( deathPoint*perc );
+			lightDamagePoint = Q_ceil( deathPoint*perc*0.25f );
+			heavyDamagePoint = Q_ceil( deathPoint*perc );
 		}
 		else
 		{
-			heavyDamagePoint = ceil( deathPoint*0.66f );
-			lightDamagePoint = ceil( deathPoint*0.14f );
+			heavyDamagePoint = Q_ceil( deathPoint*0.66f );
+			lightDamagePoint = Q_ceil( deathPoint*0.14f );
 		}
 
 		if ( veh->locationDamage[impactDir] >= deathPoint)
@@ -2443,7 +2443,7 @@ void G_VehUpdateShields( gentity_t *targ )
 	{//doesn't have shields, so don't have to send it
 		return;
 	}
-	targ->client->ps.activeForcePass = floor(((float)targ->m_pVehicle->m_iShields/(float)targ->m_pVehicle->m_pVehicleInfo->shields)*10.0f);
+	targ->client->ps.activeForcePass = Q_floor(((float)targ->m_pVehicle->m_iShields/(float)targ->m_pVehicle->m_pVehicleInfo->shields)*10.0f);
 }
 
 // Set the parent entity of this Vehicle NPC.

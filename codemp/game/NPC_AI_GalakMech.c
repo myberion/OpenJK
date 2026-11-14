@@ -1054,14 +1054,19 @@ void NPC_BSGM_Attack( void )
 		vec3_t velocity = {0,0,0};
 		vec3_t mins = {-REPEATER_ALT_SIZE,-REPEATER_ALT_SIZE,-REPEATER_ALT_SIZE}, maxs = {REPEATER_ALT_SIZE,REPEATER_ALT_SIZE,REPEATER_ALT_SIZE};
 		qboolean clearshot;
+		float spread;
 
 		CalcEntitySpot( NPCS.NPC, SPOT_WEAPON, muzzle );
 
 		VectorCopy( NPCS.NPC->enemy->r.currentOrigin, target );
 
-		target[0] += flrand( -5, 5 )+(Q_flrand(-1.0f, 1.0f)*(6-NPCS.NPCInfo->currentAim)*2);
-		target[1] += flrand( -5, 5 )+(Q_flrand(-1.0f, 1.0f)*(6-NPCS.NPCInfo->currentAim)*2);
-		target[2] += flrand( -5, 5 )+(Q_flrand(-1.0f, 1.0f)*(6-NPCS.NPCInfo->currentAim)*2);
+		// flrand drawn first on every compiler (the operands of + are unsequenced)
+		spread = Q_flrand( -5, 5 );
+		target[0] += spread+(Q_flrand(-1.0f, 1.0f)*(6-NPCS.NPCInfo->currentAim)*2);
+		spread = Q_flrand( -5, 5 );
+		target[1] += spread+(Q_flrand(-1.0f, 1.0f)*(6-NPCS.NPCInfo->currentAim)*2);
+		spread = Q_flrand( -5, 5 );
+		target[2] += spread+(Q_flrand(-1.0f, 1.0f)*(6-NPCS.NPCInfo->currentAim)*2);
 
 		//Find the desired angles
 		clearshot = WP_LobFire( NPCS.NPC, muzzle, target, mins, maxs, MASK_SHOT|CONTENTS_LIGHTSABER,

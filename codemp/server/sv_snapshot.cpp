@@ -74,14 +74,14 @@ static void SV_EmitPacketEntities( clientSnapshot_t *from, clientSnapshot_t *to,
 		if ( newindex >= to->num_entities ) {
 			newnum = 9999;
 		} else {
-			newent = &svs.snapshotEntities[(to->first_entity+newindex) % svs.numSnapshotEntities];
+			newent = &svs.snapshotEntities[to->entities[newindex]];
 			newnum = newent->number;
 		}
 
 		if ( oldindex >= from_num_entities ) {
 			oldnum = 9999;
 		} else {
-			oldent = &svs.snapshotEntities[(from->first_entity+oldindex) % svs.numSnapshotEntities];
+			oldent = &svs.snapshotEntities[from->entities[oldindex]];
 			oldnum = oldent->number;
 		}
 
@@ -117,18 +117,15 @@ static void SV_EmitPacketEntities( clientSnapshot_t *from, clientSnapshot_t *to,
 
 /*
 ==================
-SV_WriteSnapshotToClient
+SV_SnapshotBase
+
+The earlier snapshot to code this one against and its distance in messages, or NULL and 0
 ==================
 */
-static void SV_WriteSnapshotToClient( client_t *client, msg_t *msg ) {
-	clientSnapshot_t	*frame, *oldframe;
+clientSnapshot_t *SV_SnapshotBase( client_t *client, int *lastframe_out ) {
+	clientSnapshot_t	*oldframe;
 	int					lastframe;
-	int					i;
-	int					snapFlags;
 	int					deltaMessage;
-
-	// this is the snapshot we are creating
-	frame = &client->frames[ client->netchan.outgoingSequence & PACKET_MASK ];
 
 	// bots never acknowledge, but it doesn't matter since the only use case is for serverside demos
 	// in which case we can delta against the very last message every time
@@ -148,17 +145,9 @@ static void SV_WriteSnapshotToClient( client_t *client, msg_t *msg ) {
 		Com_DPrintf ("%s: Delta request from out of date packet.\n", client->name);
 		oldframe = NULL;
 		lastframe = 0;
-	} else if ( client->demo.demorecording && client->demo.demowaiting ) {
-		// demo is waiting for a non-delta-compressed frame for this client, so don't delta compress
-		oldframe = NULL;
-		lastframe = 0;
-	} else if ( client->demo.minDeltaFrame > deltaMessage ) {
-		// we saved a non-delta frame to the demo and sent it to the client, but the client didn't ack it
-		// we can't delta against an old frame that's not in the demo without breaking the demo.  so send
-		// non-delta frames until the client acks.
-		oldframe = NULL;
-		lastframe = 0;
 	} else {
+		// (a server demo needs no rule here: its start resets the message codec's frames, which then code only
+		// against messages of the demo, SV_NetcodecDemoGameState)
 		// we have a valid snapshot to delta from
 		oldframe = &client->frames[ deltaMessage & PACKET_MASK ];
 		lastframe = client->netchan.outgoingSequence - deltaMessage;
@@ -171,13 +160,49 @@ static void SV_WriteSnapshotToClient( client_t *client, msg_t *msg ) {
 		}
 	}
 
-	if ( oldframe == NULL ) {
-		if ( client->demo.demowaiting ) {
-			// this is a non-delta frame, so we can delta against it in the demo
-			client->demo.minDeltaFrame = client->netchan.outgoingSequence;
-		}
-		client->demo.demowaiting = qfalse;
+	*lastframe_out = lastframe;
+	return oldframe;
+}
+
+// the server time sent with the snapshot
+int SV_SnapshotTime( const client_t *client ) {
+	if( client->oldServerTime &&
+		!( client->demo.demorecording && client->demo.isBot ) ) {
+		// The server has not yet got an acknowledgement of the
+		// new gamestate from this client, so continue to send it
+		// a time as if the server has not restarted. Note from
+		// the client's perspective this time is strictly speaking
+		// incorrect, but since it'll be busy loading a map at
+		// the time it doesn't really matter.
+		return sv.time + client->oldServerTime;
 	}
+	return sv.time;
+}
+
+int SV_SnapshotFlags( const client_t *client ) {
+	int snapFlags = svs.snapFlagServerBit;
+	if ( client->rateDelayed ) {
+		snapFlags |= SNAPFLAG_RATE_DELAYED;
+	}
+	if ( client->state != CS_ACTIVE ) {
+		snapFlags |= SNAPFLAG_NOT_ACTIVE;
+	}
+	return snapFlags;
+}
+
+/*
+==================
+SV_WriteSnapshotToClient
+
+The legacy format, only for the byte comparison of sv_netcodecCompare (the codec sends the messages): oldframe and
+lastframe come from SV_SnapshotBase.
+==================
+*/
+void SV_WriteSnapshotToClient( client_t *client, msg_t *msg, clientSnapshot_t *oldframe, int lastframe ) {
+	clientSnapshot_t	*frame;
+
+	// this is the snapshot we are creating
+	frame = &client->frames[ client->netchan.outgoingSequence & PACKET_MASK ];
 
 	MSG_WriteByte (msg, svc_snapshot);
 
@@ -187,31 +212,12 @@ static void SV_WriteSnapshotToClient( client_t *client, msg_t *msg ) {
 
 	// send over the current server time so the client can drift
 	// its view of time to try to match
-	if( client->oldServerTime &&
-		!( client->demo.demorecording && client->demo.isBot ) ) {
-		// The server has not yet got an acknowledgement of the
-		// new gamestate from this client, so continue to send it
-		// a time as if the server has not restarted. Note from
-		// the client's perspective this time is strictly speaking
-		// incorrect, but since it'll be busy loading a map at
-		// the time it doesn't really matter.
-		MSG_WriteLong (msg, sv.time + client->oldServerTime);
-	} else {
-		MSG_WriteLong (msg, sv.time);
-	}
+	MSG_WriteLong (msg, SV_SnapshotTime( client ));
 
 	// what we are delta'ing from
 	MSG_WriteByte (msg, lastframe);
 
-	snapFlags = svs.snapFlagServerBit;
-	if ( client->rateDelayed ) {
-		snapFlags |= SNAPFLAG_RATE_DELAYED;
-	}
-	if ( client->state != CS_ACTIVE ) {
-		snapFlags |= SNAPFLAG_NOT_ACTIVE;
-	}
-
-	MSG_WriteByte (msg, snapFlags);
+	MSG_WriteByte (msg, SV_SnapshotFlags( client ));
 
 	// send over the areabits
 	MSG_WriteByte (msg, frame->areabytes);
@@ -262,13 +268,6 @@ static void SV_WriteSnapshotToClient( client_t *client, msg_t *msg ) {
 
 	// delta encode the entities
 	SV_EmitPacketEntities (oldframe, frame, msg);
-
-	// padding for rate debugging
-	if ( sv_padPackets->integer ) {
-		for ( i = 0 ; i < sv_padPackets->integer ; i++ ) {
-			MSG_WriteByte (msg, svc_nop);
-		}
-	}
 }
 
 
@@ -527,6 +526,20 @@ static void SV_AddEntitiesVisibleFromPoint( vec3_t origin, clientSnapshot_t *fra
 	}
 }
 
+// SV_SendClientMessages is building the snapshots of every client: the entities' states are those of one tick
+static qboolean s_sendingAll;
+
+// the entities' states may have changed: each is compared with its last copy again
+static void SV_NewSnapshotTick( void ) {
+	svs.snapshotTick++;
+	svs.nextSnapshotEntities = (int64_t)svs.snapshotTick * MAX_GENTITIES;
+}
+
+// where the newest copy of an entity's state is in svs.snapshotEntities
+static uint32_t SV_SnapshotPlace( int num ) {
+	return num * SV_SNAPSHOT_TICKS + svs.snapshotVersion[num] % SV_SNAPSHOT_TICKS;
+}
+
 /*
 =============
 SV_BuildClientSnapshot
@@ -545,8 +558,6 @@ static void SV_BuildClientSnapshot( client_t *client ) {
 	clientSnapshot_t			*frame;
 	snapshotEntityNumbers_t		entityNumbers;
 	int							i;
-	sharedEntity_t				*ent;
-	entityState_t				*state;
 	svEntity_t					*svEnt;
 	sharedEntity_t				*clent;
 	playerState_t				*ps;
@@ -624,19 +635,27 @@ static void SV_BuildClientSnapshot( client_t *client ) {
 		((int *)frame->areabits)[i] = ((int *)frame->areabits)[i] ^ -1;
 	}
 
-	// copy the entity states out
+	// The entity states: one copy of a state while it does not change, shared by every snapshot that holds it
+	// (svs.snapshotEntities); the snapshot keeps where each one is, in the order of the numbers. A tick compares an
+	// entity's state with its last copy once, for the first client that sees it (the state is the same for all of
+	// them), and stores a new version if it differs. A snapshot built outside SV_SendClientMessages is a tick of its
+	// own: the states may have changed since the last one.
+	if ( !s_sendingAll ) {
+		SV_NewSnapshotTick();
+	}
 	frame->num_entities = 0;
 	frame->first_entity = svs.nextSnapshotEntities;
 	for ( i = 0 ; i < entityNumbers.numSnapshotEntities ; i++ ) {
-		ent = SV_GentityNum(entityNumbers.snapshotEntities[i]);
-		state = &svs.snapshotEntities[svs.nextSnapshotEntities % svs.numSnapshotEntities];
-		*state = ent->s;
-		svs.nextSnapshotEntities++;
-		// this should never hit, map should always be restarted first in SV_Frame
-		if ( svs.nextSnapshotEntities >= 0x7FFFFFFE ) {
-			Com_Error(ERR_FATAL, "svs.nextSnapshotEntities wrapped");
+		const int num = entityNumbers.snapshotEntities[i];
+		if ( svs.snapshotStoredTick[num] != svs.snapshotTick ) {
+			svs.snapshotStoredTick[num] = svs.snapshotTick;
+			const entityState_t *now = &SV_GentityNum( num )->s;
+			if ( memcmp( now, &svs.snapshotEntities[SV_SnapshotPlace( num )], sizeof( *now ) ) ) {
+				svs.snapshotVersion[num]++;
+				svs.snapshotEntities[SV_SnapshotPlace( num )] = *now;
+			}
 		}
-		frame->num_entities++;
+		frame->entities[frame->num_entities++] = SV_SnapshotPlace( num );
 	}
 }
 
@@ -650,35 +669,12 @@ to take to clear, based on the current rate
 ====================
 */
 #define	HEADER_RATE_BYTES	48		// include our header, IP header, and some overhead
-static int SV_RateMsec( client_t *client, int messageSize ) {
-	int		rate;
-	int		rateMsec;
-
+static int SV_RateMsec( int messageSize ) {
 	// individual messages will never be larger than fragment size
 	if ( messageSize > 1500 ) {
 		messageSize = 1500;
 	}
-	rate = client->rate;
-	if ( sv_maxRate->integer ) {
-		if ( sv_maxRate->integer < 1000 ) {
-			Cvar_Set( "sv_MaxRate", "1000" );
-		}
-		if ( sv_maxRate->integer < rate ) {
-			rate = sv_maxRate->integer;
-		}
-	}
-	if ( sv_minRate->integer ) {
-		if ( sv_minRate->integer < 1000 ) {
-			Cvar_Set( "sv_minRate", "1000" );
-		}
-		if ( sv_minRate->integer > rate ) {
-			rate = sv_minRate->integer;
-		}
-	}
-
-	rateMsec = ( messageSize + HEADER_RATE_BYTES ) * 1000 / ((int) (rate * com_timescale->value));
-
-	return rateMsec;
+	return ( messageSize + HEADER_RATE_BYTES ) * 1000 / ((int) (SV_CLIENT_RATE * com_timescale->value));
 }
 
 extern void SV_WriteDemoMessage ( client_t *cl, msg_t *msg, int headerBytes );
@@ -704,14 +700,13 @@ void SV_SendMessageToClient( msg_t *msg, client_t *client ) {
 
 	// record information about the message
 	client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageSize = msg->cursize;
-	client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageSent = svs.time;
-	client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageAcked = -1;
+	auto &ping = client->pingTimes[client->netchan.outgoingSequence & ( SV_PING_WINDOW - 1 )];
+	ping.sent = Sys_Milliseconds();	// real time: svs.time moves once per server frame
+	ping.isAcked = qfalse;
 
 	// save the message to demo.  this must happen before sending over network as that encodes the backing databuf
-	if ( client->demo.demorecording && !client->demo.demowaiting ) {
-		msg_t msgcopy = *msg;
-		MSG_WriteByte( &msgcopy, svc_EOF );
-		SV_WriteDemoMessage( client, &msgcopy, 0 );
+	if ( client->demo.demorecording ) {
+		SV_WriteDemoMessage( client, msg, 0 );
 	}
 
 	// bots need to have their snapshots built, but
@@ -725,22 +720,18 @@ void SV_SendMessageToClient( msg_t *msg, client_t *client ) {
 	// send the datagram
 	SV_Netchan_Transmit( client, msg );	//msg->cursize, msg->data );
 
-	// set nextSnapshotTime based on rate and requested number of updates
+	// set nextSnapshotTime: a snapshot every server frame, unless this message takes longer than a frame at SV_CLIENT_RATE
 
 	// local clients get snapshots every server frame
-	// TTimo - https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=491
-	// added sv_lanForceRate check
-	if ( client->netchan.remoteAddress.type == NA_LOOPBACK || (sv_lanForceRate->integer && Sys_IsLANAddress (&client->netchan.remoteAddress)) ) {
-		client->nextSnapshotTime = svs.time + ((int) (1000.0 / sv_fps->integer * com_timescale->value));
+	if ( client->netchan.remoteAddress.type == NA_LOOPBACK ) {
+		client->nextSnapshotTime = svs.time + ((int) (TICK_MSEC * com_timescale->value));
 		return;
 	}
 
-	// normal rate / snapshotMsec calculation
-	rateMsec = SV_RateMsec( client, msg->cursize );
+	rateMsec = SV_RateMsec( msg->cursize );
 
-	if ( rateMsec < client->snapshotMsec ) {
-		// never send more packets than this, no matter what the rate is at
-		rateMsec = client->snapshotMsec;
+	if ( rateMsec < TICK_MSEC ) {
+		rateMsec = TICK_MSEC;
 		client->rateDelayed = qfalse;
 	} else {
 		client->rateDelayed = qtrue;
@@ -770,49 +761,21 @@ Also called by SV_FinalMessage
 */
 extern cvar_t	*fs_gamedirvar;
 void SV_SendClientSnapshot( client_t *client ) {
-	byte		msg_buf[MAX_MSGLEN];
-	msg_t		msg;
+	const char *setGame = NULL;
 
 	if (!client->sentGamedir)
-	{ //rww - if this is the case then make sure there is an svc_setgame sent before this snap
-		int i = 0;
-
-		MSG_Init (&msg, msg_buf, sizeof(msg_buf));
-
-		//have to include this for each message.
-		MSG_WriteLong( &msg, client->lastClientCommand );
-
-		MSG_WriteByte (&msg, svc_setgame);
-
-		const char *gamedir = FS_GetCurrentGameDir(true);
-
-		while (gamedir[i])
-		{
-			MSG_WriteByte(&msg, gamedir[i]);
-			i++;
-		}
-		MSG_WriteByte(&msg, 0);
-
-		// MW - my attempt to fix illegible server message errors caused by
-		// packet fragmentation of initial snapshot.
-		//rww - reusing this code here
-		while(client->state&&client->netchan.unsentFragments)
-		{
-			// send additional message fragments if the last message
-			// was too large to send at once
-			Com_Printf ("[ISM]SV_SendClientGameState() [1] for %s, writing out old fragments\n", client->name);
-			SV_Netchan_TransmitNextFragment(&client->netchan);
-		}
-
-		// record information about the message
-		client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageSize = msg.cursize;
-		client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageSent = svs.time;
-		client->frames[client->netchan.outgoingSequence & PACKET_MASK].messageAcked = -1;
-
-		// send the datagram
-		SV_Netchan_Transmit( client, &msg );	//msg->cursize, msg->data );
-
+	{ //rww - the game dir goes with the next message (svc_setgame, a message of its own before the message codec)
+		setGame = FS_GetCurrentGameDir(true);
 		client->sentGamedir = qtrue;
+	}
+
+	// A bot's snapshot is built only to be recorded in a demo. Nothing else reads it: the base game's bot code never
+	// calls BotGetSnapshotEntity, which finds no entity then. Built at every tick, the bots' snapshots were 6 % of a
+	// tick with 16 bots (plan step 14, part 7).
+	if ( client->netchan.remoteAddress.type == NA_BOT && !client->demo.demorecording
+		&& !( sv_autoDemo->integer && sv_autoDemoBots->integer ) ) {
+		client->frames[client->netchan.outgoingSequence & PACKET_MASK].num_entities = 0;
+		return;
 	}
 
 	// build the snapshot
@@ -830,30 +793,8 @@ void SV_SendClientSnapshot( client_t *client ) {
 		return;
 	}
 
-	MSG_Init (&msg, msg_buf, sizeof(msg_buf));
-	msg.allowoverflow = qtrue;
-
-	// NOTE, MRE: all server->client messages now acknowledge
-	// let the client know which reliable clientCommands we have received
-	MSG_WriteLong( &msg, client->lastClientCommand );
-
-	// (re)send any reliable server commands
-	SV_UpdateServerCommandsToClient( client, &msg );
-
-	// send over all the relevant entityState_t
-	// and the playerState_t
-	SV_WriteSnapshotToClient( client, &msg );
-
-	// Add any download data if the client is downloading
-	SV_WriteDownloadToClient( client, &msg );
-
-	// check for overflow
-	if ( msg.overflowed ) {
-		Com_Printf ("WARNING: msg overflowed for %s\n", client->name);
-		MSG_Clear (&msg);
-	}
-
-	SV_SendMessageToClient( &msg, client );
+	// commands, game dir, snapshot and download, coded and sent
+	SV_NetcodecSendSnapshot( client, setGame );
 }
 
 
@@ -865,6 +806,9 @@ SV_SendClientMessages
 void SV_SendClientMessages( void ) {
 	int			i;
 	client_t	*c;
+
+	SV_NewSnapshotTick();
+	s_sendingAll = qtrue;
 
 	// send a message to each connected client
 	for (i=0, c = svs.clients ; i < sv_maxclients->integer ; i++, c++) {
@@ -880,7 +824,7 @@ void SV_SendClientMessages( void ) {
 		// was too large to send at once
 		if ( c->netchan.unsentFragments ) {
 			c->nextSnapshotTime = svs.time +
-				SV_RateMsec( c, c->netchan.unsentLength - c->netchan.unsentFragmentStart );
+				SV_RateMsec( c->netchan.unsentLength - c->netchan.unsentFragmentStart );
 			SV_Netchan_TransmitNextFragment( &c->netchan );
 			continue;
 		}
@@ -888,5 +832,7 @@ void SV_SendClientMessages( void ) {
 		// generate and send a new message
 		SV_SendClientSnapshot( c );
 	}
+
+	s_sendingAll = qfalse;
 }
 

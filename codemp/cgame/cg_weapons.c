@@ -263,7 +263,7 @@ static void CG_CalculateWeaponPosition( vec3_t origin, vec3_t angles ) {
 	if ( cg_weaponBob.value ) {
 		// idle drift
 		scale = cg.xyspeed + 40;
-		fracsin = sin( cg.time * 0.001 );
+		fracsin = Q_sin( cg.time * 0.001 );
 		angles[ROLL] += scale * fracsin * 0.01;
 		angles[YAW] += scale * fracsin * 0.01;
 		angles[PITCH] += scale * fracsin * 0.01;
@@ -394,7 +394,7 @@ static void CG_AddWeaponWithPowerups( refEntity_t *gun, int powerups ) {
 	if (cg.predictedPlayerState.electrifyTime > cg.time)
 	{ //add electrocution shell
 		int preShader = gun->customShader;
-		if ( rand() & 1 )
+		if ( Q_irand( 0, 1 ) )
 		{
 			gun->customShader = cgs.media.electricBodyShader;
 		}
@@ -766,7 +766,7 @@ Ghoul2 Insert End
 		CG_LightningBolt( nonPredictedCent, flashorigin );
 
 		if ( weapon->flashDlightColor[0] || weapon->flashDlightColor[1] || weapon->flashDlightColor[2] ) {
-			trap->R_AddLightToScene( flashorigin, 300 + (rand()&31), weapon->flashDlightColor[0],
+			trap->R_AddLightToScene( flashorigin, 300 + (Q_irand( 0, 31 )), weapon->flashDlightColor[0],
 				weapon->flashDlightColor[1], weapon->flashDlightColor[2] );
 		}
 	}
@@ -848,8 +848,8 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 
 	if ( cg_fovViewmodel.integer )
 	{
-		float fracDistFOV = tanf( cg_fov.value * ( M_PI/180 ) * 0.5f );
-		float fracWeapFOV = ( 1.0f / fracDistFOV ) * tanf( cg_fovViewmodel.value * ( M_PI/180 ) * 0.5f );
+		float fracDistFOV = Q_tanpif( cg_fov.value / 360.0f );
+		float fracWeapFOV = ( 1.0f / fracDistFOV ) * Q_tanpif( cg_fovViewmodel.value / 360.0f );
 		VectorScale( hand.axis[0], fracWeapFOV, hand.axis[0] );
 	}
 
@@ -876,9 +876,9 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 		}
 
 		trap->G2API_GetBoneFrame(cent->ghoul2, "lower_lumbar", cg.time, &currentFrame, cgs.gameModels, 0);
-		hand.frame = CG_MapTorsoToWeaponFrame( ci, ceil( currentFrame ), ps->torsoAnim );
-		hand.oldframe = CG_MapTorsoToWeaponFrame( ci, floor( currentFrame ), ps->torsoAnim );
-		hand.backlerp = 1.0f - (currentFrame-floor(currentFrame));
+		hand.frame = CG_MapTorsoToWeaponFrame( ci, Q_ceil( currentFrame ), ps->torsoAnim );
+		hand.oldframe = CG_MapTorsoToWeaponFrame( ci, Q_floor( currentFrame ), ps->torsoAnim );
+		hand.backlerp = 1.0f - (currentFrame-Q_floor(currentFrame));
 
 		// Handle the fringe situation where oldframe is invalid
 		if ( hand.frame == -1 )
@@ -1878,23 +1878,23 @@ void CG_FireWeapon( centity_t *cent, qboolean altFire ) {
 			{
 				if (!cg.renderingThirdPerson )//gives an advantage to being in 3rd person, but would look silly otherwise
 				{//kick the view back
-					cg.kick_angles[PITCH] = flrand( -10, -15 );
+					cg.kick_angles[PITCH] = Q_flrand( -10, -15 );
 					cg.kick_time = cg.time;
 				}
 			}
 			else if (ent->weapon == WP_ROCKET_LAUNCHER)
 			{
-				CGCam_Shake(flrand(2, 3), 350);
+				CGCam_Shake(Q_flrand(2, 3), 350);
 			}
 			else if (ent->weapon == WP_REPEATER)
 			{
-				CGCam_Shake(flrand(2, 3), 350);
+				CGCam_Shake(Q_flrand(2, 3), 350);
 			}
 			else if (ent->weapon == WP_FLECHETTE)
 			{
 				if (altFire)
 				{
-					CGCam_Shake(flrand(2, 3), 350);
+					CGCam_Shake(Q_flrand(2, 3), 350);
 				}
 				else
 				{
@@ -1926,7 +1926,7 @@ void CG_FireWeapon( centity_t *cent, qboolean altFire ) {
 			}
 		}
 		if ( c > 0 ) {
-			c = rand() % c;
+			c = Q_irand( 0, c - 1 );
 			if ( weap->altFlashSound[c] )
 			{
 				trap->S_StartSound( NULL, ent->number, CHAN_WEAPON, weap->altFlashSound[c] );
@@ -1946,7 +1946,7 @@ void CG_FireWeapon( centity_t *cent, qboolean altFire ) {
 			}
 		}
 		if ( c > 0 ) {
-			c = rand() % c;
+			c = Q_irand( 0, c - 1 );
 			if ( weap->flashSound[c] )
 			{
 				trap->S_StartSound( NULL, ent->number, CHAN_WEAPON, weap->flashSound[c] );

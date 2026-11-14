@@ -35,21 +35,16 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 extern qboolean BG_SabersOff( playerState_t *ps );
 saberInfo_t *BG_MySaber( int clientNum, int saberNum );
 
+// A number from val1 to val2 - 1 (val2 itself never came out of 1.01's formula, val1 + random * (val2 - val1)
+// truncated, and the saber's chances were tuned with it), or val1 when val2 <= val1. Drawn from the command's own
+// state, seeded with its time, so that the server and the client's prediction draw the same numbers (plan step 14).
 int PM_irand_timesync(int val1, int val2)
 {
-	int i;
-
-	i = (val1-1) + (Q_random( &pm->cmd.serverTime )*(val2 - val1)) + 1;
-	if (i < val1)
+	if ( val2 <= val1 )
 	{
-		i = val1;
+		return val1;
 	}
-	if (i > val2)
-	{
-		i = val2;
-	}
-
-	return i;
+	return Q_RandInt( &pml.rand, val1, val2 - 1 );
 }
 
 void BG_ForcePowerDrain( playerState_t *ps, forcePowers_t forcePower, int overrideAmt )
@@ -1412,7 +1407,7 @@ void PM_SaberLocked( void )
 				if ( (pm->ps->torsoAnim) == BOTH_CCWCIRCLELOCK ||
 					(pm->ps->torsoAnim) == BOTH_BF2LOCK )
 				{
-					curFrame = floor( currentFrame )-strength;
+					curFrame = Q_floor( currentFrame )-strength;
 					//drop my frame one
 					if ( curFrame <= anim->firstFrame )
 					{//I won!  Break out
@@ -1427,7 +1422,7 @@ void PM_SaberLocked( void )
 				}
 				else
 				{
-					curFrame = ceil( currentFrame )+strength;
+					curFrame = Q_ceil( currentFrame )+strength;
 					//advance my frame one
 					if ( curFrame >= anim->firstFrame+anim->numFrames )
 					{//I won!  Break out
@@ -1445,7 +1440,7 @@ void PM_SaberLocked( void )
 			{ //new locks
 				if ( BG_CheckIncrementLockAnim( pm->ps->torsoAnim, SABERLOCK_WIN ) )
 				{
-					curFrame = ceil( currentFrame )+strength;
+					curFrame = Q_ceil( currentFrame )+strength;
 					//advance my frame one
 					if ( curFrame >= anim->firstFrame+anim->numFrames )
 					{//I won!  Break out
@@ -1460,7 +1455,7 @@ void PM_SaberLocked( void )
 				}
 				else
 				{
-					curFrame = floor( currentFrame )-strength;
+					curFrame = Q_floor( currentFrame )-strength;
 					//drop my frame one
 					if ( curFrame <= anim->firstFrame )
 					{//I won!  Break out
@@ -1488,7 +1483,7 @@ void PM_SaberLocked( void )
 				{
 					if ( !PM_irand_timesync( 0, 2 ) )
 					{
-						BG_AddPredictableEventToPlayerstate(EV_PAIN, floor((float)80/100*100.0f), genemy);
+						BG_AddPredictableEventToPlayerstate(EV_PAIN, Q_floor((float)80/100*100.0f), genemy);
 					}
 					PM_SetAnimFrame( genemy, anim->firstFrame+remaining, qtrue, qtrue );
 				}
@@ -1503,7 +1498,7 @@ void PM_SaberLocked( void )
 				{
 					if ( !PM_irand_timesync( 0, 2 ) )
 					{
-						BG_AddPredictableEventToPlayerstate(EV_PAIN, floor((float)80/100*100.0f), genemy);
+						BG_AddPredictableEventToPlayerstate(EV_PAIN, Q_floor((float)80/100*100.0f), genemy);
 					}
 					PM_SetAnimFrame( genemy, anim->firstFrame+anim->numFrames-remaining, qtrue, qtrue );
 				}

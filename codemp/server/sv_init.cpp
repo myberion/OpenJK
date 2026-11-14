@@ -270,14 +270,11 @@ void SV_Startup( void ) {
 	SV_BoundMaxClients( 1 );
 
 	svs.clients = (struct client_s *)Z_Malloc (sizeof(client_t) * sv_maxclients->integer, TAG_CLIENTS, qtrue );
+	svs.numSnapshotEntities = SV_SNAPSHOT_ENTITIES;
 	if ( com_dedicated->integer ) {
-		svs.numSnapshotEntities = sv_maxclients->integer * PACKET_BACKUP * MAX_SNAPSHOT_ENTITIES;
 		Cvar_Set( "r_ghoul2animsmooth", "0");
 		Cvar_Set( "r_ghoul2unsqashaftersmooth", "0");
 
-	} else {
-		// we don't need nearly as many when playing locally
-		svs.numSnapshotEntities = sv_maxclients->integer * 4 * MAX_SNAPSHOT_ENTITIES;
 	}
 	SV_ChallengeInit();
 	svs.initialized = qtrue;
@@ -362,12 +359,7 @@ void SV_ChangeMaxClients( void ) {
 	Hunk_FreeTempMemory( oldClients );
 
 	// allocate new snapshot entities
-	if ( com_dedicated->integer ) {
-		svs.numSnapshotEntities = sv_maxclients->integer * PACKET_BACKUP * MAX_SNAPSHOT_ENTITIES;
-	} else {
-		// we don't need nearly as many when playing locally
-		svs.numSnapshotEntities = sv_maxclients->integer * 4 * MAX_SNAPSHOT_ENTITIES;
-	}
+	svs.numSnapshotEntities = SV_SNAPSHOT_ENTITIES;
 }
 
 /*
@@ -474,7 +466,7 @@ Ghoul2 Insert Start
  	// de allocate the snapshot entities
 	if (svs.snapshotEntities)
 	{
-		delete[] svs.snapshotEntities;
+		free( svs.snapshotEntities );
 		svs.snapshotEntities = NULL;
 	}
 /*
@@ -545,12 +537,13 @@ Ghoul2 Insert Start
 */
 	// allocate the snapshot entities on the hunk
 //	svs.snapshotEntities = (struct entityState_s *)Hunk_Alloc( sizeof(entityState_t)*svs.numSnapshotEntities, h_high );
-	svs.nextSnapshotEntities = 0;
 
-	// allocate the snapshot entities
-	svs.snapshotEntities = new entityState_s[svs.numSnapshotEntities];
-	// we CAN afford to do this here, since we know the STL vectors in Ghoul2 are empty
-	memset(svs.snapshotEntities, 0, sizeof(entityState_t)*svs.numSnapshotEntities);
+	// allocate the snapshot entities, zeroed by the system: a place nothing was stored in yet is not memory in use
+	// (cleared by hand, the whole array was: 69.7 MB at a window of 128 messages; plan step 14, part 5)
+	svs.snapshotEntities = (entityState_t *)calloc( svs.numSnapshotEntities, sizeof( entityState_t ) );
+	if ( !svs.snapshotEntities ) {
+		Com_Error( ERR_FATAL, "SV_SpawnServer: no memory for the snapshot entities" );
+	}
 
 /*
 Ghoul2 Insert End
@@ -585,9 +578,8 @@ Ghoul2 Insert End
 	// make sure we are not paused
 	Cvar_Set("cl_paused", "0");
 
-	// get a new checksum feed and restart the file system
-	srand(Com_Milliseconds());
-	sv.checksumFeed = ( ((int) rand() << 16) ^ rand() ) ^ Com_Milliseconds();
+	// get a new checksum feed (unpredictable: the system's random bytes) and restart the file system
+	Com_RandomBytes( (byte *)&sv.checksumFeed, sizeof( sv.checksumFeed ) );
 	FS_Restart( sv.checksumFeed );
 
 	CM_LoadMap( va("maps/%s.bsp", server), qfalse, &checksum );
@@ -953,13 +945,6 @@ void SV_Init (void) {
 	sv_maxclients = Cvar_Get ("sv_maxclients", "8", CVAR_SERVERINFO | CVAR_LATCH, "Max. connected clients" );
 
 
-	//cvar_t	*sv_ratePolicy;		// 1-2
-	//cvar_t	*sv_clientRate;
-	sv_ratePolicy = Cvar_Get( "sv_ratePolicy", "1", CVAR_ARCHIVE_ND, "Determines which policy of enforcement is used for client's \"rate\" cvar" );
-	Cvar_CheckRange(sv_ratePolicy, 1, 2, qtrue);
-	sv_clientRate = Cvar_Get( "sv_clientRate", "50000", CVAR_ARCHIVE_ND);
-	sv_minRate = Cvar_Get ("sv_minRate", "0", CVAR_ARCHIVE_ND | CVAR_SERVERINFO, "Min bandwidth rate allowed on server. Use 0 for unlimited." );
-	sv_maxRate = Cvar_Get ("sv_maxRate", "0", CVAR_ARCHIVE_ND | CVAR_SERVERINFO, "Max bandwidth rate allowed on server. Use 0 for unlimited." );
 	sv_minPing = Cvar_Get ("sv_minPing", "0", CVAR_ARCHIVE_ND | CVAR_SERVERINFO );
 	sv_maxPing = Cvar_Get ("sv_maxPing", "0", CVAR_ARCHIVE_ND | CVAR_SERVERINFO );
 	sv_floodProtect = Cvar_Get ("sv_floodProtect", "1", CVAR_ARCHIVE | CVAR_SERVERINFO, "Protect against flooding of server commands" );
@@ -976,13 +961,6 @@ void SV_Init (void) {
 	// server vars
 	sv_rconPassword = Cvar_Get ("rconPassword", "", CVAR_TEMP );
 	sv_privatePassword = Cvar_Get ("sv_privatePassword", "", CVAR_TEMP );
-	sv_snapsMin = Cvar_Get ("sv_snapsMin", "10", CVAR_ARCHIVE_ND ); // 1 <=> sv_snapsMax
-	sv_snapsMax = Cvar_Get ("sv_snapsMax", "40", CVAR_ARCHIVE_ND ); // sv_snapsMin <=> sv_fps
-	sv_snapsPolicy = Cvar_Get ("sv_snapsPolicy", "1", CVAR_ARCHIVE_ND, "Determines which policy of enforcement is used for client's \"snaps\" cvar");
-	Cvar_CheckRange(sv_snapsPolicy, 0, 2, qtrue);
-	sv_fps = Cvar_Get ("sv_fps", "40", CVAR_SERVERINFO, "Server frames per second" );
-	sv_timeout = Cvar_Get ("sv_timeout", "200", CVAR_TEMP );
-	sv_zombietime = Cvar_Get ("sv_zombietime", "2", CVAR_TEMP );
 	Cvar_Get ("nextmap", "", CVAR_TEMP );
 
 	sv_allowDownload = Cvar_Get ("sv_allowDownload", "0", CVAR_SERVERINFO, "Allow clients to download mod files via UDP from the server");
@@ -993,10 +971,10 @@ void SV_Init (void) {
 	sv_reconnectlimit = Cvar_Get ("sv_reconnectlimit", "3", 0);
 	sv_showghoultraces = Cvar_Get ("sv_showghoultraces", "0", 0);
 	sv_showloss = Cvar_Get ("sv_showloss", "0", 0);
-	sv_padPackets = Cvar_Get ("sv_padPackets", "0", 0);
+	sv_netcodecCompare = Cvar_Get ("sv_netcodecCompare", "0", CVAR_TEMP, "Debug: also code each message in the legacy format and print the byte ratio (1: every 10 seconds, 2: every message)");
+	sv_netcodecMaxBytes = Cvar_Get ("sv_netcodecMaxBytes", "0", CVAR_TEMP, "Debug: the largest message the server codes, in bytes (0: MAX_MSGLEN, 49152), to test what happens to larger ones: snapshots are cut, a gamestate drops the client");
 	sv_killserver = Cvar_Get ("sv_killserver", "0", 0);
 	sv_mapChecksum = Cvar_Get ("sv_mapChecksum", "", CVAR_ROM);
-	sv_lanForceRate = Cvar_Get ("sv_lanForceRate", "1", CVAR_ARCHIVE_ND );
 
 	sv_filterCommands = Cvar_Get( "sv_filterCommands", "1", CVAR_ARCHIVE );
 
@@ -1098,7 +1076,7 @@ Ghoul2 Insert Start
  	// de allocate the snapshot entities
 	if (svs.snapshotEntities)
 	{
-		delete[] svs.snapshotEntities;
+		free( svs.snapshotEntities );
 		svs.snapshotEntities = NULL;
 	}
 

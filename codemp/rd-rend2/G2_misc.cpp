@@ -666,13 +666,13 @@ static void G2_BuildHitPointST( const vec3_t A, const float SA, const float TA,
 	*s = SA * i + SB * j + SC * k;
 	*t = TA * i + TB * j + TC * k;
 
-	*s=fmod(*s, 1);
+	*s=Q_fmod(*s, 1);
 	if (*s< 0)
 	{
 		*s+= 1.0;
 	}
 
-	*t=fmod(*t, 1);
+	*t=Q_fmod(*t, 1);
 	if (*t< 0)
 	{
 		*t+= 1.0;
@@ -700,7 +700,7 @@ qboolean G2_SegmentTriangleTest( const vec3_t start, const vec3_t end,
 
 	*denom=DotProduct(ray, returnedNormal);
 
-	if (fabs(*denom)<tiny||        // triangle parallel to ray
+	if (Q_fabs(*denom)<tiny||        // triangle parallel to ray
 		(!backFaces && *denom>0)||		// not accepting back faces
 		(!frontFaces && *denom<0))		//not accepting front faces
 	{
@@ -804,8 +804,8 @@ void G2_GorePolys( const mdxmSurface_t *surface, CTraceSurface &TS, const mdxmSu
 	VectorNormalize(basis1);
 	VectorNormalize(basis2);
 
-	float c=cos(TS.theta);
-	float s=sin(TS.theta);
+	float c=Q_cos(TS.theta);
+	float s=Q_sin(TS.theta);
 
 	VectorScale(basis1,.5f*c/TS.tsize,taxis);
 	VectorMA(taxis,.5f*s/TS.tsize,basis2,taxis);
@@ -1213,8 +1213,8 @@ static bool G2_RadiusTracePolys(
 	VectorNormalize(basis1);
 	VectorNormalize(basis2);
 
-	const float c=cos(0.0f);//theta
-	const float s=sin(0.0f);//theta
+	const float c=Q_cos(0.0f);//theta
+	const float s=Q_sin(0.0f);//theta
 
 	VectorScale(basis1, 0.5f * c / TS.m_fRadius,taxis);
 	VectorMA(taxis,     0.5f * s / TS.m_fRadius,basis2,taxis);
@@ -1418,7 +1418,7 @@ static void G2_TraceSurfaces(CTraceSurface &TS)
 		if (TS.collRecMap)
 		{
 #endif
-			if (!(fabs(TS.m_fRadius) < 0.1))	// if not a point-trace
+			if (!(Q_fabs(TS.m_fRadius) < 0.1))	// if not a point-trace
 			{
 				// .. then use radius check
 				//

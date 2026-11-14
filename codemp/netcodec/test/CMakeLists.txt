@@ -1,0 +1,86 @@
+# Tests on traces generated locally (they come from recordings and are not committed): the rANS layer against the
+# Python reference coder (export_rans_trace.py), and the round trip of the format on the corpus (export_demo_traces.py).
+set(netcodec_default_trace_dir "${PROJECT_SOURCE_DIR}/../../docs_rewrite/modernization/data/traces")
+set(netcodec_TRACE_DIR "${netcodec_default_trace_dir}" CACHE PATH "Directory of the test traces")
+if(NOT IS_DIRECTORY "${netcodec_TRACE_DIR}")	# a build directory configured before the folder was renamed
+	set(netcodec_TRACE_DIR "${netcodec_default_trace_dir}" CACHE PATH "Directory of the test traces" FORCE)
+endif()
+
+netcodec_add_program(netcodec_test_rans test_rans.cpp rans_trace.h)
+
+# Round-trip test of the format on the corpus traces (export_demo_traces.py): white-box (it reads the schema to
+# make -0.0 values), so it sees the library's internal headers.
+netcodec_add_program(netcodec_test_roundtrip test_roundtrip.cpp demo_trace.h message_compare.h negate_zeros.h fnv.h)
+target_include_directories(netcodec_test_roundtrip PRIVATE "${PROJECT_SOURCE_DIR}/src")
+
+# Determinism of the float steps (angle indices) against the Python reference (angle_hash.py); needs no trace.
+netcodec_add_program(netcodec_test_determinism test_determinism.cpp fnv.h)
+target_include_directories(netcodec_test_determinism PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME netcodec.determinism COMMAND netcodec_test_determinism)
+
+# Synthetic round trip (every operation, vehicles, pilots, extreme values, base ages up to 255): 100 streams of 1,000
+# messages; needs no trace. The hash of the coded bytes changes with the format, the tables or the generator.
+netcodec_add_program(netcodec_test_synthetic test_synthetic.cpp synthetic.h demo_trace.h message_compare.h fnv.h)
+target_include_directories(netcodec_test_synthetic PRIVATE "${PROJECT_SOURCE_DIR}/src")
+set(netcodec_SYNTHETIC_HASH "0x372D6A1FABE11D4C")
+add_test(NAME netcodec.synthetic COMMAND netcodec_test_synthetic "--hash=${netcodec_SYNTHETIC_HASH}" 100 1000)
+
+# Malformed input: mutated copies of synthetic messages decoded with the client's state (20 streams of 500 messages,
+# 20 mutations each); no fault, and decode(encode(decode(x))) == decode(x) for those that decode. Needs no trace.
+netcodec_add_program(netcodec_test_decode_robustness test_decode_robustness.cpp mutate.h synthetic.h demo_trace.h message_compare.h)
+target_include_directories(netcodec_test_decode_robustness PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME netcodec.decode_robustness COMMAND netcodec_test_decode_robustness 20 500 20)
+
+foreach(trace rans)
+	if(NOT EXISTS "${netcodec_TRACE_DIR}/${trace}_trace.bin")
+		message(STATUS "netcodec: ${netcodec_TRACE_DIR}/${trace}_trace.bin not found, test netcodec.${trace}_golden will fail")
+	endif()
+	add_test(NAME netcodec.${trace}_golden COMMAND netcodec_test_${trace} "${netcodec_TRACE_DIR}/${trace}_trace.bin")
+endforeach()
+foreach(trace captures holdout)
+	if(NOT EXISTS "${netcodec_TRACE_DIR}/${trace}.bin")
+		message(STATUS "netcodec: ${netcodec_TRACE_DIR}/${trace}.bin not found, test netcodec.roundtrip will fail")
+	endif()
+endforeach()
+# The hash of the coded bytes of the corpus: the same on every compiler, architecture and build type. Changes with the
+# format, the tables or the traces: update it from the test's output (clang Release), then check the other presets.
+set(netcodec_ROUNDTRIP_HASH "0x3E60F50570AA2C01")
+add_test(NAME netcodec.roundtrip COMMAND netcodec_test_roundtrip "--hash=${netcodec_ROUNDTRIP_HASH}"
+	"${netcodec_TRACE_DIR}/captures.bin" "${netcodec_TRACE_DIR}/holdout.bin")
+
+# The engine's interface (engine.h) on the corpus, with engine-like storage: the same coded bytes as netcodec.roundtrip.
+netcodec_add_program(netcodec_test_engine test_engine.cpp demo_trace.h message_compare.h negate_zeros.h fnv.h)
+target_include_directories(netcodec_test_engine PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME netcodec.engine COMMAND netcodec_test_engine "--hash=${netcodec_ROUNDTRIP_HASH}"
+	"${netcodec_TRACE_DIR}/captures.bin" "${netcodec_TRACE_DIR}/holdout.bin")
+
+# engine.h compiles as C++11, the engine's standard (an object library, linked into nothing).
+add_library(netcodec_engine_cxx11 OBJECT engine_cxx11.cpp)
+target_include_directories(netcodec_engine_cxx11 PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries(netcodec_engine_cxx11 PRIVATE netcodec_warnings)
+set_target_properties(netcodec_engine_cxx11 PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+
+# Client packets (plan step 8): synthetic round trip (needs no trace), and the round trip of the client traces
+# (netcodec_bench_client --trace), with and without base. Each hash changes with the client format or tables.
+netcodec_add_program(netcodec_test_client test_client.cpp client_synthetic.h client_trace.h synthetic.h fnv.h)
+target_include_directories(netcodec_test_client PRIVATE "${PROJECT_SOURCE_DIR}/src")
+set(netcodec_CLIENT_SYNTHETIC_HASH "0xCFE7E7FEB2FB9F06")
+add_test(NAME netcodec.client_synthetic COMMAND netcodec_test_client "--hash=${netcodec_CLIENT_SYNTHETIC_HASH}" synthetic 100000)
+foreach(trace client_train client_holdout)
+	if(NOT EXISTS "${netcodec_TRACE_DIR}/${trace}.bin")
+		message(STATUS "netcodec: ${netcodec_TRACE_DIR}/${trace}.bin not found, test netcodec.client_roundtrip will fail")
+	endif()
+endforeach()
+set(netcodec_CLIENT_ROUNDTRIP_HASH "0xC371DB108DA14F6D")
+add_test(NAME netcodec.client_roundtrip COMMAND netcodec_test_client "--hash=${netcodec_CLIENT_ROUNDTRIP_HASH}"
+	"${netcodec_TRACE_DIR}/client_train.bin" "${netcodec_TRACE_DIR}/client_holdout.bin")
+
+# Malformed client packets (the server decodes them from anyone): mutated copies of 20,000 synthetic packets, 20 each,
+# decoded with random bases and `latest` values; no fault, decode(encode(decode(x))) == decode(x), and the command
+# length limit. Needs no trace.
+netcodec_add_program(netcodec_test_client_robustness test_client_robustness.cpp client_synthetic.h mutate.h synthetic.h)
+target_include_directories(netcodec_test_client_robustness PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME netcodec.client_robustness COMMAND netcodec_test_client_robustness 20000 20)
+
+# Determinism of the game's player movement (bg_pmove.c) as the game module and as cgame, with OpenJK's own settings.
+add_subdirectory(pmove)

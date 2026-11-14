@@ -235,8 +235,8 @@ void Wampa_Slash( int boltIndex, qboolean backhand )
 				vec3_t pushDir;
 				vec3_t angs;
 				VectorCopy( NPCS.NPC->client->ps.viewangles, angs );
-				angs[YAW] += flrand( 25, 50 );
-				angs[PITCH] = flrand( -25, -15 );
+				angs[YAW] += Q_flrand( 25, 50 );
+				angs[PITCH] = Q_flrand( -25, -15 );
 				AngleVectors( angs, pushDir, NULL, NULL );
 				if ( radiusEnt->client->NPC_class != CLASS_WAMPA
 					&& radiusEnt->client->NPC_class != CLASS_RANCOR
@@ -274,8 +274,8 @@ void Wampa_Slash( int boltIndex, qboolean backhand )
 				vec3_t pushDir;
 				vec3_t angs;
 				VectorCopy( NPCS.NPC->client->ps.viewangles, angs );
-				angs[YAW] += flrand( 25, 50 );
-				angs[PITCH] = flrand( -25, -15 );
+				angs[YAW] += Q_flrand( 25, 50 );
+				angs[PITCH] = Q_flrand( -25, -15 );
 				AngleVectors( angs, pushDir, NULL, NULL );
 				G_Knockdown( radiusEnt );
 			}
@@ -406,7 +406,7 @@ void Wampa_Combat( void )
 			vec3_t	yawOnlyAngles;
 			VectorSet( yawOnlyAngles, 0, NPCS.NPC->r.currentAngles[YAW], 0 );
 			if ( NPCS.NPC->enemy->health > 0//enemy still alive
-				&& fabs(distance-350) <= 80 //enemy anywhere from 270 to 430 away
+				&& Q_fabs(distance-350) <= 80 //enemy anywhere from 270 to 430 away
 				&& InFOV3( NPCS.NPC->enemy->r.currentOrigin, NPCS.NPC->r.currentOrigin, yawOnlyAngles, 20, 20 ) )//enemy generally in front
 			{//10% chance of doing charge anim
 				if ( !Q_irand( 0, 9 ) )

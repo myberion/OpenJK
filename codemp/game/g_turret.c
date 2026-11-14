@@ -191,7 +191,6 @@ static void turret_fire ( gentity_t *ent, vec3_t start, vec3_t dir )
 	bolt->s.pos.trTime = level.time;
 	VectorCopy( start, bolt->s.pos.trBase );
 	VectorScale( dir, ent->mass, bolt->s.pos.trDelta );
-	SnapVector( bolt->s.pos.trDelta );		// save net bandwidth
 	VectorCopy( start, bolt->r.currentOrigin);
 
 	bolt->parent = ent;
@@ -268,8 +267,8 @@ static void turret_aim( gentity_t *self )
 
 	if ( self->painDebounceTime > level.time )
 	{
-		desiredAngles[YAW] = top->r.currentAngles[YAW]+flrand(-45,45);
-		desiredAngles[PITCH] = top->r.currentAngles[PITCH]+flrand(-10,10);
+		desiredAngles[YAW] = top->r.currentAngles[YAW]+Q_flrand(-45,45);
+		desiredAngles[PITCH] = top->r.currentAngles[PITCH]+Q_flrand(-10,10);
 
 		if (desiredAngles[PITCH] < -pitchCap)
 		{
@@ -282,7 +281,7 @@ static void turret_aim( gentity_t *self )
 
 		diffYaw = AngleSubtract( desiredAngles[YAW], top->r.currentAngles[YAW] );
 		diffPitch = AngleSubtract( desiredAngles[PITCH], top->r.currentAngles[PITCH] );
-		turnSpeed = flrand( -5, 5 );
+		turnSpeed = Q_flrand( -5, 5 );
 	}
 	else if ( self->enemy )
 	{
@@ -329,7 +328,7 @@ static void turret_aim( gentity_t *self )
 	else
 	{//FIXME: Pan back and forth in original facing
 		// no enemy, so make us slowly sweep back and forth as if searching for a new one
-		desiredAngles[YAW] = sin( level.time * 0.0001f + top->count );
+		desiredAngles[YAW] = Q_sin( level.time * 0.0001f + top->count );
 		desiredAngles[YAW] *=  60.0f;
 		desiredAngles[YAW] += self->s.angles[YAW];
 		desiredAngles[YAW] = AngleNormalize180( desiredAngles[YAW] );
@@ -341,14 +340,14 @@ static void turret_aim( gentity_t *self )
 	if ( diffYaw )
 	{
 		// cap max speed....
-		if ( fabs(diffYaw) > turnSpeed )
+		if ( Q_fabs(diffYaw) > turnSpeed )
 		{
 			diffYaw = ( diffYaw >= 0 ? turnSpeed : -turnSpeed );
 		}
 	}
 	if ( diffPitch )
 	{
-		if ( fabs(diffPitch) > turnSpeed )
+		if ( Q_fabs(diffPitch) > turnSpeed )
 		{
 			// cap max speed
 			diffPitch = (diffPitch > 0.0f ? turnSpeed : -turnSpeed );

@@ -1692,7 +1692,7 @@ float vectoyaw( const vec3_t vec ) {
 		yaw = 0;
 	} else {
 		if (vec[PITCH]) {
-			yaw = ( atan2( vec[YAW], vec[PITCH]) * 180 / M_PI );
+			yaw = Q_atan2degf( vec[YAW], vec[PITCH] );
 		} else if (vec[YAW] > 0) {
 			yaw = 90;
 		} else {
@@ -2239,7 +2239,7 @@ void BG_EvaluateTrajectory( const trajectory_t *tr, int atTime, vec3_t result ) 
 		break;
 	case TR_SINE:
 		deltaTime = ( atTime - tr->trTime ) / (float) tr->trDuration;
-		phase = sin( deltaTime * M_PI * 2 );
+		phase = Q_sinpif( deltaTime * 2.0f );
 		VectorMA( tr->trBase, phase, tr->trDelta, result );
 		break;
 	case TR_LINEAR_STOP:
@@ -2264,7 +2264,7 @@ void BG_EvaluateTrajectory( const trajectory_t *tr, int atTime, vec3_t result ) 
 		}
 		else
 		{//FIXME: maybe scale this somehow?  So that it starts out faster and stops faster?
-			deltaTime = tr->trDuration*0.001f*((float)cos( DEG2RAD(90.0f - (90.0f*((float)(atTime-tr->trTime))/(float)tr->trDuration)) ));
+			deltaTime = tr->trDuration*0.001f*Q_cospif( (90.0f - (90.0f*((float)(atTime-tr->trTime))/(float)tr->trDuration)) / 180.0f );
 		}
 		VectorMA( tr->trBase, deltaTime, tr->trDelta, result );
 		break;
@@ -2304,7 +2304,7 @@ void BG_EvaluateTrajectoryDelta( const trajectory_t *tr, int atTime, vec3_t resu
 		break;
 	case TR_SINE:
 		deltaTime = ( atTime - tr->trTime ) / (float) tr->trDuration;
-		phase = cos( deltaTime * M_PI * 2 );	// derivative of sin = cos
+		phase = Q_cospif( deltaTime * 2.0f );	// derivative of sin = cos
 		phase *= 0.5;
 		VectorScale( tr->trDelta, phase, result );
 		break;
@@ -2321,7 +2321,7 @@ void BG_EvaluateTrajectoryDelta( const trajectory_t *tr, int atTime, vec3_t resu
 			VectorClear( result );
 			return;
 		}
-		deltaTime = tr->trDuration*0.001f*((float)cos( DEG2RAD(90.0f - (90.0f*((float)(atTime-tr->trTime))/(float)tr->trDuration)) ));
+		deltaTime = tr->trDuration*0.001f*Q_cospif( (90.0f - (90.0f*((float)(atTime-tr->trTime))/(float)tr->trDuration)) / 180.0f );
 		VectorScale( tr->trDelta, deltaTime, result );
 		break;
 	case TR_GRAVITY:

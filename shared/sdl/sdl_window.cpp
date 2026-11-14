@@ -206,8 +206,8 @@ static int GLimp_CompareModes( const void *a, const void *b )
 	float aspectB = (float)modeB->w / (float)modeB->h;
 	int areaA = modeA->w * modeA->h;
 	int areaB = modeB->w * modeB->h;
-	float aspectDiffA = fabs( aspectA - displayAspect );
-	float aspectDiffB = fabs( aspectB - displayAspect );
+	float aspectDiffA = Q_fabs( aspectA - displayAspect );
+	float aspectDiffB = Q_fabs( aspectB - displayAspect );
 	float aspectDiffsDiff = aspectDiffA - aspectDiffB;
 
 	if( aspectDiffsDiff > ASPECT_EPSILON )

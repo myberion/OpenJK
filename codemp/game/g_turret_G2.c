@@ -366,8 +366,8 @@ static void turretG2_fire ( gentity_t *ent, vec3_t start, vec3_t dir )
 	if ( ent->random )
 	{
 		vectoangles( dir, ang );
-		ang[PITCH] += flrand( -ent->random, ent->random );
-		ang[YAW] += flrand( -ent->random, ent->random );
+		ang[PITCH] += Q_flrand( -ent->random, ent->random );
+		ang[YAW] += Q_flrand( -ent->random, ent->random );
 		AngleVectors( ang, dir, NULL, NULL );
 	}
 
@@ -415,7 +415,6 @@ static void turretG2_fire ( gentity_t *ent, vec3_t start, vec3_t dir )
 		bolt->s.pos.trTime = level.time;
 		VectorCopy( start, bolt->s.pos.trBase );
 		VectorScale( dir, ent->mass, bolt->s.pos.trDelta );
-		SnapVector( bolt->s.pos.trDelta );		// save net bandwidth
 		VectorCopy( start, bolt->r.currentOrigin);
 	}
 }
@@ -572,7 +571,7 @@ static void turretG2_aim( gentity_t *self )
 	if ( diffYaw )
 	{
 		// cap max speed....
-		if ( fabs(diffYaw) > maxYawSpeed )
+		if ( Q_fabs(diffYaw) > maxYawSpeed )
 		{
 			diffYaw = ( diffYaw >= 0 ? maxYawSpeed : -maxYawSpeed );
 		}
@@ -588,7 +587,7 @@ static void turretG2_aim( gentity_t *self )
 
 	if ( diffPitch )
 	{
-		if ( fabs(diffPitch) > maxPitchSpeed )
+		if ( Q_fabs(diffPitch) > maxPitchSpeed )
 		{
 			// cap max speed
 			self->speed += (diffPitch > 0.0f) ? -maxPitchSpeed : maxPitchSpeed;

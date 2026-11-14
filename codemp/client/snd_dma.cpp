@@ -307,7 +307,7 @@ void Normalize(EAXVECTOR *v)
 {
 	float flMagnitude;
 
-	flMagnitude = (float)sqrt(sqr(v->x) + sqr(v->y) + sqr(v->z));
+	flMagnitude = (float)Q_sqrt(sqr(v->x) + sqr(v->y) + sqr(v->z));
 
 	v->x = v->x / flMagnitude;
 	v->y = v->y / flMagnitude;
@@ -6054,14 +6054,14 @@ void UpdateEAXListener()
 		// Since both vectors are already normalized, and two terms cancel out (0's), the angle
 		// is the arc cosine of the z component of the Listener Orientation
 
-		float flTheta = (float)acos(ListOri.fZ);
+		float flTheta = (float)Q_acos(ListOri.fZ);
 
 		// If the Listener Orientation is to the left of straight ahead, then invert the angle
 		if (ListOri.fX < 0)
 			flTheta = -flTheta;
 
-		float flSin = (float)sin(-flTheta);
-		float flCos = (float)cos(-flTheta);
+		float flSin = (float)Q_sin(-flTheta);
+		float flCos = (float)Q_cos(-flTheta);
 
 		for (i = 0; i < Q_min(s_NumFXSlots,s_lNumEnvironments); i++)
 		{
@@ -6120,10 +6120,10 @@ void UpdateEAXListener()
 				Normalize(&LP1);
 				Normalize(&LP2);
 
-				float flGamma = acos((LP1.x * LP2.x) + (LP1.y * LP2.y) + (LP1.z * LP2.z));
+				float flGamma = Q_acos((LP1.x * LP2.x) + (LP1.y * LP2.y) + (LP1.z * LP2.z));
 
 				// We want opposite magnitude (because we are 'in' this environment)
-				float flMagnitude = 1.0f - ((2.0f * (float)sin(flGamma/2.0f)) / flGamma);
+				float flMagnitude = 1.0f - ((2.0f * (float)Q_sin(flGamma/2.0f)) / flGamma);
 
 				// Negative (because pan should be 180 degrees)
 				Pan.x *= -flMagnitude;
@@ -6174,8 +6174,8 @@ void UpdateEAXListener()
 				Normalize(&LP1);
 				Normalize(&LP2);
 
-				float flGamma = acos((LP1.x * LP2.x) + (LP1.y * LP2.y) + (LP1.z * LP2.z));
-				float flMagnitude = (2.0f * (float)sin(flGamma/2.0f)) / flGamma;
+				float flGamma = Q_acos((LP1.x * LP2.x) + (LP1.y * LP2.y) + (LP1.z * LP2.z));
+				float flMagnitude = (2.0f * (float)Q_sin(flGamma/2.0f)) / flGamma;
 
 				Pan.x *= flMagnitude;
 				Pan.y *= flMagnitude;
@@ -6341,6 +6341,6 @@ void UpdateEAXBuffer(channel_t *ch)
 
 float CalcDistance(EMPOINT A, EMPOINT B)
 {
-	return (float)sqrt(sqr(A.fX - B.fX)+sqr(A.fY - B.fY) + sqr(A.fZ - B.fZ));
+	return (float)Q_sqrt(sqr(A.fX - B.fX)+sqr(A.fY - B.fY) + sqr(A.fZ - B.fZ));
 }
 #endif

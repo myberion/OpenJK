@@ -52,6 +52,14 @@ extern vec3_t gPainPoint;
 #endif
 
 #define	FRAMETIME			100					// msec
+
+// Two clocks (plan step 14). The game module was tuned on the 50 ms frames of sv_fps 20; the server ticks at 100 Hz,
+// and every 20 Hz instant (a multiple of 50 ms) is a tick. level.time is the logic clock: the last 20 Hz instant, which
+// all game code reads (timers, thinks, damage, user commands), so it keeps the timing of sv_fps 20. level.tickTime is the
+// tick's time, read only for the bots' command times and the sanity clamp of a command's time. The logic tuned on 50 ms
+// frames (thinks, force powers, the saber, pain, missiles, movers, items, the bots' AI) runs on the frames where
+// G_GRID20_STEP is true.
+#define	G_GRID20_STEP			( level.logicFrame )
 #define	CARNAGE_REWARD_TIME	3000
 #define REWARD_SPRITE_TIME	2000
 
@@ -486,7 +494,6 @@ typedef struct clientPersistant_s {
 	qboolean	localClient;		// true if "ip" info key is "localhost"
 	qboolean	initialSpawn;		// the first spawn should be at a cool location
 	qboolean	predictItemPickup;	// based on cg_predictItems userinfo
-	qboolean	pmoveFixed;			//
 	char		netname[MAX_NETNAME];
 	char		netname_nocolor[MAX_NETNAME];
 	int			netnameTime;				// Last time the name was changed
@@ -886,8 +893,10 @@ typedef struct level_locals_s {
 	int			maxclients;
 
 	int			framenum;
-	int			time;					// in msec
-	int			previousTime;			// so movers can back up when blocked
+	int			time;					// in msec: the logic clock, the last 20 Hz instant (plan step 14)
+	int			previousTime;			// so movers can back up when blocked: the logic clock's previous instant
+	int			tickTime;				// the tick's time: the bots' command times, the clamp of a command's time
+	qboolean	logicFrame;				// this frame is a 20 Hz instant: the logic clock moved (G_GRID20_STEP)
 
 	int			startTime;				// level.time the map was started
 
@@ -1260,7 +1269,6 @@ void WP_FireTurretMissile( gentity_t *ent, vec3_t start, vec3_t dir, qboolean al
 void WP_FireGenericBlasterMissile( gentity_t *ent, vec3_t start, vec3_t dir, qboolean altFire, int damage, int velocity, int mod );
 qboolean LogAccuracyHit( gentity_t *target, gentity_t *attacker );
 void CalcMuzzlePoint ( gentity_t *ent, const vec3_t inForward, const vec3_t inRight, const vec3_t inUp, vec3_t muzzlePoint );
-void SnapVectorTowards( vec3_t v, vec3_t to );
 qboolean CheckGauntletAttack( gentity_t *ent );
 
 
@@ -1352,7 +1360,6 @@ void G_ClearTeamVote( gentity_t *ent, int team );
 void G_CheckClientTimeouts	( gentity_t *ent );
 void ClientThink			( int clientNum, usercmd_t *ucmd );
 void ClientEndFrame			( gentity_t *ent );
-void G_RunClient			( gentity_t *ent );
 
 //
 // g_team.c
@@ -1498,6 +1505,43 @@ int BotAIStartFrame( int time );
 
 extern	level_locals_t	level;
 extern	gentity_t		g_entities[MAX_GENTITIES];
+
+// Combat statistics since the last "gamestats" server command (plan step 14): the game must play the same at any server
+// frame rate, so the hits, blocks and damage per saber swing are compared at 20 Hz and at the tick's rate.
+typedef struct gameStats_s {
+	int		frames;
+	int		startTime;			// level.time of the first frame counted
+	int		saberSwings;		// saber attack moves started by clients
+	int		saberWounds;		// saber wounds of more than idle damage on clients
+	int		saberTouches;		// idle saber touches (SABER_NONATTACK_DAMAGE) on clients
+	int		saberDamage;		// damage of both, before armour
+	int		saberBlocks;		// blade on a client's body parried without the sabers touching (WP_SaberCanBlock)
+	int		saberClashes;		// saber against saber: the blades touch (a block)
+	int		saberLocks;			// saber locks started
+	int		missileBlocks;		// projectiles and disruptor shots blocked by a saber
+	int		forceDamage;		// health taken by the dark force powers
+	int		deaths;
+	int		saberHitEffects;	// hit effects (blood or sparks, and their sound) of sabers on clients
+	int		forceStarts[NUM_FORCE_POWERS];		// times each force power was started (WP_ForcePowerStart)
+	int		forceTimerEvents[NUM_FORCE_POWERS];	// periodic events of the held powers: grip, protect and absorb drains, rage health losses, lightning and drain shots
+	int		forceActiveMsec[NUM_FORCE_POWERS];	// time each power was held, 50 ms per 20 Hz instant it was active
+	int		events[EV_NUM_ENTITY_EVENTS];	// events and temporary entities added by the game (G_AddEvent, G_TempEntity)
+	int		modDamage[MOD_MAX];	// health taken from clients, by cause
+	int		modKills[MOD_MAX];	// client deaths, by cause
+	int		shots[WP_NUM_WEAPONS][2];	// FireWeapon by weapon, primary and alternate
+	int		styleAttacks[SS_NUM_SABER_STYLES];	// saber attack moves started by clients, by style
+	int		styleBounces[SS_NUM_SABER_STYLES];	// saber moves of clients sent into a bounce or deflection, by style
+} gameStats_t;
+extern	gameStats_t		g_stats;
+void G_StatsSaberMove( gentity_t *ent, int oldSaberMove );
+
+// g_scenario.c: scripted bot scenarios for the measurements of plan step 14
+qboolean G_ScenarioControls( int clientNum );
+qboolean G_ScenarioCommand( int clientNum, int t, usercmd_t *ucmd );
+void G_ScenarioFrame( void );
+void G_ScenarioTrace( void );
+void G_ScenarioDamageTrace( gentity_t *targ, gentity_t *inflictor, const vec3_t point, int take, int mod );
+void Svcmd_Scenario_f( void );
 
 #define	FOFS(x) offsetof(gentity_t, x)
 

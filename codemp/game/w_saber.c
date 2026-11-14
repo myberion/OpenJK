@@ -50,22 +50,6 @@ qboolean WP_SaberBladeDoTransitionDamage( saberInfo_t *saber, int bladeNum );
 void WP_SaberAddG2Model( gentity_t *saberent, const char *saberModel, qhandle_t saberSkin );
 void WP_SaberRemoveG2Model( gentity_t *saberent );
 
-//	g_randFix 0 == Same as basejka. Broken on Linux, fine on Windows
-//	g_randFix 1 == Use proper behaviour of RAND_MAX. Fine on Linux, fine on Windows
-//	g_randFix 2 == Intentionally break RAND_MAX. Broken on Linux, broken on Windows.
-float RandFloat( float min, float max ) {
-	int randActual = rand();
-	float randMax = 32768.0f;
-#ifdef _WIN32
-	if ( g_randFix.integer == 2 )
-		randActual = (randActual<<16)|randActual;
-#elif defined(__GCC__)
-	if ( g_randFix.integer == 1 )
-		randMax = RAND_MAX;
-#endif
-	return ((randActual * (max - min)) / randMax) + min;
-}
-
 #ifdef DEBUG_SABER_BOX
 void	G_DebugBoxLines(vec3_t mins, vec3_t maxs, int duration)
 {
@@ -351,7 +335,7 @@ void SaberUpdateSelf(gentity_t *ent)
 			VectorAdd( ent->r.currentOrigin, ent->r.mins, dbgMins );
 			VectorAdd( ent->r.currentOrigin, ent->r.maxs, dbgMaxs );
 
-			G_DebugBoxLines(dbgMins, dbgMaxs, (10.0f/(float)sv_fps.integer)*100);
+			G_DebugBoxLines(dbgMins, dbgMaxs, 50);	// redrawn on every 20 Hz instant (plan step 14)
 		}
 #endif
 		if (ent->r.contents != CONTENTS_LIGHTSABER)
@@ -665,7 +649,7 @@ static QINLINE qboolean G_CheckLookTarget( gentity_t *ent, vec3_t	lookAngles, fl
 	{ //an NPC bolted to a vehicle should just look around randomly
 		if ( TIMER_Done( ent, "lookAround" ) )
 		{
-			ent->NPC->shootAngles[YAW] = flrand(0,360);
+			ent->NPC->shootAngles[YAW] = Q_flrand(0,360);
 			TIMER_Set( ent, "lookAround", Q_irand( 500, 3000 ) );
 		}
 		VectorSet( lookAngles, 0, ent->NPC->shootAngles[YAW], 0 );
@@ -1453,6 +1437,7 @@ static QINLINE qboolean WP_SabersCheckLock2( gentity_t *attacker, gentity_t *def
 	}
 
 	//DONE!
+	g_stats.saberLocks++;
 	return qtrue;
 }
 
@@ -1515,7 +1500,7 @@ qboolean WP_SabersCheckLock( gentity_t *ent1, gentity_t *ent2 )
 		}
 	}
 
-	if ( fabs( ent1->r.currentOrigin[2]-ent2->r.currentOrigin[2] ) > 16 )
+	if ( Q_fabs( ent1->r.currentOrigin[2]-ent2->r.currentOrigin[2] ) > 16 )
 	{
 		return qfalse;
 	}
@@ -1960,7 +1945,7 @@ static QINLINE qboolean WP_GetSaberDeflectionAngle( gentity_t *attacker, gentity
 		int attQuadStart = saberMoveData[attacker->client->ps.saberMove].startQuad;
 		int attQuadEnd = saberMoveData[attacker->client->ps.saberMove].endQuad;
 		int defQuad = saberMoveData[defender->client->ps.saberMove].endQuad;
-		int quadDiff = fabs((float)(defQuad-attQuadStart));
+		int quadDiff = Q_fabs((float)(defQuad-attQuadStart));
 
 		if ( defender->client->ps.saberMove == LS_READY )
 		{
@@ -2035,7 +2020,7 @@ static QINLINE qboolean WP_GetSaberDeflectionAngle( gentity_t *attacker, gentity
 			{
 				quadDiff = -4 + (quadDiff + 4);
 			}
-			newQuad = attQuadEnd + ceil( ((float)quadDiff)/2.0f );
+			newQuad = attQuadEnd + Q_ceil( ((float)quadDiff)/2.0f );
 			if ( newQuad < Q_BR )
 			{//less than zero wraps around
 				newQuad = Q_B + newQuad;
@@ -2233,7 +2218,7 @@ static QINLINE int G_GetAttackDamage(gentity_t *self, int minDmg, int maxDmg, fl
 	int speedDif = 0;
 	int totalDamage = maxDmg;
 	float peakPoint = 0;
-	float attackAnimLength = bgAllAnims[self->localAnimIndex].anims[self->client->ps.torsoAnim].numFrames * fabs((float)(bgAllAnims[self->localAnimIndex].anims[self->client->ps.torsoAnim].frameLerp));
+	float attackAnimLength = bgAllAnims[self->localAnimIndex].anims[self->client->ps.torsoAnim].numFrames * Q_fabs((float)(bgAllAnims[self->localAnimIndex].anims[self->client->ps.torsoAnim].frameLerp));
 	float currentPoint = 0;
 	float damageFactor = 0;
 	float animSpeedFactor = 1.0f;
@@ -2273,7 +2258,7 @@ static QINLINE int G_GetAttackDamage(gentity_t *self, int minDmg, int maxDmg, fl
 static QINLINE float G_GetAnimPoint(gentity_t *self)
 {
 	int speedDif = 0;
-	float attackAnimLength = bgAllAnims[self->localAnimIndex].anims[self->client->ps.torsoAnim].numFrames * fabs((float)(bgAllAnims[self->localAnimIndex].anims[self->client->ps.torsoAnim].frameLerp));
+	float attackAnimLength = bgAllAnims[self->localAnimIndex].anims[self->client->ps.torsoAnim].numFrames * Q_fabs((float)(bgAllAnims[self->localAnimIndex].anims[self->client->ps.torsoAnim].frameLerp));
 	float currentPoint = 0;
 	float animSpeedFactor = 1.0f;
 	float animPercentage = 0;
@@ -3579,6 +3564,15 @@ void WP_SaberApplyDamage( gentity_t *self )
 		}
 		dflags |= saberKnockbackFlags[i];
 
+		if ( victim->client ) { // gamestats
+			if ( totalDmg[i] > SABER_NONATTACK_DAMAGE ) {
+				g_stats.saberWounds++;
+			} else {
+				g_stats.saberTouches++;
+			}
+			g_stats.saberDamage += (int)totalDmg[i];
+		}
+
 		G_Damage( victim, self, self, dmgDir[i], dmgSpot[i], totalDmg[i], dflags, MOD_SABER );
 	}
 }
@@ -3619,6 +3613,10 @@ void WP_SaberDoHit( gentity_t *self, int saberNum, int bladeNum )
 		}
 
 		te = G_TempEntity( dmgSpot[i], EV_SABER_HIT );
+		if ( te && victim->client )
+		{ // gamestats
+			g_stats.saberHitEffects++;
+		}
 		if ( te )
 		{
 			te->s.otherEntityNum = victimEntityNum[i];
@@ -3738,7 +3736,7 @@ void WP_SaberRadiusDamage( gentity_t *ent, vec3_t point, float radius, int damag
 			{//in range
 				if ( damage > 0 )
 				{//do damage
-					int points = ceil((float)damage*dist/radius);
+					int points = Q_ceil((float)damage*dist/radius);
 					G_Damage( radiusEnt, ent, ent, vec3_origin, radiusEnt->r.currentOrigin, points, DAMAGE_NO_KNOCKBACK, MOD_MELEE );
 				}
 				if ( knockBack > 0 )
@@ -4149,11 +4147,11 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 				float traceLength = Distance( saberEnd, saberStart );
 				if ( tr.fraction >= 1.0f )
 				{//allsolid?
-					dmg = ceil( fDmg*traceLength*0.1f*0.33f );
+					dmg = Q_ceil( fDmg*traceLength*0.1f*0.33f );
 				}
 				else
 				{//fractional hit, the sooner you hit in the trace, the more damage you did
-					dmg = ceil( fDmg*traceLength*(1.0f-tr.fraction)*0.1f*0.33f );//(1.0f-tr.fraction) isn't really accurate, but kind of simulates what we have in SP
+					dmg = Q_ceil( fDmg*traceLength*(1.0f-tr.fraction)*0.1f*0.33f );//(1.0f-tr.fraction) isn't really accurate, but kind of simulates what we have in SP
 				}
 #ifdef DEBUG_SABER_BOX
 				if ( g_saberDebugBox.integer == 3 || g_saberDebugBox.integer == 4 )
@@ -4391,12 +4389,12 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 		if ( !WP_SaberBladeUseSecondBladeStyle( &self->client->saber[rSaberNum], rBladeNum )
 			&& self->client->saber[rSaberNum].damageScale != 1.0f )
 		{
-			dmg = ceil( (float)dmg*self->client->saber[rSaberNum].damageScale );
+			dmg = Q_ceil( (float)dmg*self->client->saber[rSaberNum].damageScale );
 		}
 		else if ( WP_SaberBladeUseSecondBladeStyle( &self->client->saber[rSaberNum], rBladeNum )
 			&& self->client->saber[rSaberNum].damageScale2 != 1.0f )
 		{
-			dmg = ceil( (float)dmg*self->client->saber[rSaberNum].damageScale2 );
+			dmg = Q_ceil( (float)dmg*self->client->saber[rSaberNum].damageScale2 );
 		}
 
 		if ((self->client->ps.brokenLimbs & (1 << BROKENLIMB_RARM)) ||
@@ -4571,6 +4569,7 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 			&& !unblockable
 			&& WP_SaberCanBlock(&g_entities[tr.entityNum], tr.endpos, 0, MOD_SABER, qfalse, attackStr))
 		{//hit a client who blocked the attack (fake: didn't actually hit their saber)
+			g_stats.saberBlocks++;
 			if (dmg <= SABER_NONATTACK_DAMAGE)
 			{
 				self->client->ps.saberIdleWound = level.time + g_saberDmgDelay_Idle.integer;
@@ -4795,6 +4794,7 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 			return qtrue;
 		}
 		didHit = qtrue;
+		g_stats.saberClashes++;
 		self->client->ps.saberIdleWound = level.time + g_saberDmgDelay_Idle.integer;
 
 		if (dmg <= SABER_NONATTACK_DAMAGE)
@@ -5326,7 +5326,7 @@ void G_SPSaberDamageTraceLerped( gentity_t *self, int saberNum, int bladeNum, ve
 			curDirFrac = 1.0f;
 		}
 		//NOTE: if saber spun at least 180 degrees since last damage trace, this is not reliable...!
-		if ( fabs(curDirFrac) < 1.0f - MAX_SABER_SWING_INC )
+		if ( Q_fabs(curDirFrac) < 1.0f - MAX_SABER_SWING_INC )
 		{//the saber blade spun more than 33 degrees since the last damage trace
 			curDirFrac = dirInc = 1.0f/((1.0f - curDirFrac)/MAX_SABER_SWING_INC);
 		}
@@ -7656,7 +7656,7 @@ static void G_KickSomeMofos(gentity_t *ent)
 	float remainingTime = (animLength-elapsedTime);
 	float kickDist = (ent->r.maxs[0]*1.5f)+STAFF_KICK_RANGE+8.0f;//fudge factor of 8
 	int	  kickDamage = Q_irand(10, 15);//Q_irand( 3, 8 ); //since it can only hit a guy once now
-	int	  kickPush = flrand( 50.0f, 100.0f );
+	int	  kickPush = Q_flrand( 50.0f, 100.0f );
 	qboolean doKick = qfalse;
 	renderInfo_t *ri = &ent->client->renderInfo;
 
@@ -7802,7 +7802,7 @@ static void G_KickSomeMofos(gentity_t *ent)
 			}
 			break;
 		case BOTH_A7_KICK_S:
-			kickPush = flrand( 75.0f, 125.0f );
+			kickPush = Q_flrand( 75.0f, 125.0f );
 			if ( ri->footRBolt != -1 )
 			{//actually trace to a bolt
 				if ( elapsedTime >= 550
@@ -7869,7 +7869,7 @@ static void G_KickSomeMofos(gentity_t *ent)
 			}
 			break;
 		case BOTH_A7_KICK_BF:
-			kickPush = flrand( 75.0f, 125.0f );
+			kickPush = Q_flrand( 75.0f, 125.0f );
 			kickDist += 20.0f;
 			if ( elapsedTime < 1500 )
 			{//auto-aim!
@@ -7907,7 +7907,7 @@ static void G_KickSomeMofos(gentity_t *ent)
 			}
 			break;
 		case BOTH_A7_KICK_RL:
-			kickPush = flrand( 75.0f, 125.0f );
+			kickPush = Q_flrand( 75.0f, 125.0f );
 			kickDist += 10.0f;
 
 			//ok, I'm tracing constantly on these things, they NEVER hit otherwise (in MP at least)
@@ -8114,6 +8114,16 @@ void WP_SaberPositionUpdate( gentity_t *self, usercmd_t *ucmd )
 		return;
 	}
 #endif
+
+	if ( self && self->inuse && self->client && self->s.number < MAX_CLIENTS )
+	{ // a saber swing starts when the player enters an attack move (gamestats)
+		static int lastSaberMove[MAX_CLIENTS];
+		const int move = self->client->ps.saberMove;
+		if ( move != lastSaberMove[self->s.number] && BG_SaberInAttack( move ) ) {
+			g_stats.saberSwings++;
+		}
+		lastSaberMove[self->s.number] = move;
+	}
 
 	if (self && self->inuse && self->client)
 	{
@@ -8500,7 +8510,7 @@ nextStep:
 	}
 
 	//fVSpeed *= 0.08;
-	fVSpeed *= 1.6f/sv_fps.value;
+	fVSpeed *= 1.6f/20.0f; // the 20 Hz frame: the saber runs on the 20 Hz instants of the tick (plan step 14), not every tick
 
 	//Cap it off at reasonable values so the saber box doesn't go flying ahead of us or
 	//something if we get a big speed boost from something.
@@ -9216,7 +9226,7 @@ void WP_SaberBlock( gentity_t *playerent, vec3_t hitloc, qboolean missileBlock )
 	// Ultimately we might care if the shot was ahead or behind, but for now, just quadrant is fine.
 	AngleVectors( fwdangles, NULL, right, NULL );
 
-	rightdot = DotProduct(right, diff) + RandFloat(-0.2f,0.2f);
+	rightdot = DotProduct(right, diff) + Q_flrand(-0.2f,0.2f);
 	zdiff = hitloc[2] - playerent->client->ps.origin[2] + Q_irand(-8,8);
 
 	// Figure out what quadrant the block was in.
@@ -9452,6 +9462,7 @@ int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolea
 	if (projectile)
 	{
 		WP_SaberBlockNonRandom(self, point, projectile);
+		g_stats.missileBlocks++;
 	}
 	return 1;
 }

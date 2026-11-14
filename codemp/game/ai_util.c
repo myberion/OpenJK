@@ -692,7 +692,7 @@ void BotUtilizePersonality(bot_state_t *bs)
 
 	if (!failed && GetPairedValue(group, "accuracy", readbuf))
 	{
-		bs->skills.accuracy = atof(readbuf);
+		bs->skills.accuracy = Q_atof(readbuf);
 	}
 	else
 	{
@@ -701,7 +701,7 @@ void BotUtilizePersonality(bot_state_t *bs)
 
 	if (!failed && GetPairedValue(group, "turnspeed", readbuf))
 	{
-		bs->skills.turnspeed = atof(readbuf);
+		bs->skills.turnspeed = Q_atof(readbuf);
 	}
 	else
 	{
@@ -710,7 +710,7 @@ void BotUtilizePersonality(bot_state_t *bs)
 
 	if (!failed && GetPairedValue(group, "turnspeed_combat", readbuf))
 	{
-		bs->skills.turnspeed_combat = atof(readbuf);
+		bs->skills.turnspeed_combat = Q_atof(readbuf);
 	}
 	else
 	{
@@ -719,7 +719,7 @@ void BotUtilizePersonality(bot_state_t *bs)
 
 	if (!failed && GetPairedValue(group, "maxturn", readbuf))
 	{
-		bs->skills.maxturn = atof(readbuf);
+		bs->skills.maxturn = Q_atof(readbuf);
 	}
 	else
 	{

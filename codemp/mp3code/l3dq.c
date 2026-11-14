@@ -177,7 +177,7 @@ void dequant(SAMPLE Sample[], int *nsamp,
 	    {
 		float tmpConst = (float)(1.0/3.0);
 	       tmp = (double) Sample[i].s;
-	       Sample[i].x = (float) (xs * tmp * pow(fabs(tmp), tmpConst));
+	       Sample[i].x = (float) (xs * tmp * Q_pow(Q_fabs(tmp), tmpConst));
 	    }
 	 }
       }
@@ -220,7 +220,7 @@ block type = 2  short blocks
 	       {
 		  float tmpConst = (float)(1.0/3.0);
 		  tmp = (double) Sample[i].s;
-		  buf[j][w] = (float) (xs * tmp * pow(fabs(tmp), tmpConst));
+		  buf[j][w] = (float) (xs * tmp * Q_pow(Q_fabs(tmp), tmpConst));
 	       }
 	    }
 	 }

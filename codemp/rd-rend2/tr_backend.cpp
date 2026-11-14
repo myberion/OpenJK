@@ -1769,9 +1769,9 @@ static const void *RB_RotatePic ( const void *data )
 	int numVerts = tess.numVertexes;
 	int numIndexes = tess.numIndexes;
 
-	float angle = DEG2RAD( cmd->a );
-	float s = sinf( angle );
-	float c = cosf( angle );
+	float halfTurns = cmd->a / 180.0f;
+	float s = Q_sinpif( halfTurns );
+	float c = Q_cospif( halfTurns );
 
 	matrix3_t m = {
 		{ c, s, 0.0f },
@@ -1862,9 +1862,9 @@ static const void *RB_RotatePic2 ( const void *data )
 	int numVerts = tess.numVertexes;
 	int numIndexes = tess.numIndexes;
 
-	float angle = DEG2RAD( cmd->a );
-	float s = sinf( angle );
-	float c = cosf( angle );
+	float halfTurns = cmd->a / 180.0f;
+	float s = Q_sinpif( halfTurns );
+	float c = Q_cospif( halfTurns );
 
 	matrix3_t m = {
 		{ c, s, 0.0f },
@@ -2168,8 +2168,8 @@ static void RB_UpdateCameraConstants(gpuFrame_t *frame)
 		const float zmax = tr.cachedViewParms[i].zFar;
 		const float zmin = tr.cachedViewParms[i].zNear;
 
-		const float ymax = zmax * tanf(backEnd.viewParms.fovY * M_PI / 360.0f);
-		const float xmax = zmax * tanf(backEnd.viewParms.fovX * M_PI / 360.0f);
+		const float ymax = zmax * Q_tanpif( backEnd.viewParms.fovY / 360.0f );
+		const float xmax = zmax * Q_tanpif( backEnd.viewParms.fovX / 360.0f );
 
 		vec3_t viewBasis[3];
 
@@ -2262,7 +2262,7 @@ static void RB_UpdateFogsConstants(gpuFrame_t *frame)
 
 		VectorCopy4(fog->surface, fogData->plane);
 		VectorCopy4(fog->color, fogData->color);
-		fogData->depthToOpaque = sqrtf(-logf(1.0f / 255.0f)) / fog->parms.depthForOpaque;
+		fogData->depthToOpaque = Q_sqrtf(-Q_logf(1.0f / 255.0f)) / fog->parms.depthForOpaque;
 		fogData->hasPlane = fog->hasSurface;
 	}
 
@@ -2851,7 +2851,7 @@ const void *RB_PostProcess(const void *data)
 
 			color[0] =
 			color[1] =
-			color[2] = pow(2, r_cameraExposure->value); //exp2(r_cameraExposure->value);
+			color[2] = Q_pow(2, r_cameraExposure->value); //exp2(r_cameraExposure->value);
 			color[3] = 1.0f;
 
 			FBO_Blit(srcFbo, srcBox, NULL, NULL, dstBox, NULL, color, 0);

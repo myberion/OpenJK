@@ -405,18 +405,18 @@ int UI_ParseAnimationFile(const char *filename, animation_t *animset, qboolean i
 		{
 			break;
 		}
-		fps = atof( token );
+		fps = Q_atof( token );
 		if ( fps == 0 )
 		{
 			fps = 1;//Don't allow divide by zero error
 		}
 		if ( fps < 0 )
 		{//backwards
-			animset[animNum].frameLerp = floor(1000.0f / fps);
+			animset[animNum].frameLerp = Q_floor(1000.0f / fps);
 		}
 		else
 		{
-			animset[animNum].frameLerp = ceil(1000.0f / fps);
+			animset[animNum].frameLerp = Q_ceil(1000.0f / fps);
 		}
 
 //		animset[animNum].initialLerp = ceil(1000.0f / fabs(fps));
@@ -2854,7 +2854,7 @@ static void UI_DrawServerRefreshDate(rectDef_t *rect, float scale, vec4_t color,
 		lowLight[1] = 0.8 * color[1];
 		lowLight[2] = 0.8 * color[2];
 		lowLight[3] = 0.8 * color[3];
-		LerpColor(color,lowLight,newColor,0.5+0.5*sin((float)(uiInfo.uiDC.realTime / PULSE_DIVISOR)));
+		LerpColor(color,lowLight,newColor,0.5+0.5*Q_sin((float)(uiInfo.uiDC.realTime / PULSE_DIVISOR)));
 
 		trap->SE_GetStringTextString("MP_INGAME_GETTINGINFOFORSERVERS", holdSPString, sizeof(holdSPString));
 		Text_Paint(rect->x, rect->y, scale, newColor, va((char *) holdSPString, trap->LAN_GetServerCount(UI_SourceForLAN())), 0, 0, textStyle, iMenuFont);
@@ -4680,19 +4680,6 @@ static void UI_Update(const char *name) {
 		Q_strncpyz( buf, UI_Cvar_VariableString( "ui_Name" ), sizeof( buf ) );
 		trap->Cvar_Set( "name", buf );
 	}
-	else if (Q_stricmp(name, "ui_setRate") == 0) {
-		float rate = trap->Cvar_VariableValue("rate");
-		if (rate >= 5000) {
-			trap->Cvar_Set("cl_maxpackets", "30");
-			trap->Cvar_Set("cl_packetdup", "1");
-		} else if (rate >= 4000) {
-			trap->Cvar_Set("cl_maxpackets", "15");
-			trap->Cvar_Set("cl_packetdup", "2");		// favor less prediction errors when there's packet loss
-		} else {
-			trap->Cvar_Set("cl_maxpackets", "15");
-			trap->Cvar_Set("cl_packetdup", "1");		// favor lower bandwidth
-		}
-	}
 	else if ( !Q_stricmp( name, "ui_GetName" ) ) {
 		char buf[MAX_NETNAME] = {0};
 		Q_strncpyz( buf, UI_Cvar_VariableString( "name" ), sizeof( buf ) );
@@ -5100,16 +5087,16 @@ void UI_SetSiegeObjectiveGraphicPos(menuDef_t *menu,const char *itemName,const c
 		holdBuf = cvarBuf;
 		if (String_Parse(&holdBuf,&holdVal))
 		{
-			item->window.rectClient.x = atof(holdVal);
+			item->window.rectClient.x = Q_atof(holdVal);
 			if (String_Parse(&holdBuf,&holdVal))
 			{
-				item->window.rectClient.y = atof(holdVal);
+				item->window.rectClient.y = Q_atof(holdVal);
 				if (String_Parse(&holdBuf,&holdVal))
 				{
-					item->window.rectClient.w = atof(holdVal);
+					item->window.rectClient.w = Q_atof(holdVal);
 					if (String_Parse(&holdBuf,&holdVal))
 					{
-						item->window.rectClient.h = atof(holdVal);
+						item->window.rectClient.h = Q_atof(holdVal);
 
 						item->window.rect.x = item->window.rectClient.x;
 						item->window.rect.y = item->window.rectClient.y;
@@ -7409,7 +7396,8 @@ UI_BuildServerDisplayList
 ==================
 */
 static void UI_BuildServerDisplayList(int force) {
-	int i, count, clients, maxClients, ping, game, len, passw/*, visible*/;
+	int i, count, clients, maxClients, game, len, passw/*, visible*/;
+	qboolean answered;
 	char info[MAX_STRING_CHARS];
 //	qboolean startRefresh = qtrue; TTimo: unused
 	int	lanSource;
@@ -7470,9 +7458,9 @@ static void UI_BuildServerDisplayList(int force) {
 			continue;
 		}
 //		visible = qtrue;
-		// get the ping for this server
-		ping = trap->LAN_GetServerPing(lanSource, i);
-		if (ping > 0 || ui_netSource.integer == UIAS_FAVORITES) {
+		// has this server answered
+		answered = (qboolean)(trap->ext.LAN_GetServerState(lanSource, i) == LANSERVER_ANSWERED);
+		if (answered || ui_netSource.integer == UIAS_FAVORITES) {
 
 			trap->LAN_GetServerInfo(lanSource, i, info, MAX_STRING_CHARS);
 
@@ -7529,7 +7517,7 @@ static void UI_BuildServerDisplayList(int force) {
 			// insert the server into the list
 			UI_BinaryServerInsertion(i);
 			// done with this server
-			if (ping > 0) {
+			if (answered) {
 				trap->LAN_MarkServerVisible(lanSource, i, qfalse);
 			}
 		}
@@ -8283,20 +8271,17 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 		return UI_SelectedMap(index, &actual);
 	} else if (feederID == FEEDER_SERVERS) {
 		if (index >= 0 && index < uiInfo.serverStatus.numDisplayServers) {
-			int ping, game;
+			int game;
+			qboolean answered;
 			if (lastColumn != column || lastTime > uiInfo.uiDC.realTime + 5000) {
 				trap->LAN_GetServerInfo(UI_SourceForLAN(), uiInfo.serverStatus.displayServers[index], info, MAX_STRING_CHARS);
 				lastColumn = column;
 				lastTime = uiInfo.uiDC.realTime;
 			}
-			ping = atoi(Info_ValueForKey(info, "ping"));
-			if (ping == -1) {
-				// if we ever see a ping that is out of date, do a server refresh
-				// UI_UpdatePendingPings();
-			}
+			answered = (qboolean)(trap->ext.LAN_GetServerState(UI_SourceForLAN(), uiInfo.serverStatus.displayServers[index]) == LANSERVER_ANSWERED);
 			switch (column) {
 				case SORT_HOST :
-					if (ping <= 0) {
+					if (!answered) {
 						return Info_ValueForKey(info, "addr");
 					} else {
 						int gametype = atoi( Info_ValueForKey( info, "gametype" ) );
@@ -8385,14 +8370,14 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 					if (game >= 0 && game < numGameTypes) {
 						Q_strncpyz( needPass, gameTypes[game], sizeof( needPass ) );
 					} else {
-						if ( ping <= 0 )
+						if ( !answered )
 							Q_strncpyz( needPass, "Inactive", sizeof( needPass ) );
 						Q_strncpyz( needPass, "Unknown", sizeof( needPass ) );
 					}
 
 					return needPass;
 				case SORT_PING :
-					if (ping <= 0) {
+					if (!answered) {
 						return "...";
 					} else {
 						return Info_ValueForKey(info, "ping");
@@ -10179,14 +10164,25 @@ UI_MouseEvent
 */
 void UI_MouseEvent( int dx, int dy )
 {
+	// the deltas are screen pixels, the cursor is in 640x480 units: scale them (else the cursor moves vidWidth / 640
+	// times faster than the desktop's), keeping the fractions so that slow movements are not lost
+	static float fracx = 0.0f, fracy = 0.0f;
+	int stepx, stepy;
+	fracx += dx / uiInfo.uiDC.xscale;
+	fracy += dy / uiInfo.uiDC.yscale;
+	stepx = (int)fracx;
+	stepy = (int)fracy;
+	fracx -= stepx;
+	fracy -= stepy;
+
 	// update mouse screen position
-	uiInfo.uiDC.cursorx += dx;
+	uiInfo.uiDC.cursorx += stepx;
 	if (uiInfo.uiDC.cursorx < 0)
 		uiInfo.uiDC.cursorx = 0;
 	else if (uiInfo.uiDC.cursorx > SCREEN_WIDTH)
 		uiInfo.uiDC.cursorx = SCREEN_WIDTH;
 
-	uiInfo.uiDC.cursory += dy;
+	uiInfo.uiDC.cursory += stepy;
 	if (uiInfo.uiDC.cursory < 0)
 		uiInfo.uiDC.cursory = 0;
 	else if (uiInfo.uiDC.cursory > SCREEN_HEIGHT)

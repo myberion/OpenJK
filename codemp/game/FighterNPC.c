@@ -788,21 +788,21 @@ static void FighterWingMalfunctionCheck( Vehicle_t *pVeh, playerState_t *parentP
 	//check right wing damage
 	if ( (parentPS->brokenLimbs&(1<<SHIPSURF_DAMAGE_RIGHT_HEAVY)) )
 	{//right wing has taken heavy damage
-		pVeh->m_vOrientation[ROLL] += (sin( pVeh->m_ucmd.serverTime*0.001 )+1.0f)*pVeh->m_fTimeModifier*mYawOverride*50.0f;
+		pVeh->m_vOrientation[ROLL] += (Q_sin( pVeh->m_ucmd.serverTime*0.001 )+1.0f)*pVeh->m_fTimeModifier*mYawOverride*50.0f;
 	}
 	else if ( (parentPS->brokenLimbs&(1<<SHIPSURF_DAMAGE_RIGHT_LIGHT)) )
 	{//right wing has taken light damage
-		pVeh->m_vOrientation[ROLL] += (sin( pVeh->m_ucmd.serverTime*0.001 )+1.0f)*pVeh->m_fTimeModifier*mYawOverride*12.5f;
+		pVeh->m_vOrientation[ROLL] += (Q_sin( pVeh->m_ucmd.serverTime*0.001 )+1.0f)*pVeh->m_fTimeModifier*mYawOverride*12.5f;
 	}
 
 	//check left wing damage
 	if ( (parentPS->brokenLimbs&(1<<SHIPSURF_DAMAGE_LEFT_HEAVY)) )
 	{//left wing has taken heavy damage
-		pVeh->m_vOrientation[ROLL] -= (sin( pVeh->m_ucmd.serverTime*0.001 )+1.0f)*pVeh->m_fTimeModifier*mYawOverride*50.0f;
+		pVeh->m_vOrientation[ROLL] -= (Q_sin( pVeh->m_ucmd.serverTime*0.001 )+1.0f)*pVeh->m_fTimeModifier*mYawOverride*50.0f;
 	}
 	else if ( (parentPS->brokenLimbs&(1<<SHIPSURF_DAMAGE_LEFT_LIGHT)) )
 	{//left wing has taken light damage
-		pVeh->m_vOrientation[ROLL] -= (sin( pVeh->m_ucmd.serverTime*0.001 )+1.0f)*pVeh->m_fTimeModifier*mYawOverride*12.5f;
+		pVeh->m_vOrientation[ROLL] -= (Q_sin( pVeh->m_ucmd.serverTime*0.001 )+1.0f)*pVeh->m_fTimeModifier*mYawOverride*12.5f;
 	}
 
 }
@@ -816,12 +816,12 @@ static void FighterNoseMalfunctionCheck( Vehicle_t *pVeh, playerState_t *parentP
 	if ( (parentPS->brokenLimbs&(1<<SHIPSURF_DAMAGE_FRONT_HEAVY)) )
 	{//nose has taken heavy damage
 		//pitch up and down over time
-		pVeh->m_vOrientation[PITCH] += sin( pVeh->m_ucmd.serverTime*0.001 )*pVeh->m_fTimeModifier*mPitchOverride*50.0f;
+		pVeh->m_vOrientation[PITCH] += Q_sin( pVeh->m_ucmd.serverTime*0.001 )*pVeh->m_fTimeModifier*mPitchOverride*50.0f;
 	}
 	else if ( (parentPS->brokenLimbs&(1<<SHIPSURF_DAMAGE_FRONT_LIGHT)) )
 	{//nose has taken heavy damage
 		//pitch up and down over time
-		pVeh->m_vOrientation[PITCH] += sin( pVeh->m_ucmd.serverTime*0.001 )*pVeh->m_fTimeModifier*mPitchOverride*20.0f;
+		pVeh->m_vOrientation[PITCH] += Q_sin( pVeh->m_ucmd.serverTime*0.001 )*pVeh->m_fTimeModifier*mPitchOverride*20.0f;
 	}
 }
 
@@ -1064,7 +1064,7 @@ void FighterRollAdjust(Vehicle_t *pVeh, playerState_t *riderPS, playerState_t *p
 void FighterYawAdjust(Vehicle_t *pVeh, playerState_t *riderPS, playerState_t *parentPS)
 {
 	float angDif = AngleSubtract(pVeh->m_vPrevRiderViewAngles[YAW],riderPS->viewangles[YAW]);///2.0f;//AngleSubtract(pVeh->m_vPrevRiderViewAngles[YAW], riderPS->viewangles[YAW]);
-	if ( fabs( angDif ) < FIGHTER_TURNING_DEADZONE )
+	if ( Q_fabs( angDif ) < FIGHTER_TURNING_DEADZONE )
 	{
 		angDif = 0.0f;
 	}
@@ -1129,7 +1129,7 @@ void FighterYawAdjust(Vehicle_t *pVeh, playerState_t *riderPS, playerState_t *pa
 void FighterPitchAdjust(Vehicle_t *pVeh, playerState_t *riderPS, playerState_t *parentPS)
 {
 	float angDif = AngleSubtract(0,riderPS->viewangles[PITCH]);//AngleSubtract(pVeh->m_vPrevRiderViewAngles[PITCH], riderPS->viewangles[PITCH]);
-	if ( fabs( angDif ) < FIGHTER_TURNING_DEADZONE )
+	if ( Q_fabs( angDif ) < FIGHTER_TURNING_DEADZONE )
 	{
 		angDif = 0.0f;
 	}

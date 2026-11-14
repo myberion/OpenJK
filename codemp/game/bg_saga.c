@@ -982,7 +982,7 @@ void BG_SiegeParseClassFile(const char *filename, siegeClassDesc_t *descBuffer)
 	//Parse speed (this is a multiplier value)
 	if (BG_SiegeGetPairedValue(classInfo, "speed", parseBuf))
 	{
-		bgSiegeClasses[bgNumSiegeClasses].speed = atof(parseBuf);
+		bgSiegeClasses[bgNumSiegeClasses].speed = Q_atof(parseBuf);
 	}
 	else
 	{ //It's alright, just default to 1 then.

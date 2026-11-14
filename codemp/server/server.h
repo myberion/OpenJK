@@ -102,13 +102,26 @@ typedef struct clientSnapshot_s {
 	int				*pDeltaNumBitVeh;
 #endif
 	int				num_entities;
-	int				first_entity;		// into the circular sv_packet_entities[]
-										// the entities MUST be in increasing state number
-										// order, otherwise the delta compression will fail
-	int				messageSent;		// time the message was transmitted
-	int				messageAcked;		// time the message was acked
+	uint32_t		entities[MAX_SNAPSHOT_ENTITIES];	// where each entity's state is in svs.snapshotEntities, in
+										// increasing number order (the delta coding needs it): the snapshots
+										// share one copy of a state while it does not change (plan step 14, part 5)
+	int64_t			first_entity;		// svs.nextSnapshotEntities of the snapshot's tick: the snapshot's states are
+										// held for SV_SNAPSHOT_TICKS ticks from it
 	int				messageSize;		// used to rate drop packets
 } clientSnapshot_t;
+
+// the snapshots' entity states: SV_SNAPSHOT_TICKS copies of each of the MAX_GENTITIES entities (69.7 MB at 128, of
+// which only the copies written are memory in use); a power of two, so that an entity's version count may wrap
+#define	SV_SNAPSHOT_TICKS		PACKET_BACKUP
+#define	SV_SNAPSHOT_ENTITIES	( SV_SNAPSHOT_TICKS * MAX_GENTITIES )
+#define	SV_INPUT_REPEAT_MSEC	250	// a player whose commands stop coming has its last one run again this long, then
+									// empty ones (g_forceClientUpdateRate's default, removed)
+#define	SV_INPUT_AHEAD_MSEC		1000	// a command dated further ahead of the server's clock is not kept
+#define SV_INPUT_BUFFER	256		// user commands a client may have received and not yet run (plan step 14: they run in the
+								// tick of their time); a power of two
+#define SV_PING_WINDOW	256		// messages the ping is measured over: the window of the client's 8-bit acknowledge
+								// (eng::kAckWindow), 2.56 s at the tick, valid up to that round trip (plan step 14; the
+								// 32 frames were 320 ms at 100 Hz, 1.6 s at 20 Hz)
 
 typedef enum {
 	CS_FREE,		// can be reused for a new connection
@@ -123,13 +136,44 @@ typedef enum {
 // struct to hold demo data for a single demo
 typedef struct {
 	char		demoName[MAX_OSPATH];
-	qboolean	demorecording;
-	qboolean	demowaiting;	// don't record until a non-delta message is sent
-	int			minDeltaFrame;	// the first non-delta frame stored in the demo.  cannot delta against frames older than this
+	qboolean	demorecording;	// every message sent is recorded (the message codec codes them only against messages of the demo)
 	fileHandle_t	demofile;
 	qboolean	isBot;
 	int			botReliableAcknowledge; // for bots, need to maintain a separate reliableAcknowledge to record server messages into the demo file
 } demoInfo_t;
+
+// message codec statistics of one client since its connection or the last svnetstats (sv_netcodec.cpp)
+typedef struct {
+	int			messages;
+	double		bytes;
+	int			snapshots;
+	int			noBase;			// snapshots for which no base was asked (new client, map change, client asked for a full one)
+	int			baseRefused;	// a base was asked but the codec coded without one (its own base no longer held)
+	int			escaped;		// messages sent in their raw form
+	int			cut;			// snapshots too large, sent with only the entities nearest to the player
+	int			commands;		// server commands sent, counting each time one is sent
+	int			repeats;		// of them, commands sent before
+	int			repeatsBy[5];	// the repeats by why the message sent them (CommandsDue in sv_netcodec.cpp): not in the
+								// game or a bot, the carrier lost, a new command, twice the ping passed, both of the last two
+	int			baseAge[6];		// snapshots coded against a base 1, 2, 3, 4, 5 to 8, 9 or more messages back
+	int			packets;		// client packets received
+	double		packetBytes;
+	int			packetsNotDecoded;	// malformed, or coded against a message whose PacketBase is no longer held
+	int			packetsLimited;	// client packets dropped unread, above SV_PACKET_RATE and SV_PACKET_BURST
+	int			packetsLost;	// client packets lost on the way (gaps in their netchan sequence)
+	int			lossRuns[4];	// runs of 1, 2, 3, 4 or more consecutive client packets lost
+	int			userCmds;		// user commands received in the decoded packets, the repeats of CL_PACKET_DUP included
+	int			sendChanges;	// snapshots whose send time was compared with the previous one's (sv_netcodec.cpp)
+	double		sendChangeSum;	// sum of the changes of (real send time - game time) between them, in microseconds
+	int			sendChangeMax;	// the largest change, in microseconds
+	int			sendChangesOver1ms;	// changes of 1 ms or more
+	int			cmdsOnTime;		// ticks run with the player's command of that tick (SV_RunClientCommands)
+	int			cmdsLate;		// commands that came after their tick
+	int			cmdsMissing;	// ticks run without a command of their own (the last one again, or an empty one)
+	int			margins;		// input margins measured
+	double		marginSum;		// their sum, in ms
+	int			marginMin;		// the lowest
+} netcodecStats_t;
 
 
 typedef struct client_s {
@@ -147,7 +191,21 @@ typedef struct client_s {
 	int				gamestateMessageNum;	// netchan->outgoingSequence of gamestate
 	int				challenge;
 
-	usercmd_t		lastUsercmd;
+	usercmd_t		lastUsercmd;		// the last command run, which the game reads (GetUsercmd)
+	usercmd_t		inputCmds[SV_INPUT_BUFFER];	// commands received and not yet run, oldest first: slots inputFirst to
+	int				inputFirst;					// inputLast - 1, & ( SV_INPUT_BUFFER - 1 ); they run in the tick their
+	int				inputLast;					// time comes (SV_RunClientCommands)
+	int				inputArrival[SV_INPUT_BUFFER];	// Sys_Milliseconds() when each of them arrived
+	int				inputNewest;		// time of the newest command received (those of the repeated packets are at or below it)
+	qboolean		inputStarted;		// a command of the player ran since it entered the world: the ticks without one run
+										// the last command again
+	int				inputRepeats;		// ticks in a row run without a command of their own
+	int				inputMargin;		// how early the last command measured came before its tick ran, in ms (negative:
+										// after it)
+	qboolean		inputMarginNew;		// measured since the last snapshot: sent in the next one, once
+	int				lateButtons;		// what the commands that came after their tick newly pressed, for the next
+	int				lateUpmove;			// command run
+	int				lateGeneric;
 	int				lastMessageNum;		// for delta compression
 	int				lastClientCommand;	// reliable client message sequence
 	char			lastClientCommandString[MAX_STRING_CHARS];
@@ -172,13 +230,15 @@ typedef struct client_s {
 	int				lastPacketTime;		// svs.time when packet was last received
 	int				lastConnectTime;	// svs.time when connection started
 	int				nextSnapshotTime;	// send another snapshot when svs.time >= nextSnapshotTime
-	qboolean		rateDelayed;		// true if nextSnapshotTime was set based on rate instead of snapshotMsec
+	qboolean		rateDelayed;		// true if nextSnapshotTime was set based on SV_CLIENT_RATE instead of the server frame
 	int				timeoutCount;		// must timeout a few frames in a row so debugging doesn't break
 	clientSnapshot_t	frames[PACKET_BACKUP];	// updates can be delta'd from here
+	struct {
+		int			sent;				// real time the message was transmitted (Sys_Milliseconds)
+		int			acked;				// real time of the first packet that acknowledged it, when isAcked
+		qboolean	isAcked;
+	}				pingTimes[SV_PING_WINDOW];	// the last SV_PING_WINDOW messages, slot seq & (SV_PING_WINDOW - 1)
 	int				ping;
-	int				rate;				// bytes / second
-	int				snapshotMsec;		// requests a snapshot every snapshotMsec unless rate choked
-	int				wishSnaps;			// requested snapshot/sec rate
 	int				pureAuthentic;
 	qboolean		gotCP; // TTimo - additional flag to distinguish between a bad pure checksum, and no cp command at all
 	netchan_t		netchan;
@@ -190,6 +250,7 @@ typedef struct client_s {
 	qboolean		csUpdated[MAX_CONFIGSTRINGS];
 
 	demoInfo_t		demo;
+	netcodecStats_t	netcodecStats;
 } client_t;
 
 //=============================================================================
@@ -205,9 +266,22 @@ typedef struct serverStatic_s {
 	int			snapFlagServerBit;			// ^= SNAPFLAG_SERVERCOUNT every SV_SpawnServer()
 
 	client_t	*clients;					// [sv_maxclients->integer];
-	int			numSnapshotEntities;		// sv_maxclients->integer*PACKET_BACKUP*MAX_SNAPSHOT_ENTITIES
-	int			nextSnapshotEntities;		// next snapshotEntities to use
+	// The entity states of the snapshots (plan step 14, part 5): one copy of an entity's state while it does not
+	// change, shared by every snapshot that holds it. The copies of entity n are its versions: version v is at place
+	// n * SV_SNAPSHOT_TICKS + v % SV_SNAPSHOT_TICKS, written when a tick finds the entity's state different from its
+	// last copy (SV_BuildClientSnapshot, once per entity and tick). The versions of an entity are neighbours: a state
+	// is next to the one it is compared with, and the memory in use is that of the entity numbers in use, whatever
+	// the size of the system's pages. An entity gets at most one version per tick, so a
+	// copy is overwritten SV_SNAPSHOT_TICKS ticks after it stops being the newest, at the earliest: the states of a
+	// snapshot are held that long. A client's snapshot is a list of places; an entity at the same place in a snapshot
+	// and in its base has not changed, which the message codec reads from the places, without comparing the states.
+	int			numSnapshotEntities;		// SV_SNAPSHOT_ENTITIES
 	entityState_t	*snapshotEntities;		// [numSnapshotEntities]
+	int			snapshotTick;				// counts the times snapshots are built
+	int64_t		nextSnapshotEntities;		// snapshotTick * MAX_GENTITIES: the tick as the message codec counts the states
+											// (a snapshot is held while its own is less than numSnapshotEntities behind)
+	int			snapshotStoredTick[MAX_GENTITIES];	// per entity number: the snapshotTick its state was last compared in
+	uint32_t	snapshotVersion[MAX_GENTITIES];		// per entity number: how many versions of its state were stored
 	int			nextHeartbeatTime;
 	netadr_t	redirectAddress;			// for rcon return messages
 
@@ -234,12 +308,17 @@ extern	server_t		sv;					// cleared each map
 //FIXME: dedi server probably can't have this..
 extern	refexport_t		*re;					// interface to refresh .dll
 
-extern	cvar_t	*sv_snapsMin;
-extern	cvar_t	*sv_snapsMax;
-extern	cvar_t	*sv_snapsPolicy;
-extern	cvar_t	*sv_fps;
-extern	cvar_t	*sv_timeout;
-extern	cvar_t	*sv_zombietime;
+// Network settings of the server, fixed rather than set by cvars (plan step 11; the shared ones are in qcommon.h): a
+// snapshot every server frame, the rate only paces messages larger than a frame allows (a gamestate, a download block)
+#define SV_CLIENT_RATE			200000	// bytes per second to each client: a single message (counted at most 1,500
+										// bytes, SV_RateMsec: 7 ms) never lasts a tick, so none delays the next snapshot (plan step 14)
+#define SV_PACKET_RATE			( MAX_PACKET_RATE + MAX_PACKET_RATE / 10 )	// client packets per second decoded: 10 % above what
+														// the client sends, whose clock may run slightly faster than the server's
+#define SV_PACKET_BURST			100		// packets a client may send above SV_PACKET_RATE at once (one second of them)
+#define SV_ZOMBIE_TIME			2		// seconds to sink messages after a disconnection
+#define SV_MAX_CATCHUP_TICKS	25		// ticks run at once after a stall (250 ms); the rest of the stall is dropped and the
+										// clients follow the server's clock (plan step 14; Bevy and "Fix Your Timestep!" 250 ms)
+
 extern	cvar_t	*sv_rconPassword;
 extern	cvar_t	*sv_privatePassword;
 extern	cvar_t	*sv_allowDownload;
@@ -250,22 +329,18 @@ extern	cvar_t	*sv_master[MAX_MASTER_SERVERS];
 extern	cvar_t	*sv_reconnectlimit;
 extern	cvar_t	*sv_showghoultraces;
 extern	cvar_t	*sv_showloss;
-extern	cvar_t	*sv_padPackets;
+extern	cvar_t	*sv_netcodecCompare;
+extern	cvar_t	*sv_netcodecMaxBytes;
 extern	cvar_t	*sv_killserver;
 extern	cvar_t	*sv_mapname;
 extern	cvar_t	*sv_mapChecksum;
 extern	cvar_t	*sv_serverid;
-extern	cvar_t	*sv_ratePolicy;
-extern	cvar_t	*sv_clientRate;
-extern	cvar_t	*sv_minRate;
-extern	cvar_t	*sv_maxRate;
 extern	cvar_t	*sv_minPing;
 extern	cvar_t	*sv_maxPing;
 extern	cvar_t	*sv_gametype;
 extern	cvar_t	*sv_pure;
 extern	cvar_t	*sv_floodProtect;
 extern	cvar_t	*sv_floodProtectSlow;
-extern	cvar_t	*sv_lanForceRate;
 extern	cvar_t	*sv_needpass;
 extern	cvar_t	*sv_filterCommands;
 extern	cvar_t	*sv_autoDemo;
@@ -350,8 +425,19 @@ void SV_DropClient( client_t *drop, const char *reason );
 
 void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK );
 void SV_ClientThink (client_t *cl, usercmd_t *cmd);
+void SV_RunClientCommands( int time, int frameMsec );
 
-void SV_WriteDownloadToClient( client_t *cl , msg_t *msg );
+// the download block of the next message, if any (one per message): block 0 holds the file size, or -1 with the
+// error text as data (valid until the next call)
+typedef struct svDownloadBlock_s {
+	qboolean		present;
+	int				block;
+	int				fileSize;
+	const byte		*data;
+	int				size;
+} svDownloadBlock_t;
+void SV_NextDownloadBlock( client_t *cl, svDownloadBlock_t *out );
+void SV_CreateClientGameStateMessage( client_t *client, msg_t *msg );
 
 //
 // sv_ccmds.c
@@ -372,6 +458,30 @@ void SV_WriteFrameToClient (client_t *client, msg_t *msg);
 void SV_SendMessageToClient( msg_t *msg, client_t *client );
 void SV_SendClientMessages( void );
 void SV_SendClientSnapshot( client_t *client );
+clientSnapshot_t *SV_SnapshotBase( client_t *client, int *lastframe );
+int SV_SnapshotTime( const client_t *client );
+int SV_SnapshotFlags( const client_t *client );
+void SV_WriteSnapshotToClient( client_t *client, msg_t *msg, clientSnapshot_t *oldframe, int lastframe );
+
+//
+// sv_netcodec.cpp: every server-to-client message is coded by netcodec (plan step 7), every client packet decoded by it
+// (plan step 8)
+//
+namespace netcodec { namespace engine { struct ClientPacket; } }
+void SV_NetcodecNewClient( const client_t *client );
+void SV_NetcodecResetClient( const client_t *client );
+void SV_NetcodecSendGameState( client_t *client );
+void SV_NetcodecSendMapChange( client_t *client );
+void SV_NetcodecSendSnapshot( client_t *client, const char *setGame );
+size_t SV_NetcodecDemoGameState( client_t *client, byte *out, size_t outSize );
+void SV_NetcodecStats_f( void );
+const netcodec::engine::ClientPacket *SV_NetcodecDecodeClientPacket( client_t *client, const msg_t *msg );
+
+//
+// sv_main.cpp: the server's CPU time, printed by svnetstats (plan step 14: what a higher tick rate costs)
+//
+long long SV_Microseconds( void );	// steady clock, for durations
+void SV_CostStats( void );			// prints the CPU time since the last call, then resets it
 
 //
 // sv_game.c

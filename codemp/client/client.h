@@ -35,6 +35,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "ui/ui_public.h"
 
 #define	RETRANSMIT_TIMEOUT	3000	// time between connection packet retransmits
+#define	CL_PACKET_DUP		2		// each packet repeats the usercmds of the 2 previous packets (plan step 11)
 
 // file full of random crap that gets used to create ja_guid
 #define QKEY_FILE "jakey"
@@ -62,6 +63,9 @@ typedef struct clSnapshot_s {
 	int				numEntities;			// all of the entities that need to be presented
 	int				parseEntitiesNum;		// at the time of this snapshot
 
+	qboolean		inputMarginValid;		// the server measured an input margin since its last snapshot
+	int				inputMargin;			// how early it got the command of this snapshot's tick, in ms (negative: after
+											// the tick), which steers the command clock (CL_AdjustCmdDelta)
 	int				serverCommandNum;		// execute all commands up to this before
 											// making the snapshot current
 } clSnapshot_t;
@@ -80,13 +84,34 @@ new gamestate_t, potentially several times during an established connection
 typedef struct outPacket_s {
 	int		p_cmdNumber;		// cl.cmdNumber when packet was sent
 	int		p_serverTime;		// usercmd->serverTime when packet was sent
-	int		p_realtime;			// cls.realtime when packet was sent
+	int		p_realtime;			// Sys_Milliseconds() when packet was sent
 } outPacket_t;
 
 // the parseEntities array must be large enough to hold PACKET_BACKUP frames of
 // entities, so that when a delta compressed message arives from the server
 // it can be un-deltad from the original
 #define	MAX_PARSE_ENTITIES	( PACKET_BACKUP * MAX_SNAPSHOT_ENTITIES )
+
+// the packets sent the client's ping is measured over (2.56 s of round trip at a packet per tick; plan step 14)
+#define	OUT_PACKET_BACKUP	256
+#define	OUT_PACKET_MASK		( OUT_PACKET_BACKUP - 1 )
+
+// The client's clocks (CL_AdjustTimeDelta, plan step 14, part 4e): a window keeps the smallest sample of each of
+// its last CLOCK_SLOTS slots of CLOCK_SLOT_MSEC of real time
+#define	CLOCK_SLOTS			64
+#define	CLOCK_SLOT_MSEC		32
+#define	CLOCK_MIN_SLOTS		8	// with fewer slots filled the target is the smallest sample, not the second
+#define	CLOCK_SAFETY_MSEC	2	// kept between the target and the second smallest sample
+#define	CLOCK_MAX_GAP_MSEC	100	// a longer interval without a snapshot is an interruption: no sample
+#define	CLOCK_SPEEDUP_MSEC	16	// a clock gains at most 1 ms per 16 ms of real time (about 6 %)
+#define	CLOCK_SLOWDOWN_MSEC	14	// and loses at most 1 ms per 14 ms (about 7 %)
+#define	CMD_MARGIN_MSEC		3	// the input margin the command clock keeps above the second smallest of its window
+
+typedef struct clockWindow_s {
+	int			low[CLOCK_SLOTS];	// INT_MAX: no sample in the slot
+	int			slot;				// cls.realtime / CLOCK_SLOT_MSEC of the newest slot
+	qboolean	started;			// qfalse: empty, cleared at the next sample
+} clockWindow_t;
 
 extern int g_console_field_width;
 
@@ -101,9 +126,33 @@ typedef struct clientActive_s {
 	int			oldFrameServerTime;	// to check tournament restarts
 	int			serverTimeDelta;	// cl.serverTime = cls.realtime + cl.serverTimeDelta
 									// this value changes as net lag varies
-	qboolean	extrapolatedSnapshot;	// set if any cgame frame has been forced to extrapolate
-									// cleared when CL_AdjustTimeDelta looks at it
+	qboolean	extrapolatedSnapshot;	// set if a cgame frame passed the newest snapshot before the next one arrived
+									// (counted for netstats), cleared when CL_AdjustTimeDelta looks at it
 	qboolean	newSnapshots;		// set on parse of any valid packet
+
+	// The interpolation delay (CL_AdjustTimeDelta)
+	clockWindow_t	interpWindow;	// per interval between two snapshot arrivals, the largest serverTimeDelta its last
+									// frame allowed
+	int			interpPending;		// the sample of the interval in progress
+	qboolean	interpPendingValid;
+	int			interpArrival;		// cls.realtime of the frame that brought the newest snapshot
+	int			interpRealtime;		// cls.realtime of the last frame adjusted
+	int			interpCredit;		// real time not yet turned into a step of serverTimeDelta
+	qboolean	interpJumpPending;	// the newest snapshot showed a jump of the server's clock: measured on the next one
+
+	// The command clock (plan step 14, part 4c): cl.cmdTime = cls.realtime + cl.cmdTimeDelta, ahead of the server's
+	// clock by the trip of a packet and the input margin, so that the command of a tick reaches the server just before
+	// that tick runs. The user commands are made on it (CL_CreateNewCommands) and cgame draws the local player at it.
+	int			cmdTime;
+	int			oldCmdTime;			// to prevent the command clock from flowing backwards
+	int			cmdTimeDelta;
+	int			cmdDeltaAt[CMD_BACKUP];	// cmdTimeDelta when each command of cl.cmds was made
+	clockWindow_t	cmdWindow;		// per snapshot, its input margin minus the cmdTimeDelta of the command it measured:
+									// the margin a cmdTimeDelta of 0 would have had
+	int			cmdCredit;			// real time not yet turned into a step of cmdTimeDelta
+	int			cmdMarginMessage;	// messageNum of the last snapshot whose margin was taken
+	int			cmdSettleTime;		// the clock was set at once: the margins of snapshots before this serverTime are
+									// about commands made on the old clock, and are not taken
 
 	gameState_t	gameState;			// configstrings
 	char		mapname[MAX_QPATH];	// extracted from CS_SERVERINFO
@@ -133,7 +182,7 @@ typedef struct clientActive_s {
 	int			cmdNumber;			// incremented each frame, because multiple
 									// frames may need to be packed into a single packet
 
-	outPacket_t	outPackets[PACKET_BACKUP];	// information about each packet we have sent out
+	outPacket_t	outPackets[OUT_PACKET_BACKUP];	// information about each packet we have sent out
 
 	// the client maintains its own idea of view angles, which are
 	// sent to the server each frame.  It is cleared to 0 upon entering each level.
@@ -186,6 +235,7 @@ typedef struct clientConnection_s {
 	int			clientNum;
 	int			lastPacketSentTime;			// for retransmits during connection
 	int			lastPacketTime;				// for timeouts
+	int			nextPacketTime;				// cls.realtime from which the next packet may leave (MAX_PACKET_RATE)
 
 	netadr_t	serverAddress;
 	int			connectTime;				// for connection retransmits
@@ -233,7 +283,6 @@ typedef struct clientConnection_s {
 	qboolean	spDemoRecording;
 	qboolean	demorecording;
 	qboolean	demoplaying;
-	qboolean	demowaiting;	// don't record until a non-delta message is received
 	qboolean	firstDemoFrameSkipped;
 	fileHandle_t	demofile;
 
@@ -262,7 +311,8 @@ no client connection is active at all
 typedef struct ping_s {
 	netadr_t	adr;
 	int			start;
-	int			time;
+	int			time;		// round trip in ms, valid once answered (0 is a valid value)
+	qboolean	answered;
 	char		info[MAX_INFO_STRING];
 } ping_t;
 
@@ -277,7 +327,8 @@ typedef struct serverInfo_s {
 	int		  	maxClients;
 	int			minPing;
 	int			maxPing;
-	int			ping;
+	int			ping;		// valid only when state is LANSERVER_ANSWERED
+	lanServerState_t	state;
 	qboolean	visible;
 	qboolean	needPassword;
 	int			trueJedi;
@@ -392,11 +443,10 @@ extern	cvar_t	*cl_nodelta;
 extern	cvar_t	*cl_debugMove;
 extern	cvar_t	*cl_noprint;
 extern	cvar_t	*cl_timegraph;
-extern	cvar_t	*cl_maxpackets;
-extern	cvar_t	*cl_packetdup;
 extern	cvar_t	*cl_shownet;
 extern	cvar_t	*cl_showSend;
-extern	cvar_t	*cl_timeNudge;
+extern	cvar_t	*cl_debugInterpForce;
+extern	cvar_t	*cl_debugInterpDelay;
 extern	cvar_t	*cl_showTimeDelta;
 extern	cvar_t	*cl_freezeDemo;
 
@@ -438,8 +488,6 @@ extern	cvar_t	*cl_consoleKeys;
 extern	cvar_t	*cl_consoleUseScanCode;
 extern	cvar_t	*cl_consoleShiftRequirement;
 
-extern  cvar_t  *cl_lanForcePackets;
-
 extern	cvar_t	*cl_drawRecording;
 
 extern	cvar_t	*cl_reconnectArgs;
@@ -474,7 +522,7 @@ void CL_ReadDemoMessage( void );
 void CL_InitDownloads(void);
 void CL_NextDownload(void);
 
-void CL_GetPing( int n, char *buf, int buflen, int *pingtime );
+lanServerState_t CL_GetPing( int n, char *buf, int buflen, int *pingtime );
 void CL_GetPingInfo( int n, char *buf, int buflen );
 void CL_ClearPing( int n );
 int CL_GetPingQueueCount( void );
@@ -507,7 +555,8 @@ void CL_ClearState (void);
 
 void CL_WritePacket( void );
 
-float CL_KeyState (kbutton_t *key);
+float CL_KeyState (kbutton_t *key, unsigned span);
+qboolean CL_PendingCmd( usercmd_t *cmd );
 const char *Key_KeynumToString( int keynum/*, qboolean bTranslate */ ); //note: translate is only called for menu display not configs
 
 //
@@ -518,6 +567,24 @@ extern int cl_connectedToCheatServer;
 
 void CL_SystemInfoChanged( void );
 void CL_ParseServerMessage( msg_t *msg );
+void CL_ParseCommandString( int seq, const char *s );
+void CL_ParseGamestate( int serverCommandSequence );
+void CL_ParseGamestateString( int i, const char *s );
+void CL_ParseGamestateEnd( const entityState_t *baselines, int clientNum, int checksumFeed );
+void CL_ParseSetGame( const char *gameDir );
+void CL_ParseSnapshot( clSnapshot_t *newSnap );
+void CL_ParseDownload( int block, int fileSize, const byte *data, int size );
+
+//
+// cl_netcodec.cpp: the server's messages are decoded by netcodec (plan step 7)
+//
+void CL_NetcodecReset( void );
+void CL_NetcodecParseServerMessage( msg_t *msg );
+qboolean CL_NetcodecRecordGameState( void );
+void CL_NetcodecStats_f( void );
+void CL_InterpStats( void );	// cl_cgame.cpp: the interpolation delay's line of netstats
+void CL_CmdClockStats( void );	// cl_cgame.cpp: the command clock's line of netstats
+qboolean CL_NetcodecWritePacket( msg_t *buf, int count, qboolean delta );
 
 //====================================================================
 

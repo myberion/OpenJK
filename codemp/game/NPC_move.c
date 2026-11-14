@@ -63,7 +63,7 @@ qboolean NPC_ClearPathToGoal( vec3_t dir, gentity_t *goal )
 	if (!FlyingCreature(NPCS.NPC))
 	{
 		//See if we're too far above
-		if ( fabs( NPCS.NPC->r.currentOrigin[2] - goal->r.currentOrigin[2] ) > 48 )
+		if ( Q_fabs( NPCS.NPC->r.currentOrigin[2] - goal->r.currentOrigin[2] ) > 48 )
 			return qfalse;
 	}
 
@@ -372,8 +372,8 @@ void G_UcmdMoveForDir( gentity_t *self, usercmd_t *cmd, vec3_t dir )
 	{
 		rDot = -127.0f;
 	}
-	cmd->forwardmove = floor(fDot);
-	cmd->rightmove = floor(rDot);
+	cmd->forwardmove = Q_floor(fDot);
+	cmd->rightmove = Q_floor(rDot);
 
 	/*
 	vec3_t	wishvel;

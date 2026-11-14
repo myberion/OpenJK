@@ -256,7 +256,7 @@ void WP_ResistForcePush( gentity_t *self, gentity_t *pusher, qboolean noPenalty 
 
 		trap->Cvar_VariableStringBuffer("timescale", buf, sizeof(buf));
 
-		tFVal = atof(buf);
+		tFVal = Q_atof(buf);
 
 		if ( !runningResist )
 		{
@@ -266,7 +266,7 @@ void WP_ResistForcePush( gentity_t *self, gentity_t *pusher, qboolean noPenalty 
 			self->client->ps.weaponTime = 1000;
 			if ( self->client->ps.fd.forcePowersActive&(1<<FP_SPEED) )
 			{
-				self->client->ps.weaponTime = floor( self->client->ps.weaponTime * tFVal );
+				self->client->ps.weaponTime = Q_floor( self->client->ps.weaponTime * tFVal );
 			}
 			self->client->ps.pm_time = self->client->ps.weaponTime;
 			self->client->ps.pm_flags |= PMF_TIME_KNOCKBACK;
@@ -279,7 +279,7 @@ void WP_ResistForcePush( gentity_t *self, gentity_t *pusher, qboolean noPenalty 
 			self->client->ps.weaponTime = 600;
 			if ( self->client->ps.fd.forcePowersActive&(1<<FP_SPEED) )
 			{
-				self->client->ps.weaponTime = floor( self->client->ps.weaponTime * tFVal );
+				self->client->ps.weaponTime = Q_floor( self->client->ps.weaponTime * tFVal );
 			}
 		}
 	}
@@ -946,7 +946,7 @@ void NPC_Jedi_RateNewEnemy( gentity_t *self, gentity_t *enemy )
 		break;
 	}
 	//Average these with current aggression
-	newAggression = ceil( (healthAggression + weaponAggression + (float)self->NPC->stats.aggression )/3.0f);
+	newAggression = Q_ceil( (healthAggression + weaponAggression + (float)self->NPC->stats.aggression )/3.0f);
 	//Com_Printf( "(%d) new agg %d - new enemy\n", level.time, newAggression );
 	Jedi_Aggression( self, newAggression - self->NPC->stats.aggression );
 
@@ -2355,13 +2355,13 @@ int Jedi_ReCalcParryTime( gentity_t *self, evasionType_t evasionType )
 
 				if ( self->client->NPC_class == CLASS_TAVION )
 				{//Tavion is faster
-					baseTime = ceil(baseTime/2.0f);
+					baseTime = Q_ceil(baseTime/2.0f);
 				}
 				else if ( self->NPC->rank >= RANK_LT_JG )
 				{//fencers, bosses, shadowtroopers, luke, desann, et al use the norm
 					if ( !Q_irand( 0, 2 ) )
 					{//with the occasional fast parry
-						baseTime = ceil(baseTime/2.0f);
+						baseTime = Q_ceil(baseTime/2.0f);
 					}
 				}
 				else if ( self->NPC->rank == RANK_CIVILIAN )
@@ -2548,7 +2548,7 @@ evasionType_t Jedi_SaberBlockGo( gentity_t *self, usercmd_t *cmd, vec3_t pHitloc
 		{
 			if ( rightdot > 12
 				|| (rightdot > 3 && zdiff < 5)
-				|| (!incoming&&fabs(hitdir[2])<0.25f) )//was normalized, 0.3
+				|| (!incoming&&Q_fabs(hitdir[2])<0.25f) )//was normalized, 0.3
 			{//coming from right
 				if ( doDodge )
 				{
@@ -2596,7 +2596,7 @@ evasionType_t Jedi_SaberBlockGo( gentity_t *self, usercmd_t *cmd, vec3_t pHitloc
 			}
 			else if ( rightdot < -12
 				|| (rightdot < -3 && zdiff < 5)
-				|| (!incoming&&fabs(hitdir[2])<0.25f) )//was normalized, -0.3
+				|| (!incoming&&Q_fabs(hitdir[2])<0.25f) )//was normalized, -0.3
 			{//coming from left
 				if ( doDodge )
 				{
@@ -3408,7 +3408,7 @@ static void Jedi_EvasionSaber( vec3_t enemy_movedir, float enemy_dist, vec3_t en
 			facingAmt = DotProduct( enemy_movedir, dirEnemy2Me );
 		}
 
-		if ( flrand( 0.25, 1 ) < facingAmt )
+		if ( Q_flrand( 0.25, 1 ) < facingAmt )
 		{//coming at/facing me!
 			int whichDefense = 0;
 			if ( NPCS.NPC->client->ps.weaponTime || NPCS.NPC->client->ps.saberInFlight || NPCS.NPC->client->NPC_class == CLASS_BOBAFETT )
@@ -3780,7 +3780,7 @@ static void Jedi_FaceEnemy( qboolean doPitch )
 			{
 				float eDist = Distance( eyes, enemy_eyes );
 				eDist /= missileSpeed;//How many seconds it will take to get to the enemy
-				VectorMA( enemy_eyes, eDist*flrand(0.95f,1.25f), NPCS.NPC->enemy->client->ps.velocity, enemy_eyes );
+				VectorMA( enemy_eyes, eDist*Q_flrand(0.95f,1.25f), NPCS.NPC->enemy->client->ps.velocity, enemy_eyes );
 			}
 		}
 	}
@@ -4439,7 +4439,7 @@ static qboolean Jedi_AttackDecide( int enemy_dist )
 }
 
 #define	APEX_HEIGHT		200.0f
-#define	PARA_WIDTH		(sqrt(APEX_HEIGHT)+sqrt(APEX_HEIGHT))
+#define	PARA_WIDTH		(Q_sqrt(APEX_HEIGHT)+Q_sqrt(APEX_HEIGHT))
 #define	JUMP_SPEED		200.0f
 
 static qboolean Jedi_Jump( vec3_t dest, int goalEntNum )
@@ -4502,11 +4502,11 @@ static qboolean Jedi_Jump( vec3_t dest, int goalEntNum )
 				VectorCopy( NPCS.NPC->r.currentOrigin, lastPos );
 
 				//This may be kind of wasteful, especially on long throws... use larger steps?  Divide the travelTime into a certain hard number of slices?  Trace just to apex and down?
-				for ( elapsedTime = timeStep; elapsedTime < floor(travelTime)+timeStep; elapsedTime += timeStep )
+				for ( elapsedTime = timeStep; elapsedTime < Q_floor(travelTime)+timeStep; elapsedTime += timeStep )
 				{
 					if ( (float)elapsedTime > travelTime )
 					{//cap it
-						elapsedTime = floor( travelTime );
+						elapsedTime = Q_floor( travelTime );
 					}
 					BG_EvaluateTrajectory( &tr, level.time + elapsedTime, testPos );
 					if ( testPos[2] < lastPos[2] )
@@ -4554,7 +4554,7 @@ static qboolean Jedi_Jump( vec3_t dest, int goalEntNum )
 							}
 						}
 					}
-					if ( elapsedTime == floor( travelTime ) )
+					if ( elapsedTime == Q_floor( travelTime ) )
 					{//reached end, all clear
 						if ( trace.fraction >= 1.0f )
 						{//hmm, make sure we'll land on the ground...
@@ -4648,7 +4648,7 @@ static qboolean Jedi_Jump( vec3_t dest, int goalEntNum )
 		}
 		*/
 
-		z = (sqrt(apexHeight + z) - sqrt(apexHeight));
+		z = (Q_sqrt(apexHeight + z) - Q_sqrt(apexHeight));
 
 		assert(z >= 0);
 
@@ -4666,7 +4666,7 @@ static qboolean Jedi_Jump( vec3_t dest, int goalEntNum )
 
 		//Now we have the apex, aim for it
 		height = apex[2] - NPCS.NPC->r.currentOrigin[2];
-		time = sqrt( height / ( .5 * NPCS.NPC->client->ps.gravity ) );//was 0.5, but didn't work well for very long jumps
+		time = Q_sqrt( height / ( .5 * NPCS.NPC->client->ps.gravity ) );//was 0.5, but didn't work well for very long jumps
 		if ( !time )
 		{
 			//Com_Printf( S_COLOR_RED"ERROR: no time in jump\n" );
@@ -5785,7 +5785,7 @@ void NPC_BSJedi_FollowLeader( void )
 		}
 		if ( NPCS.NPCInfo->aiFlags & NPCAI_BLOCKED )
 		{//try to jump to the blockedDest
-			if ( fabs(NPCS.NPCInfo->blockedDest[2]-NPCS.NPC->r.currentOrigin[2]) > 64 )
+			if ( Q_fabs(NPCS.NPCInfo->blockedDest[2]-NPCS.NPC->r.currentOrigin[2]) > 64 )
 			{
 				gentity_t *tempGoal = G_Spawn();//ugh, this is NOT good...?
 				G_SetOrigin( tempGoal, NPCS.NPCInfo->blockedDest );
@@ -5873,7 +5873,7 @@ static void Jedi_Attack( void )
 		//	{
 		//		ucmd.buttons |= BUTTON_ATTACK;
 		//	}
-			if ( flrand( -4.0f, chance ) >= 0.0f )
+			if ( Q_flrand( -4.0f, chance ) >= 0.0f )
 			{
 				NPCS.ucmd.buttons |= BUTTON_ATTACK;
 			}

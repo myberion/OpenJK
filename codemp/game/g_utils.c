@@ -555,7 +555,7 @@ gentity_t *G_PickTarget (char *targetname)
 		return NULL;
 	}
 
-	return choice[rand() % num_choices];
+	return choice[Q_irand( 0, num_choices - 1 )];
 }
 
 void GlobalUse(gentity_t *self, gentity_t *other, gentity_t *activator)
@@ -1061,6 +1061,9 @@ gentity_t *G_TempEntity( vec3_t origin, int event ) {
 
 	e = G_Spawn();
 	e->s.eType = ET_EVENTS + event;
+	if ( event > 0 && event < EV_NUM_ENTITY_EVENTS ) {
+		g_stats.events[event]++;
+	}
 
 	e->classname = "tempEntity";
 	e->eventTime = level.time;
@@ -1228,6 +1231,10 @@ void G_AddEvent( gentity_t *ent, int event, int eventParm ) {
 	if ( !event ) {
 		trap->Print( "G_AddEvent: zero event added for entity %i\n", ent->s.number );
 		return;
+	}
+
+	if ( event > 0 && event < EV_NUM_ENTITY_EVENTS ) {
+		g_stats.events[event]++;
 	}
 
 	// clients need to add the event in playerState_t instead of entityState_t
@@ -2136,7 +2143,7 @@ float ShortestLineSegBewteen2LineSegs( vec3_t start1, vec3_t end1, vec3_t start2
 	denom = (v1v2 * v1v2) - (v1v1 * v2v2);
 
 	//if denom is small, then skip all this and jump to the section marked below
-	if ( fabs(denom) > 0.001f )
+	if ( Q_fabs(denom) > 0.001f )
 	{
 		float s = -( (v2v2*DotProduct( v1, start_dif )) - (v1v2*DotProduct( v2, start_dif )) ) / denom;
 		float t = ( (v1v1*DotProduct( v2, start_dif )) - (v1v2*DotProduct( v1, start_dif )) ) / denom;

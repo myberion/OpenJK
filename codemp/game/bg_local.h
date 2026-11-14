@@ -51,10 +51,17 @@ typedef struct
 	vec3_t		previous_origin;
 	vec3_t		previous_velocity;
 	int			previous_waterlevel;
+
+	qrand_t		rand;	// PM_irand_timesync's numbers: seeded with the command's time, the same on the server and in
+						// the client's prediction (plan step 14)
 } pml_t;
 
 
 extern	pml_t		pml;
+#ifdef _CGAME
+extern	const playerState_t	*pm_startPs;
+extern	int			pm_startLegsAnim, pm_startTorsoAnim;
+#endif
 
 // movement parameters
 extern	float	pm_stopspeed;

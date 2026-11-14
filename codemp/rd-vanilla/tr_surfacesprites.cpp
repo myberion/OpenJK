@@ -133,13 +133,13 @@ static void R_SurfaceSpriteFrameUpdate(void)
 		if (backEnd.refdef.fov_x > 50 && backEnd.refdef.fov_x < 135)		// I don't consider anything below 50 or above 135 to be "normal".
 		{
 			standardfovx = backEnd.refdef.fov_x;
-			standardscalex = tan(standardfovx * 0.5 * (M_PI/180.0f));
+			standardscalex = Q_tanpif( standardfovx / 360.0f );
 			standardfovinitialized = qtrue;
 		}
 		else
 		{
 			standardfovx = 90;
-			standardscalex = tan(standardfovx * 0.5 * (M_PI/180.0f));
+			standardscalex = Q_tanpif( standardfovx / 360.0f );
 		}
 		rangescalefactor = 1.0;		// Don't multiply the shader range by anything.
 	}
@@ -151,11 +151,11 @@ static void R_SurfaceSpriteFrameUpdate(void)
 	{	// We are using a non-standard FOV.  We need to multiply the range of the shader by a scale factor.
 		if (backEnd.refdef.fov_x > 135)
 		{
-			rangescalefactor = standardscalex / tan(135.0f * 0.5f * (M_PI/180.0f));
+			rangescalefactor = standardscalex / Q_tanpif( 135.0f / 360.0f );
 		}
 		else
 		{
-			rangescalefactor = standardscalex / tan(backEnd.refdef.fov_x * 0.5 * (M_PI/180.0f));
+			rangescalefactor = standardscalex / Q_tanpif( backEnd.refdef.fov_x / 360.0f );
 		}
 	}
 
@@ -222,13 +222,13 @@ static void R_SurfaceSpriteFrameUpdate(void)
 			gustLeft -= (float)(backEnd.refdef.time - lastSSUpdateTime)*WIND_GUST_DECAY;
 			if (gustLeft <= 0)
 			{
-				nextGustTime = backEnd.refdef.time + (curWindGust*1000)*flrand(1.0f,4.0f);
+				nextGustTime = backEnd.refdef.time + (curWindGust*1000)*Q_flrand(1.0f,4.0f);
 			}
 		}
 		else if (backEnd.refdef.time >= nextGustTime)
 		{	// See if there is another right now
 			// Gust next time, mano
-			gustLeft = flrand(0.75f,1.5f);
+			gustLeft = Q_flrand(0.75f,1.5f);
 		}
 	}
 
@@ -272,7 +272,7 @@ static void R_SurfaceSpriteFrameUpdate(void)
 
 	// Note that since there are a finite number of "practical" delta millisecond values possible,
 	// the ratio should be initialized into a chart ultimately.
-	ratio = pow(dampfactor, dtime);
+	ratio = Q_pow(dampfactor, dtime);
 
 	// Apply this ratio to the windspeed...
 	curWindSpeed = targetspeed - (ratio * (targetspeed-curWindSpeed));
@@ -344,8 +344,8 @@ static void RB_VerticalSurfaceSprite(vec3_t loc, float width, float height, byte
 	if (windidle>0.0)
 	{
 		windsway = (height*windidle*0.075);
-		loc2[0] = loc[0]+skew[0]+cos(angle)*windsway;
-		loc2[1] = loc[1]+skew[1]+sin(angle)*windsway;
+		loc2[0] = loc[0]+skew[0]+Q_cos(angle)*windsway;
+		loc2[1] = loc[1]+skew[1]+Q_sin(angle)*windsway;
 
 		if (hangdown)
 		{
@@ -385,13 +385,13 @@ static void RB_VerticalSurfaceSprite(vec3_t loc, float width, float height, byte
 		{
 			windsway *= 0.4f;
 		}
-		loc2[2] += sin(angle*2.5)*windsway;
+		loc2[2] += Q_sin(angle*2.5)*windsway;
 	}
 
 	if ( flattened )
 	{
-		right[0] = sin( DEG2RAD( loc[0] ) ) * width;
-		right[1] = cos( DEG2RAD( loc[0] ) ) * height;
+		right[0] = Q_sinpif( loc[0] / 180.0f ) * width;
+		right[1] = Q_cospif( loc[0] / 180.0f ) * height;
 		right[2] = 0.0f;
 	}
 	else
@@ -456,8 +456,8 @@ static void RB_VerticalSurfaceSpriteWindPoint(vec3_t loc, float width, float hei
 	if (curWindSpeed <80.0)
 	{
 		windsway = (height*windidle*0.1)*(1.0+windforce);
-		loc2[0] = loc[0]+skew[0]+cos(angle)*windsway;
-		loc2[1] = loc[1]+skew[1]+sin(angle)*windsway;
+		loc2[0] = loc[0]+skew[0]+Q_cos(angle)*windsway;
+		loc2[1] = loc[1]+skew[1]+Q_sin(angle)*windsway;
 	}
 	else
 	{
@@ -481,12 +481,12 @@ static void RB_VerticalSurfaceSpriteWindPoint(vec3_t loc, float width, float hei
 
 	loc2[0] += height*winddiff[0]*windforce;
 	loc2[1] += height*winddiff[1]*windforce;
-	loc2[2] -= height*windforce*(0.75 + 0.15*sin((tr.refdef.time + 500*windforce)*0.01));
+	loc2[2] -= height*windforce*(0.75 + 0.15*Q_sin((tr.refdef.time + 500*windforce)*0.01));
 
 	if ( flattened )
 	{
-		right[0] = sin( DEG2RAD( loc[0] ) ) * width;
-		right[1] = cos( DEG2RAD( loc[0] ) ) * height;
+		right[0] = Q_sinpif( loc[0] / 180.0f ) * width;
+		right[1] = Q_cospif( loc[0] / 180.0f ) * height;
 		right[2] = 0.0f;
 	}
 	else
@@ -608,7 +608,7 @@ static void RB_DrawVerticalSurfaceSprites( shaderStage_t *stage, shaderCommands_
 				}
 				else
 				{
-					step = Q_rsqrt(step);		// Equals 1 over the distance.
+					step = Q_rsqrtf(step);		// Equals 1 over the distance.
 					SSVertWindDir[curvert][0] = dist[0] * step;
 					SSVertWindDir[curvert][1] = dist[1] * step;
 					step = 1.0 - (1.0 / (step * WINDPOINT_RADIUS));	// 1- (dist/maxradius) = a scale from 0 to 1 linearly dropping off
@@ -706,12 +706,12 @@ static void RB_DrawVerticalSurfaceSprites( shaderStage_t *stage, shaderCommands_
 
 		// Now get the cross product of this sum.
 		triarea = vec1to3[0]*vec1to2[1] - vec1to3[1]*vec1to2[0];
-		triarea=fabs(triarea);
+		triarea=Q_fabs(triarea);
 		if (triarea <= 1.0)
 		{	// Insanely small abhorrent triangle.
 			continue;
 		}
-		step = stage->ss->density * Q_rsqrt(triarea);
+		step = stage->ss->density * Q_rsqrtf(triarea);
 
 		randomindex = (byte)(v1[0]+v1[1]+v2[0]+v2[1]+v3[0]+v3[1]);
 		randominterval = (byte)(v1[0]+v2[1]+v3[2])|0x03;	// Make sure the interval is at least 3, and always odd
@@ -1017,12 +1017,12 @@ static void RB_DrawOrientedSurfaceSprites( shaderStage_t *stage, shaderCommands_
 
 		// Now get the cross product of this sum.
 		triarea = vec1to3[0]*vec1to2[1] - vec1to3[1]*vec1to2[0];
-		triarea=fabs(triarea);
+		triarea=Q_fabs(triarea);
 		if (triarea <= 1.0)
 		{	// Insanely small abhorrent triangle.
 			continue;
 		}
-		step = stage->ss->density * Q_rsqrt(triarea);
+		step = stage->ss->density * Q_rsqrtf(triarea);
 
 		randomindex = (byte)(v1[0]+v1[1]+v2[0]+v2[1]+v3[0]+v3[1]);
 		randominterval = (byte)(v1[0]+v2[1]+v3[2])|0x03;	// Make sure the interval is at least 3, and always odd
@@ -1317,12 +1317,12 @@ static void RB_DrawEffectSurfaceSprites( shaderStage_t *stage, shaderCommands_t 
 
 		// Now get the cross product of this sum.
 		triarea = vec1to3[0]*vec1to2[1] - vec1to3[1]*vec1to2[0];
-		triarea=fabs(triarea);
+		triarea=Q_fabs(triarea);
 		if (triarea <= 1.0f)
 		{	// Insanely small abhorrent triangle.
 			continue;
 		}
-		step = density * Q_rsqrt(triarea);
+		step = density * Q_rsqrtf(triarea);
 
 		randomindex = (byte)(v1[0]+v1[1]+v2[0]+v2[1]+v3[0]+v3[1]);
 		randominterval = (byte)(v1[0]+v2[1]+v3[2])|0x03;	// Make sure the interval is at least 3, and always odd

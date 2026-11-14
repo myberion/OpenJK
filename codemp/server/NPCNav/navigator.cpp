@@ -1382,7 +1382,7 @@ int CNavigator::GetBestPathBetweenEnts( sharedEntity_t *ent, sharedEntity_t *goa
 			radius	= node->GetRadius();
 
 			//If we're not within the known clear radius of this node OR out of Z height range...
-			if ( (int)(*nci).distance >= (radius*radius) || ( fabs( position[2] - ent->r.currentOrigin[2] ) >= MAX_Z_DELTA ) )
+			if ( (int)(*nci).distance >= (radius*radius) || ( Q_fabs( position[2] - ent->r.currentOrigin[2] ) >= MAX_Z_DELTA ) )
 			{
 				//We're not *within* this node, so check clear path, etc.
 
@@ -1437,7 +1437,7 @@ int CNavigator::GetBestPathBetweenEnts( sharedEntity_t *ent, sharedEntity_t *goa
 
 			node2->GetPosition( position2 );
 			//Okay, first get the entire path cost, including distance to first node from ents' positions
-			cost = floor(Distance( ent->r.currentOrigin, position ) + Distance( goal->r.currentOrigin, position2 ));
+			cost = Q_floor(Distance( ent->r.currentOrigin, position ) + Distance( goal->r.currentOrigin, position2 ));
 
 			if ( d_altRoutes->integer )
 			{
@@ -1472,7 +1472,7 @@ int CNavigator::GetBestPathBetweenEnts( sharedEntity_t *ent, sharedEntity_t *goa
 				radius	= node2->GetRadius();
 
 				//If we're not within the known clear radius of this node OR out of Z height range...
-				if ( (int)(*nci2).distance >= (radius*radius) || ( fabs( position2[2] - goal->r.currentOrigin[2] ) >= MAX_Z_DELTA ) )
+				if ( (int)(*nci2).distance >= (radius*radius) || ( Q_fabs( position2[2] - goal->r.currentOrigin[2] ) >= MAX_Z_DELTA ) )
 				{
 					//We're not *within* this node, so check clear path, etc.
 
@@ -1570,7 +1570,7 @@ int CNavigator::GetNearestNode( sharedEntity_t *ent, int lastID, int flags, int 
 		if ( (int)(*nci).distance < (radius*radius) )
 		{
 			//Do a z-difference sanity check
-			if ( fabs( position[2] - ent->r.currentOrigin[2] ) < MAX_Z_DELTA )
+			if ( Q_fabs( position[2] - ent->r.currentOrigin[2] ) < MAX_Z_DELTA )
 			{
 				//Found one
 				return (*nci).nodeID;

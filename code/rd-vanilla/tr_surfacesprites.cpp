@@ -617,7 +617,7 @@ static void RB_DrawVerticalSurfaceSprites( shaderStage_t *stage, shaderCommands_
 				}
 				else
 				{
-					step = Q_rsqrt(step);		// Equals 1 over the distance.
+					step = Q_rsqrtf(step);		// Equals 1 over the distance.
 					SSVertWindDir[curvert][0] = dist[0] * step;
 					SSVertWindDir[curvert][1] = dist[1] * step;
 					step = 1.0 - (1.0 / (step * WINDPOINT_RADIUS));	// 1- (dist/maxradius) = a scale from 0 to 1 linearly dropping off
@@ -720,7 +720,7 @@ static void RB_DrawVerticalSurfaceSprites( shaderStage_t *stage, shaderCommands_
 		{	// Insanely small abhorrent triangle.
 			continue;
 		}
-		step = stage->ss->density * Q_rsqrt(triarea);
+		step = stage->ss->density * Q_rsqrtf(triarea);
 
 		randomindex = (byte)(v1[0]+v1[1]+v2[0]+v2[1]+v3[0]+v3[1]);
 		randominterval = (byte)(v1[0]+v2[1]+v3[2])|0x03;	// Make sure the interval is at least 3, and always odd
@@ -1031,7 +1031,7 @@ static void RB_DrawOrientedSurfaceSprites( shaderStage_t *stage, shaderCommands_
 		{	// Insanely small abhorrent triangle.
 			continue;
 		}
-		step = stage->ss->density * Q_rsqrt(triarea);
+		step = stage->ss->density * Q_rsqrtf(triarea);
 
 		randomindex = (byte)(v1[0]+v1[1]+v2[0]+v2[1]+v3[0]+v3[1]);
 		randominterval = (byte)(v1[0]+v2[1]+v3[2])|0x03;	// Make sure the interval is at least 3, and always odd
@@ -1331,7 +1331,7 @@ static void RB_DrawEffectSurfaceSprites( shaderStage_t *stage, shaderCommands_t 
 		{	// Insanely small abhorrent triangle.
 			continue;
 		}
-		step = density * Q_rsqrt(triarea);
+		step = density * Q_rsqrtf(triarea);
 
 		randomindex = (byte)(v1[0]+v1[1]+v2[0]+v2[1]+v3[0]+v3[1]);
 		randominterval = (byte)(v1[0]+v2[1]+v3[2])|0x03;	// Make sure the interval is at least 3, and always odd

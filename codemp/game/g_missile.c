@@ -39,7 +39,6 @@ G_ReflectMissile
   Reflect the missile roughly back at it's owner
 ================
 */
-float RandFloat(float min, float max);
 void G_ReflectMissile( gentity_t *ent, gentity_t *missile, vec3_t forward )
 {
 	vec3_t	bounce_dir;
@@ -82,7 +81,7 @@ void G_ReflectMissile( gentity_t *ent, gentity_t *missile, vec3_t forward )
 	}
 	for ( i = 0; i < 3; i++ )
 	{
-		bounce_dir[i] += RandFloat( -0.2f, 0.2f );
+		bounce_dir[i] += Q_flrand( -0.2f, 0.2f );
 	}
 
 	VectorNormalize( bounce_dir );
@@ -127,7 +126,7 @@ void G_DeflectMissile( gentity_t *ent, gentity_t *missile, vec3_t forward )
 
 	for ( i = 0; i < 3; i++ )
 	{
-		bounce_dir[i] += RandFloat( -1.0f, 1.0f );
+		bounce_dir[i] += Q_flrand( -1.0f, 1.0f );
 	}
 
 	VectorNormalize( bounce_dir );
@@ -223,7 +222,6 @@ void G_ExplodeMissile( gentity_t *ent ) {
 	vec3_t		origin;
 
 	BG_EvaluateTrajectory( &ent->s.pos, level.time, origin );
-	SnapVector( origin );
 	G_SetOrigin( ent, origin );
 
 	// we don't have a valid direction, so just point straight up
@@ -318,11 +316,9 @@ gentity_t *CreateMissile( vec3_t org, vec3_t dir, float vel, int life,
 	missile->s.pos.trTime = level.time;// - MISSILE_PRESTEP_TIME;	// NOTENOTE This is a Quake 3 addition over JK2
 	missile->target_ent = NULL;
 
-	SnapVector(org);
 	VectorCopy( org, missile->s.pos.trBase );
 	VectorScale( dir, vel, missile->s.pos.trDelta );
 	VectorCopy( org, missile->r.currentOrigin);
-	SnapVector(missile->s.pos.trDelta);
 
 	return missile;
 }
@@ -783,8 +779,6 @@ killProj:
 		ent->s.eType = ET_GENERAL;
 	}
 
-	SnapVectorTowards( trace->endpos, ent->s.pos.trBase );	// save net bandwidth
-
 	G_SetOrigin( ent, trace->endpos );
 
 	ent->takedamage = qfalse;
@@ -817,6 +811,13 @@ void G_RunMissile( gentity_t *ent ) {
 	trace_t		tr;
 	int			passent;
 	qboolean	isKnockedSaber = qfalse;
+
+	if ( !G_GRID20_STEP )
+	{ //missiles move on the 20 Hz instants, with the logic clock, as at sv_fps 20 (plan step 14, g_local.h): their hits
+	  //depend on the step (a trace that starts in a player's box hits it without testing the model, and one that leaves
+	  //it reports no model surface), so per-tick steps changed the hits, their locations and the damage
+		return;
+	}
 
 	if (ent->neverFree && ent->s.weapon == WP_SABER && (ent->flags & FL_BOUNCE_HALF))
 	{

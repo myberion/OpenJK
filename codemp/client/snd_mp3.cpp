@@ -204,7 +204,7 @@ qboolean MP3_ReadSpecialTagInfo(byte *pbLoadedFile, int iLoadedFileLen,
 		{
 			if ( pfMaxVol)
 			{
-				*pfMaxVol = atof(pTAG->comment + strlen(sKEY_MAXVOL));
+				*pfMaxVol = Q_atof(pTAG->comment + strlen(sKEY_MAXVOL));
 			}
 		}
 
@@ -438,7 +438,7 @@ qboolean MP3Stream_SeekTo( channel_t *ch, float fTimeToSeekTo )
 	while (1)
 	{
 		float fPlayingTimeElapsed = MP3Stream_GetPlayingTimeInSeconds( &ch->MP3StreamHeader ) - MP3Stream_GetRemainingTimeInSeconds( &ch->MP3StreamHeader );
-		float fAbsTimeDiff = fabs(fTimeToSeekTo - fPlayingTimeElapsed);
+		float fAbsTimeDiff = Q_fabs(fTimeToSeekTo - fPlayingTimeElapsed);
 
 		if ( fAbsTimeDiff <= fEpsilon)
 			return qtrue;

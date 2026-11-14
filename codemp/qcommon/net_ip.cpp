@@ -1018,7 +1018,7 @@ void NET_Event(fd_set *fdr)
 			if(net_dropsim->value > 0.0f && net_dropsim->value <= 100.0f)
 			{
 				// com_dropsim->value percent of incoming packets get dropped.
-				if(rand() < (int) (((double) RAND_MAX) / 100.0 * (double) net_dropsim->value))
+				if(Q_flrand(0.0f, 100.0f) < net_dropsim->value)
 					continue;          // drop this packet
 			}
 
@@ -1036,17 +1036,17 @@ void NET_Event(fd_set *fdr)
 ====================
 NET_Sleep
 
-sleeps msec or until net socket is ready
+sleeps usec microseconds or until net socket is ready
 ====================
 */
-void NET_Sleep( int msec ) {
+void NET_Sleep( int usec ) {
 	struct timeval timeout;
 	fd_set	fdset;
 	int retval;
 	SOCKET highestfd = INVALID_SOCKET;
 
-	if (msec < 0)
-		msec = 0;
+	if (usec < 0)
+		usec = 0;
 
 	FD_ZERO(&fdset);
 	if (ip_socket != INVALID_SOCKET) {
@@ -1059,13 +1059,13 @@ void NET_Sleep( int msec ) {
 	{
 		// windows ain't happy when select is called without valid FDs
 
-		SleepEx(msec, 0);
+		SleepEx(usec / 1000, 0);
 		return;
 	}
 #endif
 
-	timeout.tv_sec = msec/1000;
-	timeout.tv_usec = (msec%1000)*1000;
+	timeout.tv_sec = usec / 1000000;
+	timeout.tv_usec = usec % 1000000;
 
 	retval = select(highestfd + 1, &fdset, NULL, NULL, &timeout);
 

@@ -177,7 +177,7 @@ void P_WorldEffects( gentity_t *ent ) {
 				// play a gurp sound instead of a normal pain sound
 				if (ent->health <= ent->damage) {
 					G_Sound(ent, CHAN_VOICE, G_SoundIndex(/*"*drown.wav"*/"sound/player/gurp1.wav"));
-				} else if (rand()&1) {
+				} else if (Q_irand( 0, 1 )) {
 					G_Sound(ent, CHAN_VOICE, G_SoundIndex("sound/player/gurp1.wav"));
 				} else {
 					G_Sound(ent, CHAN_VOICE, G_SoundIndex("sound/player/gurp2.wav"));
@@ -1092,6 +1092,9 @@ void SendPendingPredictableEvents( playerState_t *ps ) {
 		ps->externalEvent = 0;
 		// create temporary entity for event
 		t = G_TempEntity( ps->origin, event );
+		if ( event > 0 && event < EV_NUM_ENTITY_EVENTS ) {
+			g_stats.events[event]--;	// a copy of a Pmove event, whose number depends on the commands per frame: not counted
+		}
 		number = t->s.number;
 		BG_PlayerStateToEntityState( ps, &t->s, qtrue );
 		t->s.number = number;
@@ -1135,6 +1138,13 @@ void G_UpdateClientBroadcasts( gentity_t *self ) {
 
 		if ( other == self ) {
 			// we are always sent to ourselves anyway, this is purely an optimisation
+			continue;
+		}
+
+		if ( !( level.gametype == GT_JEDIMASTER && self->client->ps.isJediMaster )
+			&& !( other->client->ps.fd.forcePowersActive & (1 << FP_SEE) ) ) {
+			// neither test below applies: the distance and the angles (two arc tangents per pair of clients, at every
+			// command) would serve nothing
 			continue;
 		}
 
@@ -1194,8 +1204,8 @@ void G_AddPushVecToUcmd( gentity_t *self, usercmd_t *ucmd )
 
 	fMove = 127.0 * DotProduct(forward, moveDir);
 	rMove = 127.0 * DotProduct(right, moveDir);
-	ucmd->forwardmove = floor(fMove);//If in the same dir , will be positive
-	ucmd->rightmove = floor(rMove);//If in the same dir , will be positive
+	ucmd->forwardmove = Q_floor(fMove);//If in the same dir , will be positive
+	ucmd->rightmove = Q_floor(rMove);//If in the same dir , will be positive
 
 	if ( self->client->pushVecTime < level.time )
 	{
@@ -2003,12 +2013,12 @@ void ClientThink_real( gentity_t *ent ) {
 	}
 
 	// sanity check the command time to prevent speedup cheating
-	if ( ucmd->serverTime > level.time + 200 ) {
-		ucmd->serverTime = level.time + 200;
+	if ( ucmd->serverTime > level.tickTime + 200 ) {
+		ucmd->serverTime = level.tickTime + 200;
 //		trap->Print("serverTime <<<<<\n" );
 	}
-	if ( ucmd->serverTime < level.time - 1000 ) {
-		ucmd->serverTime = level.time - 1000;
+	if ( ucmd->serverTime < level.tickTime - 1000 ) {
+		ucmd->serverTime = level.tickTime - 1000;
 //		trap->Print("serverTime >>>>>\n" );
 	}
 
@@ -2026,19 +2036,6 @@ void ClientThink_real( gentity_t *ent ) {
 
 	if ( msec > 200 ) {
 		msec = 200;
-	}
-
-	if ( pmove_msec.integer < 8 ) {
-		trap->Cvar_Set("pmove_msec", "8");
-	}
-	else if (pmove_msec.integer > 33) {
-		trap->Cvar_Set("pmove_msec", "33");
-	}
-
-	if ( pmove_fixed.integer || client->pers.pmoveFixed ) {
-		ucmd->serverTime = ((ucmd->serverTime + pmove_msec.integer-1) / pmove_msec.integer) * pmove_msec.integer;
-		//if (ucmd->serverTime - client->ps.commandTime <= 0)
-		//	return;
 	}
 
 	//
@@ -2224,7 +2221,7 @@ void ClientThink_real( gentity_t *ent ) {
 								{
 									float slowdownSpeed = ((float)ent->NPC->desiredSpeed) * ent->NPC->distToGoal / SLOWDOWN_DIST;
 
-									ent->NPC->desiredSpeed = ceil(slowdownSpeed);
+									ent->NPC->desiredSpeed = Q_ceil(slowdownSpeed);
 									if ( ent->NPC->desiredSpeed < MIN_NPC_SPEED )
 									{//don't slow down too much
 										ent->NPC->desiredSpeed = MIN_NPC_SPEED;
@@ -2292,11 +2289,11 @@ void ClientThink_real( gentity_t *ent ) {
 						//if( client->renderInfo.renderFlags & RF_LOCKEDANGLE ) // yeah I know the RF_ flag is a pretty ugly hack...
 						if (0) //rwwFIXMEFIXME: ...
 						{
-							turndelta = (180 - fabs( AngleDelta( ent->r.currentAngles[YAW], ent->NPC->lockedDesiredYaw ) ))/180;
+							turndelta = (180 - Q_fabs( AngleDelta( ent->r.currentAngles[YAW], ent->NPC->lockedDesiredYaw ) ))/180;
 						}
 						else
 						{
-							turndelta = (180 - fabs( AngleDelta( ent->r.currentAngles[YAW], ent->NPC->desiredYaw ) ))/180;
+							turndelta = (180 - Q_fabs( AngleDelta( ent->r.currentAngles[YAW], ent->NPC->desiredYaw ) ))/180;
 						}
 
 						if ( turndelta < 0.75f )
@@ -2305,7 +2302,7 @@ void ClientThink_real( gentity_t *ent ) {
 						}
 						else if ( ent->NPC->distToGoal < 100 && turndelta < 1.0 )
 						{//Turn is greater than 45 degrees or closer than 100 to goal
-							client->ps.speed = floor(((float)(client->ps.speed))*turndelta);
+							client->ps.speed = Q_floor(((float)(client->ps.speed))*turndelta);
 						}
 					}
 				}
@@ -2834,10 +2831,6 @@ void ClientThink_real( gentity_t *ent ) {
 	pmove.debugLevel = g_debugMove.integer;
 	pmove.noFootsteps = (dmflags.integer & DF_NO_FOOTSTEPS) > 0;
 
-	pmove.pmove_fixed = pmove_fixed.integer | client->pers.pmoveFixed;
-	pmove.pmove_msec = pmove_msec.integer;
-	pmove.pmove_float = pmove_float.integer;
-
 	pmove.animations = bgAllAnims[ent->localAnimIndex].anims;//NULL;
 
 	//rww - bgghoul2
@@ -3049,7 +3042,12 @@ void ClientThink_real( gentity_t *ent ) {
 #endif
 	}
 
-	Pmove (&pmove);
+	{
+		const int oldSaberMove = ent->client->ps.saberMove;
+
+		Pmove (&pmove);
+		G_StatsSaberMove( ent, oldSaberMove );
+	}
 
 	if (ent->client->solidHack)
 	{
@@ -3323,13 +3321,10 @@ void ClientThink_real( gentity_t *ent ) {
 	if ( ent->client->ps.eventSequence != oldEventSequence ) {
 		ent->eventTime = level.time;
 	}
-	if (g_smoothClients.integer) {
-		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
-		//rww - 12-03-02 - Don't snap the origin of players! It screws prediction all up.
-	}
-	else {
-		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, qfalse );
-	}
+	// the player's entity state carries its velocity and the time of its command (g_smoothClients 1 of OpenJK, the cvar
+	// removed: the form the message codec's position prediction and tables were made for; plan step 14, part 6)
+	BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
+	//rww - 12-03-02 - Don't snap the origin of players! It screws prediction all up.
 
 	if (isNPC)
 	{
@@ -3591,14 +3586,9 @@ void ClientThink( int clientNum, usercmd_t *ucmd ) {
 		}
 	}
 */
-	if ( !(ent->r.svFlags & SVF_BOT) && !g_synchronousClients.integer ) {
-		ClientThink_real( ent );
-	}
-	// vehicles are clients and when running synchronous they still need to think here
-	// so special case them.
-	else if ( clientNum >= MAX_CLIENTS ) {
-		ClientThink_real( ent );
-	}
+	// every command runs when the engine gives it: a player's at its tick (the last one again when none came, plan
+	// step 14, part 4c), a bot's as it is made
+	ClientThink_real( ent );
 
 /*	This was moved to clientthink_real, but since its sort of a risky change i left it here for
     now as a more concrete reference - BSD
@@ -3618,30 +3608,6 @@ void ClientThink( int clientNum, usercmd_t *ucmd ) {
 		}
 	}
 */
-}
-
-
-void G_RunClient( gentity_t *ent ) {
-	// force client updates if they're not sending packets at roughly 4hz
-	if ( !(ent->r.svFlags & SVF_BOT) && g_forceClientUpdateRate.integer && ent->client->lastCmdTime < level.time - g_forceClientUpdateRate.integer ) {
-		trap->GetUsercmd( ent-g_entities, &ent->client->pers.cmd );
-
-		ent->client->lastCmdTime = level.time;
-
-		// fill with seemingly valid data
-		ent->client->pers.cmd.serverTime = level.time;
-		ent->client->pers.cmd.buttons = 0;
-		ent->client->pers.cmd.forwardmove = ent->client->pers.cmd.rightmove = ent->client->pers.cmd.upmove = 0;
-
-		ClientThink_real( ent );
-		return;
-	}
-
-	if ( !(ent->r.svFlags & SVF_BOT) && !g_synchronousClients.integer ) {
-		return;
-	}
-	ent->client->pers.cmd.serverTime = level.time;
-	ClientThink_real( ent );
 }
 
 
@@ -3721,8 +3687,8 @@ void ClientEndFrame( gentity_t *ent ) {
 		return;
 	}
 
-	// turn off any expired powerups
-	for ( i = 0 ; i < MAX_POWERUPS ; i++ ) {
+	// turn off any expired powerups (on the 20 Hz instants of the tick, as at sv_fps 20: plan step 14)
+	for ( i = 0 ; G_GRID20_STEP && i < MAX_POWERUPS ; i++ ) {
 		if ( ent->client->ps.powerups[ i ] < level.time ) {
 			ent->client->ps.powerups[ i ] = 0;
 		}
@@ -3748,11 +3714,14 @@ void ClientEndFrame( gentity_t *ent ) {
 		}
 	}
 
-	// burn from lava, etc
-	P_WorldEffects (ent);
+	if ( G_GRID20_STEP )
+	{ // on the 20 Hz instants of the tick: the damage of the ticks between adds up, as in one frame of sv_fps 20 (plan step 14)
+		// burn from lava, etc
+		P_WorldEffects (ent);
 
-	// apply all the damage taken this frame
-	P_DamageFeedback (ent);
+		// apply all the damage taken this frame
+		P_DamageFeedback (ent);
+	}
 
 	// add the EF_CONNECTION flag if we haven't gotten commands recently
 	if ( level.time - ent->client->lastCmdTime > 1000 )
@@ -3765,13 +3734,10 @@ void ClientEndFrame( gentity_t *ent ) {
 	G_SetClientSound (ent);
 
 	// set the latest infor
-	if (g_smoothClients.integer) {
-		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
-		//rww - 12-03-02 - Don't snap the origin of players! It screws prediction all up.
-	}
-	else {
-		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, qfalse );
-	}
+	// the player's entity state carries its velocity and the time of its command (g_smoothClients 1 of OpenJK, the cvar
+	// removed: the form the message codec's position prediction and tables were made for; plan step 14, part 6)
+	BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
+	//rww - 12-03-02 - Don't snap the origin of players! It screws prediction all up.
 
 	if (isNPC)
 	{

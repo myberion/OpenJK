@@ -95,7 +95,7 @@ int L3table_init()
 	/* extra 4 for cvt to mono scaling by 1/2 */
 	   x = quant_init_global_addr();
 	   for (i = 0; i < 256 + 2 + 4; i++)
-		  x[i] = (float) pow(2.0, 0.25 * ((i - (2 + 4)) - 210 + GLOBAL_GAIN_SCALE));
+		  x[i] = (float) Q_pow(2.0, 0.25 * ((i - (2 + 4)) - 210 + GLOBAL_GAIN_SCALE));
 
 
 
@@ -108,7 +108,7 @@ int L3table_init()
 		 for (scalefac = 0; scalefac < 32; scalefac++)
 		 {
 			ls[scalefact_scale][preemp][scalefac] =
-			   (float) pow(2.0, -0.5 * (1 + scalefact_scale) * (scalefac + preemp));
+			   (float) Q_pow(2.0, -0.5 * (1 + scalefact_scale) * (scalefac + preemp));
 		 }
 		  }
 	   }
@@ -118,7 +118,7 @@ int L3table_init()
 	   for (i = 0; i < 64; i++)
 	   {
 		  tmp = i - 32;
-		  x[i] = (float) (tmp * pow(fabs(tmp), (1.0 / 3.0)));
+		  x[i] = (float) (tmp * Q_pow(Q_fabs(tmp), (1.0 / 3.0)));
 	   }
 
 
@@ -126,7 +126,7 @@ int L3table_init()
 	   x = quant_init_subblock_addr();
 	   for (i = 0; i < 8; i++)
 	   {
-		  x[i] = (float) pow(2.0, 0.25 * -8.0 * i);
+		  x[i] = (float) Q_pow(2.0, 0.25 * -8.0 * i);
 	   }
 
 	/*-------------------------*/
@@ -138,8 +138,8 @@ int L3table_init()
 	   csa = alias_init_addr();
 	   for (i = 0; i < 8; i++)
 	   {
-		  csa[i][0] = (float) (1.0 / sqrt(1.0 + Ci[i] * Ci[i]));
-		  csa[i][1] = (float) (Ci[i] / sqrt(1.0 + Ci[i] * Ci[i]));
+		  csa[i][0] = (float) (1.0 / Q_sqrt(1.0 + Ci[i] * Ci[i]));
+		  csa[i][1] = (float) (Ci[i] / Q_sqrt(1.0 + Ci[i] * Ci[i]));
 	   }
    }
 
@@ -174,19 +174,19 @@ void hwin_init()
    {
 	   win = hwin_init_addr();
 
-	   pi = 4.0 * atan(1.0);
+	   pi = 4.0 * Q_atan(1.0);
 
 	/* type 0 */
 	   for (i = 0; i < 36; i++)
-		  win[0][i] = (float) sin(pi / 36 * (i + 0.5));
+		  win[0][i] = (float) Q_sin(pi / 36 * (i + 0.5));
 
 	/* type 1 */
 	   for (i = 0; i < 18; i++)
-		  win[1][i] = (float) sin(pi / 36 * (i + 0.5));
+		  win[1][i] = (float) Q_sin(pi / 36 * (i + 0.5));
 	   for (i = 18; i < 24; i++)
 		  win[1][i] = 1.0F;
 	   for (i = 24; i < 30; i++)
-		  win[1][i] = (float) sin(pi / 12 * (i + 0.5 - 18));
+		  win[1][i] = (float) Q_sin(pi / 12 * (i + 0.5 - 18));
 	   for (i = 30; i < 36; i++)
 		  win[1][i] = 0.0F;
 
@@ -194,15 +194,15 @@ void hwin_init()
 	   for (i = 0; i < 6; i++)
 		  win[3][i] = 0.0F;
 	   for (i = 6; i < 12; i++)
-		  win[3][i] = (float) sin(pi / 12 * (i + 0.5 - 6));
+		  win[3][i] = (float) Q_sin(pi / 12 * (i + 0.5 - 6));
 	   for (i = 12; i < 18; i++)
 		  win[3][i] = 1.0F;
 	   for (i = 18; i < 36; i++)
-		  win[3][i] = (float) sin(pi / 36 * (i + 0.5));
+		  win[3][i] = (float) Q_sin(pi / 36 * (i + 0.5));
 
 	/* type 2 */
 	   for (i = 0; i < 12; i++)
-		  win[2][i] = (float) sin(pi / 12 * (i + 0.5));
+		  win[2][i] = (float) Q_sin(pi / 12 * (i + 0.5));
 	   for (i = 12; i < 36; i++)
 		  win[2][i] = 0.0F;
 
@@ -246,18 +246,18 @@ void imdct_init()
 	   coef = addr->coef;
 	/*----*/
 	   n = 18;
-	   pi = 4.0 * atan(1.0);
+	   pi = 4.0 * Q_atan(1.0);
 	   t = pi / (4 * n);
 	   for (p = 0; p < n; p++)
-		  w[p] = (float) (2.0 * cos(t * (2 * p + 1)));
+		  w[p] = (float) (2.0 * Q_cos(t * (2 * p + 1)));
 	   for (p = 0; p < 9; p++)
-		  w2[p] = (float) (2.0 *cos(2 * t * (2 * p + 1)));
+		  w2[p] = (float) (2.0 *Q_cos(2 * t * (2 * p + 1)));
 
 	   t = pi / (2 * n);
 	   for (k = 0; k < 9; k++)
 	   {
 		  for (p = 0; p < 4; p++)
-		 coef[k][p] = (float) cos(t * (2 * k) * (2 * p + 1));
+		 coef[k][p] = (float) Q_cos(t * (2 * k) * (2 * p + 1));
 	   }
 
 	/*--- 6 point */
@@ -267,18 +267,18 @@ void imdct_init()
 	   coef87 = addr->coef;
 	/*----*/
 	   n = 6;
-	   pi = 4.0 * atan(1.0);
+	   pi = 4.0 * Q_atan(1.0);
 	   t = pi / (4 * n);
 	   for (p = 0; p < n; p++)
-		  v[p] = (float) (2.0 *cos(t * (2 * p + 1)));
+		  v[p] = (float) (2.0 *Q_cos(t * (2 * p + 1)));
 
 	   for (p = 0; p < 3; p++)
-		  v2[p] = (float) (2.0 *cos(2 * t * (2 * p + 1)));
+		  v2[p] = (float) (2.0 *Q_cos(2 * t * (2 * p + 1)));
 
 	   t = pi / (2 * n);
 	   k = 1;
 	   p = 0;
-	   *coef87 = (float) cos(t * (2 * k) * (2 * p + 1));
+	   *coef87 = (float) Q_cos(t * (2 * k) * (2 * p + 1));
 	/* adjust scaling to save a few mults */
 	   for (p = 0; p < 6; p++)
 		  v[p] = v[p] / 2.0f;
@@ -306,18 +306,18 @@ void msis_init()
 	   lr = msis_init_addr();
 
 
-	   pi = 4.0 * atan(1.0);
+	   pi = 4.0 * Q_atan(1.0);
 	   t = pi / 12.0;
 	   for (i = 0; i < 7; i++)
 	   {
-		  s = sin(i * t);
-		  c = cos(i * t);
+		  s = Q_sin(i * t);
+		  c = Q_cos(i * t);
 		/* ms_mode = 0 */
 		  lr[0][i][0] = (float) (s / (s + c));
 		  lr[0][i][1] = (float) (c / (s + c));
 		/* ms_mode = 1 */
-		  lr[1][i][0] = (float) (sqrt(2.0) * (s / (s + c)));
-		  lr[1][i][1] = (float) (sqrt(2.0) * (c / (s + c)));
+		  lr[1][i][0] = (float) (Q_sqrt(2.0) * (s / (s + c)));
+		  lr[1][i][1] = (float) (Q_sqrt(2.0) * (c / (s + c)));
 	   }
 	/* sf = 7 */
 	/* ms_mode = 0 */
@@ -355,7 +355,7 @@ void msis_init_MPEG2()
    if (!iOnceOnly++)
    {
 	   ms_factor[0] = 1.0;
-	   ms_factor[1] = (float) sqrt(2.0);
+	   ms_factor[1] = (float) Q_sqrt(2.0);
 
 	   lr2 = msis_init_addr_MPEG2();
 
@@ -364,7 +364,7 @@ void msis_init_MPEG2()
 
 	   for (intensity_scale = 0; intensity_scale < 2; intensity_scale++)
 	   {
-		  t = pow(2.0, -0.25 * (1 + intensity_scale));
+		  t = Q_pow(2.0, -0.25 * (1 + intensity_scale));
 		  for (ms_mode = 0; ms_mode < 2; ms_mode++)
 		  {
 
@@ -382,14 +382,14 @@ void msis_init_MPEG2()
 			   else if ((sf & 1))
 			   {
 			  lr2[intensity_scale][ms_mode][k][0] =
-				 (float) (ms_factor[ms_mode] * pow(t, (sf + 1) / 2));
+				 (float) (ms_factor[ms_mode] * Q_pow(t, (sf + 1) / 2));
 			  lr2[intensity_scale][ms_mode][k][1] = ms_factor[ms_mode] * 1.0f;
 			   }
 			   else
 			   {
 			  lr2[intensity_scale][ms_mode][k][0] = ms_factor[ms_mode] * 1.0f;
 			  lr2[intensity_scale][ms_mode][k][1] =
-				 (float) (ms_factor[ms_mode] * pow(t, sf / 2));
+				 (float) (ms_factor[ms_mode] * Q_pow(t, sf / 2));
 			   }
 			}
 

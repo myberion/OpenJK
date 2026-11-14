@@ -468,6 +468,96 @@ void Svcmd_Say_f( void ) {
 	trap->SendServerCommand( -1, va("print \"server: %s\n\"", text ) );
 }
 
+// gamestats: the combat statistics since the last call (g_stats), then reset; the ratios per saber swing are what must not
+// change with the server frame rate (plan step 14)
+extern char *modNames[];
+extern const char *eventnames[EV_NUM_ENTITY_EVENTS];
+extern qboolean PM_SaberInBounce( int move );
+
+// gamestats: a client's saber move after its Pmove: attacks started, and moves sent into a bounce or a deflection (an
+// attack cancelled by a block), by the client's saber style
+void G_StatsSaberMove( gentity_t *ent, int oldSaberMove ) {
+	const int move = ent->client->ps.saberMove;
+	const int style = ent->client->ps.fd.saberAnimLevel;
+
+	if ( ent->s.number >= MAX_CLIENTS || move == oldSaberMove || style < 0 || style >= SS_NUM_SABER_STYLES ) {
+		return;
+	}
+	if ( BG_SaberInAttack( move ) && !BG_SaberInAttack( oldSaberMove ) ) {
+		g_stats.styleAttacks[style]++;
+	}
+	if ( PM_SaberInBounce( move ) && !PM_SaberInBounce( oldSaberMove ) ) {
+		g_stats.styleBounces[style]++;
+	}
+}
+
+// the central counters: events by type, health taken and deaths by cause, shots by weapon, saber attacks and bounces by style
+static void G_PrintCentralStats( void ) {
+	static const char *styles[SS_NUM_SABER_STYLES] = { "none", "fast", "medium", "strong", "desann", "tavion", "dual", "staff" };
+	const gameStats_t *s = &g_stats;
+	char line[4096];
+	int i;
+
+	Q_strncpyz( line, "event statistics:", sizeof( line ) );
+	for ( i = 1; i < EV_NUM_ENTITY_EVENTS; i++ ) {
+		if ( s->events[i] ) {
+			Q_strcat( line, sizeof( line ), va( " %s %d", eventnames[i], s->events[i] ) );
+		}
+	}
+	trap->Print( "%s\n", line );
+	Q_strncpyz( line, "damage statistics (health taken from clients and deaths, by cause):", sizeof( line ) );
+	for ( i = 0; i < MOD_MAX; i++ ) {
+		if ( s->modDamage[i] || s->modKills[i] ) {
+			Q_strcat( line, sizeof( line ), va( " %s %d %d", modNames[i], s->modDamage[i], s->modKills[i] ) );
+		}
+	}
+	trap->Print( "%s\n", line );
+	Q_strncpyz( line, "shot statistics (primary and alternate fire, by weapon number):", sizeof( line ) );
+	for ( i = 0; i < WP_NUM_WEAPONS; i++ ) {
+		if ( s->shots[i][0] || s->shots[i][1] ) {
+			Q_strcat( line, sizeof( line ), va( " w%d %d %d", i, s->shots[i][0], s->shots[i][1] ) );
+		}
+	}
+	trap->Print( "%s\n", line );
+	Q_strncpyz( line, "saber style statistics (attacks started, moves bounced or deflected):", sizeof( line ) );
+	for ( i = 1; i < SS_NUM_SABER_STYLES; i++ ) {
+		if ( s->styleAttacks[i] || s->styleBounces[i] ) {
+			Q_strcat( line, sizeof( line ), va( " %s %d %d", styles[i], s->styleAttacks[i], s->styleBounces[i] ) );
+		}
+	}
+	trap->Print( "%s\n", line );
+}
+
+void Svcmd_GameStats_f( void ) {
+	const gameStats_t *s = &g_stats;
+	const float swings = s->saberSwings ? (float)s->saberSwings : 1.0f;
+
+	trap->Print( "game statistics over %.1f s, %d frames: %d saber swings; per swing: %.3f wounds, %.2f damage, "
+		"%.3f saber against saber (blocks), %.3f body hits parried without the sabers touching, %.4f saber locks, %.3f idle "
+		"touches (wounds %d, damage %d, saber against saber %d, parried %d, locks %d, touches %d); %d missiles blocked by "
+		"sabers, %d force damage, %d deaths, %d saber hit effects on clients\n",
+		( level.time - s->startTime ) / 1000.0f, s->frames, s->saberSwings,
+		s->saberWounds / swings, s->saberDamage / swings, s->saberClashes / swings, s->saberBlocks / swings,
+		s->saberLocks / swings, s->saberTouches / swings, s->saberWounds, s->saberDamage, s->saberClashes, s->saberBlocks,
+		s->saberLocks, s->saberTouches, s->missileBlocks, s->forceDamage, s->deaths, s->saberHitEffects );
+	{ // raw counts of the powers whose timing depends on the frame rate: gamestats_agg.py computes the rates
+		static const struct { forcePowers_t power; const char *name; } shown[] = {
+			{ FP_GRIP, "grip" }, { FP_RAGE, "rage" }, { FP_PROTECT, "protect" }, { FP_ABSORB, "absorb" },
+			{ FP_LIGHTNING, "lightning" }, { FP_DRAIN, "drain" },
+		};
+		char line[MAX_STRING_CHARS] = "force statistics: starts, periodic events (drains, rage health losses, shots) and milliseconds held per power:";
+		size_t i;
+		for ( i = 0; i < ARRAY_LEN( shown ); i++ ) {
+			const forcePowers_t f = shown[i].power;
+			Q_strcat( line, sizeof( line ), va( "%s %s %d %d %d", i ? "," : "", shown[i].name, s->forceStarts[f],
+				s->forceTimerEvents[f], s->forceActiveMsec[f] ) );
+		}
+		trap->Print( "%s\n", line );
+	}
+	G_PrintCentralStats();
+	memset( &g_stats, 0, sizeof( g_stats ) );
+}
+
 typedef struct svcmd_s {
 	const char	*name;
 	void		(*func)(void);
@@ -485,9 +575,11 @@ svcmd_t svcmds[] = {
 	{ "entitylist",					Svcmd_EntityList_f,					qfalse },
 	{ "forceteam",					Svcmd_ForceTeam_f,					qfalse },
 	{ "game_memory",				Svcmd_GameMem_f,					qfalse },
+	{ "gamestats",					Svcmd_GameStats_f,					qfalse },
 	{ "listip",						Svcmd_ListIP_f,						qfalse },
 	{ "removeip",					Svcmd_RemoveIP_f,					qfalse },
 	{ "say",						Svcmd_Say_f,						qtrue },
+	{ "scenario",					Svcmd_Scenario_f,					qfalse },
 	{ "toggleallowvote",			Svcmd_ToggleAllowVote_f,			qfalse },
 	{ "toggleuserinfovalidation",	Svcmd_ToggleUserinfoValidation_f,	qfalse },
 };

@@ -1020,7 +1020,7 @@ static void Com_Freeze_f (void) {
 		Com_Printf( "freeze <seconds>\n" );
 		return;
 	}
-	s = atof( Cmd_Argv(1) );
+	s = Q_atof( Cmd_Argv(1) );
 
 	start = Com_Milliseconds();
 
@@ -1069,17 +1069,16 @@ void Com_ExecuteCfg(void)
 /*
 =================
 Com_InitRand
-Seed the random number generator, if possible with an OS supplied random seed.
+Seed the engine's random number stream (q_rand.h), if possible with an OS supplied random seed.
 =================
 */
 static void Com_InitRand(void)
 {
 	unsigned int seed;
 
-	if(Sys_RandomBytes((byte *) &seed, sizeof(seed)))
-		srand(seed);
-	else
-		srand(time(NULL));
+	if(!Sys_RandomBytes((byte *) &seed, sizeof(seed)))
+		seed = (unsigned int)time(NULL);
+	Rand_Init((int)seed);
 }
 
 /*
@@ -1182,9 +1181,6 @@ void Com_Init( char *commandLine ) {
 
 		Com_InitZoneMemoryVars();
 		Cmd_Init ();
-
-		// Seed the random number generator
-		Rand_Init(Sys_Milliseconds(true));
 
 		// get the developer cvar set as early as possible
 		com_developer = Cvar_Get("developer", "0", CVAR_TEMP, "Developer mode" );
@@ -1549,13 +1545,41 @@ void Com_Frame( void ) {
 			minMsec = 1;
 
 		timeVal = Com_TimeVal(minMsec);
+		{
+		// The client's command of a tick is made and sent when its command clock enters the tick, not at the next
+		// drawn frame (plan step 14, part 10): made at the frames, the commands reached the server spread over a
+		// frame's length (8 ms at 125 frames per second), and the command clock had to run that much earlier for the
+		// latest of them, so a key waited longer the lower the frame rate. The wait for the next frame ends at that
+		// instant too, and the input alone runs (CL_InputTick). Not with a scaled or fixed time: the client's clock
+		// is then not the real time's.
+		qboolean inputTick = ( com_timescale->value == 1 && !com_fixedtime->integer ) ? qtrue : qfalse;
 		do {
+			const int cmdDue = inputTick ? CL_NextCommandMsec() : -1;	// -1: none to make between the frames
+			int wait = timeVal;
+
+			if ( cmdDue == 0 && timeVal > 0 ) {
+				IN_Frame();
+				if ( !CL_InputTick() ) {
+					inputTick = qfalse;	// it made none (the state changed): left to the frame
+				}
+				continue;
+			}
+			if ( cmdDue > 0 && cmdDue < wait ) {
+				wait = cmdDue;
+			}
 			// Busy sleep the last millisecond for better timeout precision
-			if(com_busyWait->integer || timeVal < 1)
+			if(com_busyWait->integer || wait < 1)
 				NET_Sleep(0);
+#ifndef _WIN32
+			// a dedicated server sleeps its last millisecond in steps of 100 us rather than in a busy loop, which took
+			// up to a tenth of a core at 100 Hz (plan step 14, X1); select() keeps such timeouts here, not on Windows
+			else if(wait == 1 && com_dedicated->integer)
+				NET_Sleep(100);
+#endif
 			else
-				NET_Sleep(timeVal - 1);
+				NET_Sleep((wait - 1) * 1000);
 		} while( (timeVal = Com_TimeVal(minMsec)) != 0 );
+		}
 		IN_Frame();
 
 		lastTime = com_frameTime;
@@ -2024,7 +2048,7 @@ void Com_RandomBytes( byte *string, int len )
 
 	Com_Printf( "Com_RandomBytes: using weak randomization\n" );
 	for( i = 0; i < len; i++ )
-		string[i] = (unsigned char)( rand() % 256 );
+		string[i] = (unsigned char)Q_irand( 0, 255 );
 }
 
 /*

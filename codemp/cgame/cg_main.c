@@ -2112,7 +2112,7 @@ static float CG_Cvar_Get(const char *cvar) {
 	char buff[128];
 	memset(buff, 0, sizeof(buff));
 	trap->Cvar_VariableStringBuffer(cvar, buff, sizeof(buff));
-	return atof(buff);
+	return Q_atof(buff);
 }
 
 void CG_Text_PaintWithCursor(float x, float y, float scale, vec4_t color, const char *text, int cursorPos, char cursor, int limit, int style, int iMenuFont) {

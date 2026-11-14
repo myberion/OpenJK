@@ -561,10 +561,7 @@ static void CG_UpdateThirdPersonTargetDamp(void)
 
 		// Note that since there are a finite number of "practical" delta millisecond values possible,
 		// the ratio should be initialized into a chart ultimately.
-		if ( cg_smoothCamera.integer )
-			ratio = powf( dampfactor, dtime );
-		else
-			ratio = Q_powf( dampfactor, dtime );
+		ratio = Q_powf( dampfactor, dtime );
 
 		// This value is how much distance is "left" from the ideal.
 		VectorMA(cameraIdealTarget, -ratio, targetdiff, cameraCurTarget);
@@ -620,7 +617,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 			float pitch;
 
 			// Note that the camera pitch has already been capped off to 89.
-			pitch = Q_fabs(cameraFocusAngles[PITCH]);
+			pitch = Q_fabsf(cameraFocusAngles[PITCH]);
 
 			// The higher the pitch, the larger the factor, so as you look up, it damps a lot less.
 			pitch /=115.0f;
@@ -634,7 +631,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 		float pitch;
 
 		// Note that the camera pitch has already been capped off to 89.
-		pitch = Q_fabs(cameraFocusAngles[PITCH]);
+		pitch = Q_fabsf(cameraFocusAngles[PITCH]);
 
 		// The higher the pitch, the larger the factor, so as you look up, it damps a lot less.
 		pitch /= 115.0f;
@@ -665,10 +662,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 
 		// Note that since there are a finite number of "practical" delta millisecond values possible,
 		// the ratio should be initialized into a chart ultimately.
-		if ( cg_smoothCamera.integer )
-			ratio = powf( dampfactor, dtime );
-		else
-			ratio = Q_powf( dampfactor, dtime );
+		ratio = Q_powf( dampfactor, dtime );
 
 		// This value is how much distance is "left" from the ideal.
 		VectorMA(cameraIdealLoc, -ratio, locdiff, cameraCurLoc);
