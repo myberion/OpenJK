@@ -95,7 +95,7 @@ What did not get faster, and what it costs:
 
 - The game decides 20 times a second, as the base game does. A saber contact is judged at the next 20 Hz instant, 25 ms later on average: the same as a 20 Hz server, 12 ms more than OpenJK's default of 40, which changes the game's balance.
 - A key acts at the next tick, not at the next drawn frame: 5 ms on average instead of 4 ms at 125 frames per second and 1.5 ms at 333. A player at 333 frames per second loses 3.5 ms on its own screen; in exchange every player has the same delay and the same movement.
-- There is no lag compensation yet: a hitscan shot (the disruptor) is judged with the positions the server holds, as before. It is planned for the hitscan shots only (plan step 14, part 8).
+- There is no lag compensation: a hitscan shot (the disruptor) is judged with the positions the server holds, as before. It was planned for the hitscan shots only (plan step 14, part 8) and dropped on 14 November 2026.
 - Bandwidth, measured with 17 or 18 bots: 90 to 115 bytes per snapshot, 100 times a second, about 12 to 15 KB per second down for each client with the packet headers, and about 4.5 KB per second up. OpenJK's format on the same messages would be 2.4 times larger.
 - Server CPU, measured on the test server (1 virtual core) with 16 bots and no player: 4.1 % of the core at 100 Hz (5.3 % before the optimisation of plan step 14, part 7, which takes about a third off the time of a tick; section [23](#23-server-fixes)).
 
@@ -214,7 +214,7 @@ The scenarios: the server command `scenario` and the script `tools/gamestats/sce
 - A command that arrives after its tick gets no movement, and what it newly pressed (a button, a jump, a force power) goes into the next one: a short press acts a tick late instead of being lost.
 - A tick without a command runs the previous one again, for 250 ms at most, then an empty one: a lost packet no longer stops the player, a lost connection does.
 
-**Why.** Equality: the same movement for everyone, every player at the same time on the server, no way to bank commands. It is also what lag compensation by tick needs (plan step 14, part 8).
+**Why.** Equality: the same movement for everyone, every player at the same time on the server, no way to bank commands. It is also what lag compensation by tick would need (planned as step 14 part 8, dropped).
 
 **Gain.**
 
@@ -748,7 +748,7 @@ Survey and measurements: [surveys/random-numbers.md](surveys/random-numbers.md).
 
 **Now.** The server keeps one copy of an entity's state for as long as it does not change, shared by every snapshot of every client that holds it. The counter is on 64 bits.
 
-**Why.** A window of 128 snapshots (section 17) with a copy per client would take 558 MB. It is also the store lag compensation will read (plan step 14, part 8).
+**Why.** A window of 128 snapshots (section 17) with a copy per client would take 558 MB. It was also to be the store lag compensation reads (plan step 14, part 8, dropped).
 
 **Gain.**
 
@@ -763,7 +763,7 @@ Survey and measurements: [surveys/random-numbers.md](surveys/random-numbers.md).
 - A client's snapshot is a list of places. An unchanged entity is at the same place in a snapshot and in its base, so the encoder skips it on the places alone (library: `EntityRing::index`, `Frame::index`).
 - The array is allocated zeroed by the system instead of cleared by hand at every map, and the versions of an entity are neighbours: the memory in use is that of the entity numbers in use. On Linux with transparent huge pages a write makes 2 MB resident, which is why the test server uses more than Windows.
 - A snapshot too large is cut by rewriting its list, not the shared states. The bots and `sv_netcodecCompare` read their snapshot's entities through the list.
-- Lag compensation will need the version each entity had at each tick (a byte per entity and tick); not written.
+- Lag compensation would have needed the version each entity had at each tick (a byte per entity and tick); not written, the part is dropped.
 - Details: [progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md) section 12.
 
 </details>
@@ -1011,7 +1011,7 @@ Added commands. The statistics commands print their counters since the previous 
 
 | subject | where |
 |---|---|
-| Lag compensation for the hitscan shots (not for the saber or the force powers) | plan step 14, part 8 |
+| Lag compensation: none, as in OpenJK (planned for the hitscan shots, dropped on 14 November 2026) | plan step 14, part 8 |
 | The lagometer in time; the freeze when the scoreboard first shows players whose models are not loaded | plan step 14, part 9 |
 | The size of demos at 100 messages per second, a long client hitch, the sound louder at 333 frames per second than at 125 (as in OpenJK), priority and culling per client | plan step 14, part 11 |
 | Encryption, or a replacement for the removed obfuscation; several download blocks per message | plan step 12 |

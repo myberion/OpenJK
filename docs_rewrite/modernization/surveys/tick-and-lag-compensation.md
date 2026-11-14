@@ -10,6 +10,8 @@ Each source is labelled as in the network settings survey:
 
 What changed after this survey (each choice below is kept as it was taken): **the tick is 100 Hz, not 125** (owner, the evening of 11 November 2026). Every 20 Hz instant is then a tick, and the game's logic (saber, force powers, missiles, thinks) keeps its 20 Hz pace on those instants, identical to `sv_fps` 20, after tuning the saber per tick failed ([../progress/step-14-fixed-tick.md](../progress/step-14-fixed-tick.md) section 9). The saber and the force powers get no lag compensation (decision D2 of that document); the hitscan shots will (its part 8, not done). The fixed tick, the commands per tick, the two clocks and the interpolation are done; the measurements at 100 Hz are in that document and, in plain words, in [../CHANGES.md](../CHANGES.md).
 
+**Lag compensation was dropped** (owner, 14 November 2026): it was planned for the hitscan shots only (step 14, part 8) and is not done; the shots stay judged with the positions the server holds. Sections 2 to 4 and the choices of section 8 about it are kept as they were written.
+
 The owner asked (11 November 2026) that the design follow recent games and be done well even if it means starting again from zero, rather than follow what exists in the Jedi Academy community. The JKA mods read for this page (jaPRO, SaberMod, base_entranced, and Unlagged for Quake 3) are used only to locate the game code a change touches, never as the model.
 
 ## 1. Summary
