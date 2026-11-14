@@ -4185,54 +4185,93 @@ LAGOMETER
 ===============================================================================
 */
 
-#define	LAG_SAMPLES		128
+// The lagometer in time (plan step 14, part 9): a column is a slice of LAG_SLICE_MSEC of real time, not a frame or a
+// snapshot, so that the graph covers the same span at any frame rate (LAG_COLUMNS slices: 2.4 s). A slice keeps the
+// worst case of what happened in it.
+#define	LAG_SLICE_MSEC		50
+#define	LAG_COLUMNS			48		// the graph's width: a slice per virtual pixel
+#define	LAG_SLICES			64		// slices kept: a power of two, at least LAG_COLUMNS
 
+typedef struct lagSlice_s {
+	int			number;				// real time / LAG_SLICE_MSEC: tells this slice from an older one at the same place
+	qboolean	frames;				// a frame was drawn
+	int			frameMin, frameMax;	// the drawn time minus the newest snapshot's (negative: behind it, positive: past it)
+	qboolean	snapshots;			// a snapshot was read
+	qboolean	dropped;			// a snapshot was missing
+	int			ping;				// the highest
+	int			snapFlags;			// of all of them
+	qboolean	margins;			// the server measured an input margin
+	int			marginMin, marginMax;	// in ms; a negative one: a command reached the server after its tick
+} lagSlice_t;
 
-struct lagometer_s {
-	int		frameSamples[LAG_SAMPLES];
-	int		frameCount;
-	int		snapshotFlags[LAG_SAMPLES];
-	int		snapshotSamples[LAG_SAMPLES];
-	int		snapshotCount;
-} lagometer;
+static lagSlice_t lagometer[LAG_SLICES];
+
+// the slice of the present time, emptied when it starts
+static lagSlice_t *CG_LagometerSlice( void ) {
+	const int	number = trap->Milliseconds() / LAG_SLICE_MSEC;
+	lagSlice_t	*slice = &lagometer[number & ( LAG_SLICES - 1 )];
+
+	if ( slice->number != number ) {
+		memset( slice, 0, sizeof( *slice ) );
+		slice->number = number;
+	}
+	return slice;
+}
 
 /*
 ==============
 CG_AddLagometerFrameInfo
 
-Adds the current interpolate / extrapolate bar for this frame
+Adds this frame's place against the newest snapshot (behind it or past it)
 ==============
 */
 void CG_AddLagometerFrameInfo( void ) {
-	int			offset;
+	lagSlice_t	*slice = CG_LagometerSlice();
+	const int	offset = cg.time - cg.latestSnapshotTime;
 
-	offset = cg.time - cg.latestSnapshotTime;
-	lagometer.frameSamples[ lagometer.frameCount & ( LAG_SAMPLES - 1) ] = offset;
-	lagometer.frameCount++;
+	if ( !slice->frames ) {
+		slice->frames = qtrue;
+		slice->frameMin = slice->frameMax = offset;
+	} else {
+		slice->frameMin = Q_min( slice->frameMin, offset );
+		slice->frameMax = Q_max( slice->frameMax, offset );
+	}
 }
 
 /*
 ==============
 CG_AddLagometerSnapshotInfo
 
-Each time a snapshot is received, log its ping time and
-the number of snapshots that were dropped before it.
+Each time a snapshot is received, log its ping time, its input margin and
+whether snapshots were dropped before it.
 
 Pass NULL for a dropped packet.
 ==============
 */
 void CG_AddLagometerSnapshotInfo( snapshot_t *snap ) {
+	lagSlice_t	*slice = CG_LagometerSlice();
+
 	// dropped packet
 	if ( !snap ) {
-		lagometer.snapshotSamples[ lagometer.snapshotCount & ( LAG_SAMPLES - 1) ] = -1;
-		lagometer.snapshotCount++;
+		slice->dropped = qtrue;
 		return;
 	}
 
 	// add this snapshot's info
-	lagometer.snapshotSamples[ lagometer.snapshotCount & ( LAG_SAMPLES - 1) ] = snap->ping;
-	lagometer.snapshotFlags[ lagometer.snapshotCount & ( LAG_SAMPLES - 1) ] = snap->snapFlags;
-	lagometer.snapshotCount++;
+	if ( !slice->snapshots || snap->ping > slice->ping ) {
+		slice->ping = snap->ping;
+	}
+	slice->snapshots = qtrue;
+	slice->snapFlags |= snap->snapFlags;
+	if ( snap->inputMarginValid ) {
+		if ( !slice->margins ) {
+			slice->margins = qtrue;
+			slice->marginMin = slice->marginMax = snap->inputMargin;
+		} else {
+			slice->marginMin = Q_min( slice->marginMin, snap->inputMargin );
+			slice->marginMax = Q_max( slice->marginMax, snap->inputMargin );
+		}
+	}
 }
 
 /*
@@ -4286,20 +4325,53 @@ static void CG_DrawDisconnect( void ) {
 }
 
 
-#define	MAX_LAGOMETER_PING	900
-#define	MAX_LAGOMETER_RANGE	300
+// The graph is 48 virtual pixels high: the input margin in its top LAG_MARGIN_HEIGHT pixels, the drawn time around the
+// line LAG_DELAY_MID pixels down, the ping in its bottom LAG_PING_HEIGHT pixels. Every bar is a delay, and the scales
+// leave the usual ones about a pixel high (a margin of 4 ms, 10 ms behind the newest snapshot, a ping of 20 to 40 ms):
+// a thin graph is a good connection.
+#define	LAG_HEIGHT			48
+#define	LAG_MARGIN_HEIGHT	12
+#define	LAG_MARGIN_MSEC		50		// the margin that fills its band
+#define	LAG_DELAY_MID		20
+#define	LAG_DELAY_UP		8		// the most drawn above the line (past the newest snapshot)
+#define	LAG_DELAY_DOWN		16		// the most drawn below it (behind the newest snapshot)
+#define	LAG_DELAY_MSEC		150		// the delay that fills LAG_DELAY_DOWN
+#define	LAG_PING_HEIGHT		24
+#define	LAG_PING_MSEC		900		// the ping that fills its band
+
+// one bar of a column, in a colour of g_color_table; *current is the colour set last
+static void CG_LagometerBar( float x, float y, float h, int colour, int *current ) {
+	if ( *current != colour ) {
+		*current = colour;
+		trap->R_SetColor( g_color_table[ColorIndex( colour )] );
+	}
+	trap->R_DrawStretchPic( x, y, 1, h, 0, 0, 0, 0, cgs.media.whiteShader );
+}
+
+// the slice drawn in column a (0: the present one), NULL when nothing happened in it
+static lagSlice_t *CG_LagometerColumn( int now, int a ) {
+	lagSlice_t	*slice = &lagometer[( now - a ) & ( LAG_SLICES - 1 )];
+
+	return slice->number == now - a ? slice : NULL;
+}
 
 /*
 ==============
 CG_DrawLagometer
+
+Per slice of LAG_SLICE_MSEC, from the top:
+cyan     how long a command waited on the server for its tick: the highest margin (LAG_MARGIN_MSEC fills the band)
+magenta  a command reached the server after its tick
+yellow   above the line: a frame was drawn past the newest snapshot (the next one was late)
+blue     below the line: how far behind the newest snapshot the frames were drawn (LAG_DELAY_MSEC fills LAG_DELAY_DOWN)
+green    the highest ping, yellow when a snapshot was delayed by the rate (LAG_PING_MSEC fills the band)
+red      a snapshot was missing
 ==============
 */
 static void CG_DrawLagometer( void ) {
-	int		a, x, y, i;
-	float	v;
-	float	ax, ay, aw, ah, mid, range;
-	int		color;
-	float	vscale;
+	int			a, now, colour;
+	float		ax, ay, x, v;
+	lagSlice_t	*slice;
 
 	if ( !cg_lagometer.integer || cgs.localServer ) {
 		CG_DrawDisconnect();
@@ -4309,80 +4381,64 @@ static void CG_DrawLagometer( void ) {
 	//
 	// draw the graph
 	//
-	x = 640 - 48;
-	y = 480 - 144;
+	ax = 640 - 48;
+	ay = 480 - 144;
 
 	trap->R_SetColor( NULL );
-	CG_DrawPic( x, y, 48, 48, cgs.media.lagometerShader );
+	CG_DrawPic( ax, ay, LAG_COLUMNS, LAG_HEIGHT, cgs.media.lagometerShader );
 
-	ax = x;
-	ay = y;
-	aw = 48;
-	ah = 48;
+	colour = -1;
+	now = trap->Milliseconds() / LAG_SLICE_MSEC;
 
-	color = -1;
-	range = ah / 3;
-	mid = ay + range;
-
-	vscale = range / MAX_LAGOMETER_RANGE;
-
-	// draw the frame interpoalte / extrapolate graph
-	for ( a = 0 ; a < aw ; a++ ) {
-		i = ( lagometer.frameCount - 1 - a ) & (LAG_SAMPLES - 1);
-		v = lagometer.frameSamples[i];
-		v *= vscale;
-		if ( v > 0 ) {
-			if ( color != 1 ) {
-				color = 1;
-				trap->R_SetColor( g_color_table[ColorIndex(COLOR_YELLOW)] );
-			}
-			if ( v > range ) {
-				v = range;
-			}
-			trap->R_DrawStretchPic ( ax + aw - a, mid - v, 1, v, 0, 0, 0, 0, cgs.media.whiteShader );
-		} else if ( v < 0 ) {
-			if ( color != 2 ) {
-				color = 2;
-				trap->R_SetColor( g_color_table[ColorIndex(COLOR_BLUE)] );
-			}
-			v = -v;
-			if ( v > range ) {
-				v = range;
-			}
-			trap->R_DrawStretchPic( ax + aw - a, mid, 1, v, 0, 0, 0, 0, cgs.media.whiteShader );
+	// the input margin
+	for ( a = 0 ; a < LAG_COLUMNS ; a++ ) {
+		slice = CG_LagometerColumn( now, a );
+		if ( !slice || !slice->margins ) {
+			continue;
+		}
+		x = ax + LAG_COLUMNS - a;
+		if ( slice->marginMin < 0 ) {
+			CG_LagometerBar( x, ay, LAG_MARGIN_HEIGHT, COLOR_MAGENTA, &colour );
+		} else {
+			v = slice->marginMax * ( (float)LAG_MARGIN_HEIGHT / LAG_MARGIN_MSEC );
+			v = Com_Clamp( 1, LAG_MARGIN_HEIGHT, v );	// a margin under a pixel still shows
+			CG_LagometerBar( x, ay + LAG_MARGIN_HEIGHT - v, v, COLOR_CYAN, &colour );
 		}
 	}
 
-	// draw the snapshot latency / drop graph
-	range = ah / 2;
-	vscale = range / MAX_LAGOMETER_PING;
+	// the drawn time against the newest snapshot: behind it / past it
+	for ( a = 0 ; a < LAG_COLUMNS ; a++ ) {
+		slice = CG_LagometerColumn( now, a );
+		if ( !slice || !slice->frames ) {
+			continue;
+		}
+		x = ax + LAG_COLUMNS - a;
+		if ( slice->frameMax > 0 ) {
+			v = slice->frameMax * ( (float)LAG_DELAY_DOWN / LAG_DELAY_MSEC );
+			v = Q_min( v, LAG_DELAY_UP );
+			CG_LagometerBar( x, ay + LAG_DELAY_MID - v, v, COLOR_YELLOW, &colour );
+		} else if ( slice->frameMin < 0 ) {
+			v = -slice->frameMin * ( (float)LAG_DELAY_DOWN / LAG_DELAY_MSEC );
+			v = Q_min( v, LAG_DELAY_DOWN );
+			CG_LagometerBar( x, ay + LAG_DELAY_MID, v, COLOR_BLUE, &colour );
+		}
+	}
 
-	for ( a = 0 ; a < aw ; a++ ) {
-		i = ( lagometer.snapshotCount - 1 - a ) & (LAG_SAMPLES - 1);
-		v = lagometer.snapshotSamples[i];
-		if ( v > 0 ) {
-			if ( lagometer.snapshotFlags[i] & SNAPFLAG_RATE_DELAYED ) {
-				if ( color != 5 ) {
-					color = 5;	// YELLOW for rate delay
-					trap->R_SetColor( g_color_table[ColorIndex(COLOR_YELLOW)] );
-				}
-			} else {
-				if ( color != 3 ) {
-					color = 3;
-					trap->R_SetColor( g_color_table[ColorIndex(COLOR_GREEN)] );
-				}
-			}
-			v = v * vscale;
-			if ( v > range ) {
-				v = range;
-			}
-			trap->R_DrawStretchPic( ax + aw - a, ay + ah - v, 1, v, 0, 0, 0, 0, cgs.media.whiteShader );
-		} else if ( v < 0 ) {
-			if ( color != 4 ) {
-				color = 4;		// RED for dropped snapshots
-				trap->R_SetColor( g_color_table[ColorIndex(COLOR_RED)] );
-			}
-			trap->R_DrawStretchPic( ax + aw - a, ay + ah - range, 1, range, 0, 0, 0, 0, cgs.media.whiteShader );
+	// the snapshots: latency / drop
+	for ( a = 0 ; a < LAG_COLUMNS ; a++ ) {
+		slice = CG_LagometerColumn( now, a );
+		if ( !slice ) {
+			continue;
+		}
+		x = ax + LAG_COLUMNS - a;
+		if ( slice->dropped ) {
+			CG_LagometerBar( x, ay + LAG_HEIGHT - LAG_PING_HEIGHT, LAG_PING_HEIGHT, COLOR_RED, &colour );
+		}
+		if ( slice->snapshots && slice->ping > 0 ) {
+			v = slice->ping * ( (float)LAG_PING_HEIGHT / LAG_PING_MSEC );
+			v = Q_min( v, LAG_PING_HEIGHT );
+			CG_LagometerBar( x, ay + LAG_HEIGHT - v, v,
+				( slice->snapFlags & SNAPFLAG_RATE_DELAYED ) ? COLOR_YELLOW : COLOR_GREEN, &colour );
 		}
 	}
 

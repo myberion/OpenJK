@@ -960,6 +960,21 @@ Removed cvars. A removed cvar keeps the behaviour of its default, except `cg_smo
 
 Changed: `cl_shownet` has levels 1, 2 and 3 (section 13). `g_userinfoValidate` has a new default (section 8).
 
+Changed: the lagometer (`cg_lagometer 1`) counts in time and shows one more measure. A column was one drawn frame (upper graph) or one snapshot (lower graph): the graph held 0.48 s at 100 frames per second and 0.14 s at 333, so a loss left it before it could be read, sooner for a player at a high frame rate. A column is now 50 ms of real time and shows the worst of what happened in it: 2.4 s for everyone. Every bar is a delay, so a thin graph is a good connection: the usual values are about one pixel high.
+
+| where, colour | what it measures | what it means for you | usual | when it grows |
+|---|---|---|---|---|
+| top, cyan (new) | how long your command waited on the server before the tick that ran it (the input margin; the highest of the 50 ms) | a delay added to your keys and your mouse; the client keeps it as short as it safely can | about 4 ms: 1 pixel (12 pixels for 50 ms) | your packets reach the server irregularly: the client then sends them earlier so that none is late |
+| top, magenta (new), the whole band | a command reached the server after its tick | the server ran that tick with your previous command; what you had just pressed took effect a tick later (10 ms) | none | packets of yours late or lost |
+| middle, blue, below the line | how far behind the newest snapshot the world is drawn (the farthest of the 50 ms) | the other players are shown that much in the past, on top of the network's own delay | 7 to 11 ms: 1 pixel (16 pixels for 150 ms) | the snapshots arrive irregularly or get lost: the client waits longer so that the next one is there in time |
+| middle, yellow, above the line | a frame was drawn after the newest snapshot ran out: the next one was late | the other players stand still for that time, then catch up at once | none | a snapshot later than the blue delay covers |
+| bottom, green | your ping (the highest of the 50 ms) | the round trip to the server: your own movement is predicted, but hits, damage and the other players reach you after it | 20 ms is half a pixel, 100 ms about 3 pixels (24 pixels for 900 ms, as before) | the route to the server |
+| bottom, yellow in place of green | the server held a snapshot back to respect the rate | a snapshot sent late | none: the rate is 200,000 bytes per second | a message far larger than usual |
+| bottom, red, the whole band | a snapshot of the server never arrived | the other players' positions of that tick are missing: if the next snapshot is not there in time, they stand still until it comes (the yellow above the line) | none | loss on the way from the server |
+| an empty column | nothing was read in those 50 ms | the connection was interrupted, or the client itself was stopped (a load, for example) | none | |
+
+The client gives cgame the input margin with each snapshot (`snapshot_t`, `cgame/cg_public.h`): the client and cgame must be of the same build. Details: [progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md) section 16.
+
 Added cvars, all for debugging or measuring:
 
 | cvar | side | what it does |
@@ -1012,8 +1027,9 @@ Added commands. The statistics commands print their counters since the previous 
 | subject | where |
 |---|---|
 | Lag compensation: none, as in OpenJK (planned for the hitscan shots, dropped on 14 November 2026) | plan step 14, part 8 |
-| The lagometer in time; the freeze when the scoreboard first shows players whose models are not loaded | plan step 14, part 9 |
+| The freeze when the scoreboard first shows players whose models are not loaded | plan step 14, part 9 |
 | The size of demos at 100 messages per second, a long client hitch, the sound louder at 333 frames per second than at 125 (as in OpenJK), priority and culling per client | plan step 14, part 11 |
+| The delay the other players are drawn with depends on your frame rate: about 2 ms at 100 frames per second, 7 at 125, 11 at 333 | plan step 14, part 11 |
 | Encryption, or a replacement for the removed obfuscation; several download blocks per message | plan step 12 |
 | Tables retrained on games of this build; the force power levels the prediction lacks; a wider `saberAttackChainCount` | plan step 13 |
 | The client's window, input and sound device rewritten on SDL 3 | plan step 15 |

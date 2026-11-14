@@ -92,7 +92,7 @@ The old algorithm with `cl_timeNudge 0` gave about 55 to 56 ms on a stable link 
 - The freeze when the scoreboard first shows players whose models are not loaded.
 - The prediction misses when crouching or jumping while attacking (seen in step 8, the base game's too).
 
-What became of them (14 November 2026, [step-14-fixed-tick.md](step-14-fixed-tick.md)): `cg_smoothClients` is removed, the other players always interpolated (part 6); instead of `sv_fps` 40 with the saber adapted, the server ticks at a fixed 100 Hz and the game's logic stays at 20 Hz, and the interpolation delay is 7 to 11 ms (parts 2 to 4); lag compensation is decided for the hitscan shots only and not done (part 8); the scoreboard's freeze is not done (part 9); the prediction was measured field by field and corrected (part 10), and one cause of the misses while attacking, `saberAttackChainCount` sent on 4 bits, is fixed with the format change of plan step 13.
+What became of them (14 November 2026, [step-14-fixed-tick.md](step-14-fixed-tick.md)): `cg_smoothClients` is removed, the other players always interpolated (part 6); instead of `sv_fps` 40 with the saber adapted, the server ticks at a fixed 100 Hz and the game's logic stays at 20 Hz, and the interpolation delay is 7 to 11 ms (parts 2 to 4); lag compensation, decided for the hitscan shots only, was dropped on 14 November 2026 (part 8); the scoreboard's freeze is not done (part 9); the prediction was measured field by field and corrected (part 10), and one cause of the misses while attacking, `saberAttackChainCount` sent on 4 bits, is fixed with the format change of plan step 13.
 
 ## How to repeat the checks
 

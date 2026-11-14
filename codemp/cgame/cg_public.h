@@ -42,6 +42,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 typedef struct snapshot_s {
 	int				snapFlags;			// SNAPFLAG_RATE_DELAYED, etc
 	int				ping;
+	qboolean		inputMarginValid;	// the server measured how early it got the command of this snapshot's tick
+	int				inputMargin;		// that margin in ms (negative: the command came after its tick)
 
 	int				serverTime;		// server time the message is valid for (in msec)
 

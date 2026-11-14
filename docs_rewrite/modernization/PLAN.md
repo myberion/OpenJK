@@ -204,7 +204,7 @@ The items as listed before the survey (05 section 5.7):
 - the freeze when the scoreboard (Tab) first shows players whose models are not loaded yet (cgame loads them then; seen during step 11): load them earlier;
 - a fixed physics step (`pmove_*`, 04 section 4.10), a gameplay decision.
 
-Placed on 14 November 2026 (owner: every open point gets a place; the parts are in [progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md) section 5): the cost of the statistics commands with part 7 (server CPU); the prediction of the local player, the saber first, with the animation misses and the misses when crouching or jumping while attacking, as part 10; what the audits and the sessions left (the demos' size at 100 messages per second, the dead code reported, a long client hitch, the sound at 333 frames per second, priority and culling) as part 11, at the end of the step.
+Placed on 14 November 2026 (owner: every open point gets a place; the parts are in [progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md) section 5): the cost of the statistics commands with part 7 (server CPU); the prediction of the local player, the saber first, with the animation misses and the misses when crouching or jumping while attacking, as part 10; what the audits and the sessions left (the demos' size at 100 messages per second, the dead code reported, a long client hitch, the sound at 333 frames per second, priority and culling) as part 11, at the end of the step. Added to part 11 on 14 November 2026: the drawn delay of the other players depends on the frame rate (section 17 of that document).
 
 ### Step 15: a new platform layer on SDL 3 (L)
 
