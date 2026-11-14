@@ -891,7 +891,7 @@ In real time on the VPS (GCC, 120 s, one run per build, another game each time, 
 
 Checks on the final tree: the VM validations pass (`validate.sh` with GCC and Clang, `validate.bat` with MSVC, the 32-bit tests included, which run the movement's determinism hashes over the header 7b changed); the 40 scenarios give the recorded counts (`golden: SAME`) with clang and with MSVC on Windows and with GCC on the VPS.
 
-## 16. Part 9 (cgame): the lagometer in time (14 November 2026)
+## 16. Part 9 (cgame): the lagometer in time, the freeze at the first scoreboard (14 November 2026)
 
 Part 9 has two sub-parts (owner, 14 November 2026): 9a, the lagometer, written here; 9b, the freeze at the first scoreboard, whose cause is to be found before anything is decided (owner: fix it at its source rather than choose when it happens).
 
@@ -923,7 +923,29 @@ The scales (owner, 14 November 2026, after seeing a first version in game): the 
 
 Display only: nothing changes in the game, the messages or the clocks. Built with clang (the client and cgame, no warning). To check in game (owner): thin lines at a low ping (cyan, blue and green about a pixel each); the same span at 100, 125 and 333 frames per second; a loss made with `net_dropsim` stays 2.4 s on the graph.
 
-## 17. Part 11, an item added on 14 November 2026: the drawn delay of the other players depends on the frame rate
+### 9b: the cause of the freeze, measured (14 November 2026)
+
+What happens: a player who joins with a model not loaded yet is drawn with another player's model (`cg_deferPlayers` 1, `CG_SetDeferredClientInfo`, `cgame/cg_players.c`); every waiting model is loaded in one frame once the scoreboard has been up for more than 10 frames (`cgame/cg_scoreboard.c`) or on the command `loaddeferred`. The client's main loop is stopped for that frame: no command leaves.
+
+The measure: a sampling profile of the client (samply through ETW, 4,000 samples per second; the client, cgame and the renderer built by clang with `-g -gdwarf -gcodeview` and a PDB in `build-netcodec/openjk-clang-prof-client`, started through lldb with `_NO_DEBUG_HEAP=1`; a window of 640 x 480, the sound device open at volume 0). A local game on `mp/ffa3`; ten bots with ten models join (Alora, Chewbacca, Cultist, Desann, Gran, Noghri, Rodian, Tavion, Trandoshan, Weequay), then `loaddeferred`. The samples under `CG_LoadClientInfo`, with `tools/prof/server_report.py` (`PROF_PROCESS=openjk PROF_ROOT=CG_LoadClientInfo`):
+
+| ten models | as shipped (`r_ext_compress_textures` 1) | `r_ext_compress_textures` 0 |
+|---|---|---|
+| the freeze | 2,614 samples: 653 ms, 65 ms per model | 1,087 samples: 272 ms, 27 ms per model |
+| `glTexImage2D` (the textures given to the driver) | 57.3 %: 374 ms, nearly all of it waiting inside the driver | 10.0 %: 27 ms |
+| the images read and decoded (`R_LoadImage`; JPEG for most of it) | 25.6 %: 167 ms | 53.8 %: 146 ms |
+| the shader text scanned for each name (`COM_ParseExt`, `SkipBracedSection` under `R_FindShader`) | about 5 % | 13 %: 36 ms |
+| the sounds (`CG_LoadCISounds`) | 4.3 %: 28 ms | 5.5 %: 15 ms |
+
+The cause, in order:
+
+1. **The textures are compressed by the graphics driver when they are loaded.** The renderer hands each mip level as plain RGBA and asks for a compressed internal format (`GL_COMPRESSED_RGB_S3TC_DXT1_EXT`, `GL_COMPRESSED_RGBA_S3TC_DXT5_EXT`, `rd-vanilla/tr_image.cpp`), so the driver compresses it at once and the call waits: more than half of the freeze. A choice of 2003, for the video memory of that time. It weighs on every load: the map's own loading (`CL_InitCGame`) took 2.20 s with it and 1.16 s without in these two runs.
+2. **The JPEG images are decoded on the main thread**, by the library's plain C code (`lib/jpeg-9a`): half of what is left without the compression.
+3. **A name that has no shader script is looked for twice**: in the hash table of the scripts, then by reading the whole text of every script from its start (`FindShaderInShaderText`, `rd-vanilla/tr_shader.cpp`); the second search can find nothing the first did not, if the table holds every script (to check before removing it).
+4. The sounds and the files' reading are small. The model file itself does not show: in a local game the server part had loaded it already; against a remote server the client loads it, not measured here.
+
+All of it clang on the owner's machine and its graphics driver; the shares depend on the driver. What recent engines and ioquake3 do about loading in play, and the options with their costs: [../surveys/asset-loading.md](../surveys/asset-loading.md). Not decided: what to change (owner).
+: the drawn delay of the other players depends on the frame rate
 
 Seen by the owner on the new lagometer (the blue line far thinner at `com_maxfps 100` than at 125), and measured in part 10 (section 14): when a snapshot arrives, the drawn time is 2.1 ms behind it at 100 frames per second, 7.0 ms at 125 and 10.6 ms at 333. Two players on the same server at the same ping do not see the others at the same instant: about 8 ms apart between 100 and 333 frames per second. By the owner's rule (a delay that depends on the frame rate is an inequality between players), it is a defect; the input margin was made independent of the frame rate in part 10, this delay was not.
 

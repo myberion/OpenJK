@@ -1,20 +1,22 @@
 """Report of a samply profile (Windows, ETW) of the dedicated server: the samples of its main thread whose stack holds
 a root function (SV_Frame), by phase (the first of the given phase functions found from the root down), then for each
 phase the functions by inclusive and by self share. Symbols from samply's .syms.json sidecar (--unstable-presymbolicate).
-Usage: python -I server_report.py <profile.json.gz> <profile.json.syms.json> [top] [phase ...]"""
+Usage: python -I server_report.py <profile.json.gz> <profile.json.syms.json> [top] [phase ...]
+For another program or root function: PROF_PROCESS=openjk.x86_64 PROF_ROOT=CG_LoadClientInfo in the environment."""
 import bisect
 import collections
 import gzip
 import json
+import os
 import sys
 
 prof = json.load(gzip.open(sys.argv[1]))
 syms = json.load(open(sys.argv[2]))
 top = int(sys.argv[3]) if len(sys.argv) > 3 else 25
-ROOT = "SV_Frame"
+ROOT = os.environ.get("PROF_ROOT", "SV_Frame")
 PHASES = sys.argv[4:] or ["SV_BotFrame", "SV_RunClientCommands", "G_RunFrame", "SV_SendClientMessages", "SV_CalcPings"]
 
-th = max((t for t in prof["threads"] if t.get("processName", "").startswith("openjkded")),
+th = max((t for t in prof["threads"] if t.get("processName", "").startswith(os.environ.get("PROF_PROCESS", "openjkded"))),
          key=lambda t: t["samples"]["length"])
 libs = prof["libs"]
 res_lib = th["resourceTable"]["lib"]
