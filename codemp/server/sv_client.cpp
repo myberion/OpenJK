@@ -135,7 +135,7 @@ void SV_DirectConnect( const netadr_t *from ) {
 	char		userinfo[MAX_INFO_STRING];
 	int			i;
 	client_t	*cl, *newcl;
-	client_t	temp;
+	static client_t	temp;	// not on the stack: 896 KB with the 128 snapshots of plan step 14 part 5, over Windows' 1 MB
 	sharedEntity_t *ent;
 	int			clientNum;
 	int			version;
