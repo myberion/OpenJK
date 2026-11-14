@@ -20,8 +20,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
-// q_pk3.h -- the pk3 files: ZIP archives whose files are stored or deflated. The file systems of the multiplayer
-// and the single-player engines (qcommon/files.cpp) read their archives through these functions; q_pk3.cpp is the
+// q_pk3.h -- the pk3 files: ZIP archives whose files are stored or deflated. The file system of the multiplayer
+// and the single-player engines (files.cpp) reads its archives through these functions; q_pk3.cpp is the
 // only file that knows the library that inflates them.
 
 typedef struct pk3Archive_s pk3Archive_t;	// an archive open for reading, with its directory

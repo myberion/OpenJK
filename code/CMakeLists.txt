@@ -162,7 +162,7 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 		"${SPDir}/qcommon/common.cpp"
 		"${SPDir}/qcommon/cvar.cpp"
 
-		"${SPDir}/qcommon/files.cpp"
+		"${SPDir}/qcommon/files_engine.h"
 
 		"${SPDir}/qcommon/md4.cpp"
 		"${SPDir}/qcommon/msg.cpp"
@@ -193,6 +193,8 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 		"${SPDir}/qcommon/ojk_saved_game_helper.h"
 		"${SPDir}/qcommon/ojk_saved_game_helper_fwd.h"
 		"${SPDir}/qcommon/ojk_scope_guard.h"
+		"${SharedDir}/qcommon/files.cpp"
+		"${SharedDir}/qcommon/files.h"
 		"${SharedDir}/qcommon/q_pk3.cpp"
 		"${SharedDir}/qcommon/q_pk3.h"
 

@@ -1008,6 +1008,26 @@ Checked here:
 
 Not checked: the builds were not run on the VMs' side (the game with MSVC, the server on the VPS); the client's profile was not taken again, so the gain in a model's load stays the survey's estimate (under 1 ms of 18.8); the streamed music was not listened to (volume 0.02, no error); Jedi Outcast.
 
+### One file system for the two engines (14 November 2026)
+
+Asked by the owner after the pk3 reader (no file twice between `code/` and `codemp/`): `qcommon/files.cpp` existed twice, 3,071 lines in the single-player engine and 4,384 in the multiplayer one. Compared function by function: 56 identical, 21 present in both and different (590 lines), 22 in the multiplayer one only (the pure server, the referenced pk3 files, the downloads: 745 lines), 2 in the single-player one only (the saved games' files). The single-player file system was the multiplayer one without the pure server.
+
+What changed:
+
+- `shared/qcommon/files.cpp` (4,428 lines) is the multiplayer file with five places changed, and `shared/qcommon/files.h` is its interface: the block of `FS_` declarations the two `qcommon/qcommon.h` held, which each now includes. The two functions of the saved games (`FS_DeleteUserGenFile`, `FS_MoveUserGenFile`) are added to both. `code/qcommon/files.cpp` and `codemp/qcommon/files.cpp` are removed.
+- What differs between the two engines is in a header each engine has, `qcommon/files_engine.h`, with no `#ifdef` in the shared file (as the renderers' `tr_common.h` for the image codec): the name of the configuration a game folder must hold (`mpdefault.cfg`, `default.cfg`) and of the automatic one (`autoexec.cfg`, `autoexec_sp.cfg`); whether a module found in a pk3 is loaded (multiplayer only); the sound buffer cleared before a file is read whole and the memory's label (single-player only). The single-player header also gives the file system what its engine does not have: no journal, no temporary memory on the hunk, no description for a cvar or a command.
+- The single-player engine keeps: its configuration names, its modules loaded from folders only, the sound buffer cleared before each file read, the saved games' functions. It takes the multiplayer code elsewhere, the pure server's and the referenced files' included, which stays idle there (no server ever sets a pure list). What that changes in it: a pk3 whose name starts with `dl_` is loaded only when a server references it, so never; the cvar `fs_forcegame` exists; the paths of the home and the base folders are compared as paths (`Sys_PathCmp`, which the single-player file noted as to do); the list of the open files is no longer printed before the error "none free"; in development builds, the warning for a file not precached is the multiplayer one.
+- The single-player callers of the three signatures that differed: `FS_Shutdown( qtrue )` (`common.cpp`), `FS_Restart( 0 )` (`ui_main.cpp`), and the renderer's `FS_FileIsInPAK`, which takes no checksum, through `CL_FileIsInPAK` (`cl_main.cpp`).
+
+Checked here (clang):
+
+- The multiplayer engines are unchanged: in the object file of the file system, the 88 functions have the same instructions before and after, in the client and in the dedicated server (`llvm-objdump`, the addresses of the constants left out); two functions are added, the saved games', which nothing calls there.
+- The dedicated server on `mp/ffa3` with two bots and `fs_debug 1`: the same log before and after, 257 lines, 191 files opened in the same order, the same `sv_paks`.
+- The single-player client, the same scripted session before and after with `fs_debug 1` (`academy1`, the automatic save written, then loaded): the same log, 2,489 lines, 2,324 files opened in the same order (the menus' load times apart); the save is written and loaded, the scene after the load is the same.
+- The three engines, the three renderers and the four modules build, with no new warning; the shared file also compiles without `FINAL_BUILD` in both engines and with `JK2_MODE`.
+
+Not checked: MSVC and GCC (the owner's builds); Jedi Outcast run; a single-player mod folder (`fs_game`) and the `fs_restart` it causes; macOS.
+
 ## 17. Part 11, an item added on 14 November 2026: the drawn delay of the other players depends on the frame rate
 
 Seen by the owner on the new lagometer (the blue line far thinner at `com_maxfps 100` than at 125), and measured in part 10 (section 14): when a snapshot arrives, the drawn time is 2.1 ms behind it at 100 frames per second, 7.0 ms at 125 and 10.6 ms at 333. Two players on the same server at the same ping do not see the others at the same instant: about 8 ms apart between 100 and 333 frames per second. By the owner's rule (a delay that depends on the frame rate is an inequality between players), it is a defect; the input margin was made independent of the frame rate in part 10, this delay was not.

@@ -230,7 +230,7 @@ if(BuildMPEngine OR BuildMPDed)
 		"${MPDir}/qcommon/common.cpp"
 		"${MPDir}/qcommon/cvar.cpp"
 		"${MPDir}/qcommon/disablewarnings.h"
-		"${MPDir}/qcommon/files.cpp"
+		"${MPDir}/qcommon/files_engine.h"
 		"${MPDir}/qcommon/game_version.h"
 		"${MPDir}/qcommon/GenericParser2.cpp"
 		"${MPDir}/qcommon/GenericParser2.h"
@@ -259,6 +259,8 @@ if(BuildMPEngine OR BuildMPDed)
 		"${MPDir}/qcommon/timing.h"
 		"${MPDir}/qcommon/vm.cpp"
 		"${MPDir}/qcommon/z_memman_pc.cpp"
+		"${SharedDir}/qcommon/files.cpp"
+		"${SharedDir}/qcommon/files.h"
 		"${SharedDir}/qcommon/q_pk3.cpp"
 		"${SharedDir}/qcommon/q_pk3.h"
 

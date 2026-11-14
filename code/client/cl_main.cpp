@@ -1081,6 +1081,11 @@ static CMiniHeap *GetG2VertSpaceServer( void ) {
 #define DEFAULT_RENDER_LIBRARY	"rdsp-vanilla"
 #endif
 
+// the renderer asks without the checksum the file system can give with its answer
+static int CL_FileIsInPAK( const char *filename ) {
+	return FS_FileIsInPAK( filename, NULL );
+}
+
 void CL_InitRef( void ) {
 	refexport_t	*ret;
 	static refimport_t rit;
@@ -1136,7 +1141,7 @@ void CL_InitRef( void ) {
 	RIT(Cvar_VariableStringBuffer);
 	RIT(Cvar_VariableValue);
 	RIT(FS_FCloseFile);
-	RIT(FS_FileIsInPAK);
+	rit.FS_FileIsInPAK = CL_FileIsInPAK;
 	RIT(FS_FOpenFileByMode);
 	RIT(FS_FOpenFileRead);
 	RIT(FS_FOpenFileWrite);

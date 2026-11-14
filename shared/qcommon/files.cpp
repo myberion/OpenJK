@@ -30,7 +30,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
  *
  *****************************************************************************/
 
+// One file system for the multiplayer and the single-player engines. What differs between them is in each engine's
+// qcommon/files_engine.h; the single-player engine has no pure server and no download, whose code here is idle in it.
 #include "qcommon/qcommon.h"
+#include "qcommon/files_engine.h"
 
 #ifndef DEDICATED
 #ifndef FINAL_BUILD
@@ -681,6 +684,42 @@ void FS_HomeRemove( const char *homePath ) {
 
 	remove( FS_BuildOSPath( fs_homepath->string,
 			fs_gamedir, homePath ) );
+}
+
+/*
+===========
+FS_DeleteUserGenFile, FS_MoveUserGenFile
+
+Used by the saved games; filenames are local (eg "saves/blah.sav")
+===========
+*/
+void FS_DeleteUserGenFile( const char *filename ) {
+	FS_HomeRemove( filename );
+}
+
+// filenames are local (eg "saves/blah.sav")
+//
+// return: qtrue = OK
+//
+qboolean FS_MoveUserGenFile( const char *filename_src, const char *filename_dst ) {
+	char			*from_ospath, *to_ospath;
+
+	FS_AssertInitialised();
+
+	// don't let sound stutter
+	FS_QuietSound();
+
+	from_ospath = FS_BuildOSPath( fs_homepath->string, fs_gamedir, filename_src );
+	to_ospath = FS_BuildOSPath( fs_homepath->string, fs_gamedir, filename_dst );
+
+	if ( fs_debug->integer ) {
+		Com_Printf( "FS_MoveUserGenFile: %s --> %s\n", from_ospath, to_ospath );
+	}
+
+	FS_CheckFilenameIsMutable( to_ospath, __func__ );
+
+	remove( to_ospath );
+	return (qboolean)!rename( from_ospath, to_ospath );
 }
 
 /*
@@ -1344,7 +1383,7 @@ long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean unique
 		return -1;
 	}
 
-	isUserConfig = !Q_stricmp( filename, "autoexec.cfg" ) || !Q_stricmp( filename, Q3CONFIG_CFG );
+	isUserConfig = !Q_stricmp( filename, FS_AUTOEXEC_CFG ) || !Q_stricmp( filename, Q3CONFIG_CFG );
 
 	//
 	// search through the path, one element at a time
@@ -1864,6 +1903,8 @@ long FS_ReadFile( const char *qpath, void **buffer ) {
 		Com_Error( ERR_FATAL, "FS_ReadFile with empty name\n" );
 	}
 
+	FS_QuietSound();
+
 	buf = NULL;	// quiet compiler warning
 
 	// if this is a .cfg file and we are playing back a journal, read
@@ -1942,7 +1983,7 @@ long FS_ReadFile( const char *qpath, void **buffer ) {
 	buf[len]='\0';	// because we're not calling Z_Malloc with optional trailing 'bZeroIt' bool
 	*buffer = buf;
 
-//	Z_Label(buf, qpath);
+	FS_LabelFile( buf, qpath );
 
 	if ( FS_Read (buf, len, h) != len ) {
 		// a file that cannot be read whole (a damaged archive: the reader said why) is a file that is not there
@@ -3938,8 +3979,8 @@ void FS_InitFilesystem( void ) {
 	// if we can't find default.cfg, assume that the paths are
 	// busted and error out now, rather than getting an unreadable
 	// graphics screen when the font fails to load
-	if ( FS_ReadFile( "mpdefault.cfg", NULL ) <= 0 ) {
-		Com_Error( ERR_FATAL, "Couldn't load mpdefault.cfg" );
+	if ( FS_ReadFile( FS_DEFAULT_CFG, NULL ) <= 0 ) {
+		Com_Error( ERR_FATAL, "Couldn't load " FS_DEFAULT_CFG );
 		// bk001208 - SafeMode see below, FIXME?
 	}
 
@@ -3975,7 +4016,7 @@ void FS_Restart( int checksumFeed, qboolean inPlace ) {
 	// if we can't find default.cfg, assume that the paths are
 	// busted and error out now, rather than getting an unreadable
 	// graphics screen when the font fails to load
-	if ( FS_ReadFile( "mpdefault.cfg", NULL ) <= 0 ) {
+	if ( FS_ReadFile( FS_DEFAULT_CFG, NULL ) <= 0 ) {
 		// this might happen when connecting to a pure server not using BASEGAME/pak0.pk3
 		// (for instance a TA demo server)
 		if (lastValidBase[0]) {
@@ -3988,7 +4029,7 @@ void FS_Restart( int checksumFeed, qboolean inPlace ) {
 			Com_Error( ERR_DROP, "Invalid game folder\n" );
 			return;
 		}
-		Com_Error( ERR_FATAL, "Couldn't load mpdefault.cfg" );
+		Com_Error( ERR_FATAL, "Couldn't load " FS_DEFAULT_CFG );
 	}
 
 	if ( Q_stricmp(fs_gamedirvar->string, lastValidGame) && !fs_forcegame->string[0] ) {
@@ -4247,6 +4288,9 @@ bool FS_LoadMachOBundle( const char *name )
 
 qboolean FS_WriteToTemporaryFile( const void *data, size_t dataLength, char **tempFilePath )
 {
+	if ( !FS_MODULES_FROM_PAKS ) {
+		return qfalse;
+	}
 #if defined(_WIN32)
 	DWORD error;
 	TCHAR tempPath[MAX_PATH];
