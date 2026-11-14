@@ -62,7 +62,7 @@ In game, owner, 10 November 2026, MSVC x64 client, bots. Each line is one window
 - Ping: 24 ms in the score board for a network round trip of 15 ms (`ping` of the VPS from the same machine): the round trip, plus the wait for the client's next packet (one every 16 ms at `cl_maxpackets` 63, 8 ms on average), plus processing; the legacy measure moved in 50 ms steps.
 - Prediction misses (`cg_showmiss 1`): 0.12 to 0.35 unit in normal play. Crouching or jumping while attacking someone gives larger ones, also with the reference build: the saber's special moves depend on what only the server knows at the moment of the hit (the opponent's position and block, the knockback); an entry point for plan step 14. With 20 % of the client packets lost (`net_dropsim 20` on the server): 0.14 to 1.1, a run at 0.74 to 0.80 while moving, and peaks of 7.6 and 12 in jumps: with `cl_packetdup` 1, two consecutive lost packets lose user commands, and the server then runs one long step where the client predicted several short ones (variable step). Part 3 does not change this (the server executes the commands it receives, as before; not compared with the reference build under loss); the remedies are plan step 10 (every user command not yet acknowledged resent in each packet) and step 14 (a fixed step).
 
-Timing against `972172204`, the commit before this part, 10 alternated rounds on a quiet machine, the legacy coder stable within 2.5 % in each build (`BENCH=client` with `ab_clang.sh` here and `ab_gcc.sh` on the Debian VM, `ABM_BENCH=client` with `ab_msvc.bat` on the Windows VM), nanoseconds per packet on the six recorded sessions, before and after:
+Timing against the commit before this part, 10 alternated rounds on a quiet machine, the legacy coder stable within 2.5 % in each build (`BENCH=client` with `ab_clang.sh` here and `ab_gcc.sh` on the Debian VM, `ABM_BENCH=client` with `ab_msvc.bat` on the Windows VM), nanoseconds per packet on the six recorded sessions, before and after:
 
 | | clang x64 (this machine) | GCC 12 x64 (Debian VM, the server target) | MSVC x64 (Windows VM) |
 |---|---|---|---|
@@ -135,7 +135,7 @@ build-netcodec/mingw-clang-release/bench/netcodec_bench_client.exe docs_rewrite/
   | C alone (60 fps, 2 per packet) | 32.27 | 8.21 | 0.254 |
 
   The difference with the ideal 8.15 bytes is mostly the rANS final state, 4 bytes per message of which about 1.8 are overhead (step 6), which weighs on packets this short.
-- Sizes and coding times, legacy (`msg.cpp`) then netcodec (10 November 2026, commit `d737012ce`, `netcodec_bench_client` on the six sessions, 81,789 packets, two runs per compiler within 3 %; the host quiet; clang on one fixed core at high priority). The sizes are the same with every compiler: 40.68 bytes per packet, then 10.07 (0.248; the held-out session alone 38.58 then 9.89). Nanoseconds per packet, the ratio in brackets:
+- Sizes and coding times, legacy (`msg.cpp`) then netcodec (10 November 2026, `netcodec_bench_client` on the six sessions, 81,789 packets, two runs per compiler within 3 %; the host quiet; clang on one fixed core at high priority). The sizes are the same with every compiler: 40.68 bytes per packet, then 10.07 (0.248; the held-out session alone 38.58 then 9.89). Nanoseconds per packet, the ratio in brackets:
 
   | compiler | bytes per packet | encoding (client), warm | decoding (server), warm | encoding, cold | decoding, cold |
   |---|---|---|---|---|---|

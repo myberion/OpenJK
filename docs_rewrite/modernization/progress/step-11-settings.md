@@ -18,7 +18,7 @@ The plan asked for a bandwidth estimate per connection that would set the snapsh
 | 8. debug | cheat-protected cvars for the computed value only, statistics in `svnetstats` and `netstats`; the server enforces the packet rate (8a) |
 | 9. cleanup | the old cvars and the UI's `ui_setRate` removed |
 
-## Part 1: measurements (commit `4a78a62dc`)
+## Part 1: measurements
 
 `svnetstats` (`codemp/server/sv_netcodec.cpp`, `server.h`) prints, per client: the user commands per packet, the client packets lost on the way (gaps in the netchan sequence, `netchan.dropped`) with the length of each run, and how much the time a snapshot leaves changes against the game clock it carries (mean and largest change between consecutive snapshots, measured with `std::chrono::steady_clock` in microseconds, since `Sys_Milliseconds` moves by whole milliseconds).
 
@@ -34,14 +34,14 @@ Measured on the VPS (GCC dedicated server, one player, `com_maxfps` 125, `cl_max
 - The send time follows the game clock within 0.10 to 0.11 ms on average (largest 2.0 to 3.4 ms, 0.6 to 0.7 % of the changes of 1 ms or more): far below an Internet path's jitter and the client's arrival resolution, so no time stamp is sent (point 6).
 - Found on the way: with `cl_maxpackets` 100 at 125 fps the client sent 62.7 packets per second, not 100: the cap was a minimum gap between two packets in whole milliseconds, checked once per frame, so 10 ms against frames of 8 ms let a packet leave every second frame only.
 
-## Part 2: fixed settings (commit `e70684278`, fixes in `4aec7fa1d`)
+## Part 2: fixed settings (fixes in the commit of part 3)
 
 - **Server** (`server.h`, `sv_snapshot.cpp`, `sv_main.cpp`, `sv_client.cpp`, `sv_init.cpp`, `sv_ccmds.cpp`, `sv_bot.cpp`): a snapshot every server frame (`1000 / sv_fps`); `SV_CLIENT_RATE` 100,000 bytes per second only delays the snapshot after a message larger than a frame allows (5,000 bytes at 20 Hz), such as a gamestate; LAN clients are no longer special (their rate was already 100,000). `status` loses its `rate` column. Removed: `sv_clientRate`, `sv_ratePolicy`, `sv_minRate`, `sv_maxRate`, `sv_lanForceRate`, `sv_snapsMin`, `sv_snapsMax`, `sv_snapsPolicy`, `sv_timeout`, `sv_zombietime`, and the client's `rate`, `snapshotMsec`, `wishSnaps`.
 - **Client** (`client.h`, `cl_input.cpp`, `cl_main.cpp`, `cl_cgame.cpp`): `CL_ReadyToSendPacket` sends a packet every frame up to `MAX_PACKET_RATE` (125, `qcommon.h`) per second; the unused part of the interval carries over to the next frame (at most one interval), so the client sends min(frame rate, 125) packets per second (a minimum gap checked per frame would give 72 at 144 fps, 82 at 165). `CL_PACKET_DUP` 2 replaces `cl_packetdup`. A local client (loopback) still sends every frame. Removed: `rate`, `snaps`, `cl_maxpackets`, `cl_packetdup`, `cl_lanForcePackets`, `cl_timeout`, and the warning about `rate 4000`.
 - **Server packet limit** (`sv_netcodec.cpp`, `SV_NetcodecPacketAllowed`): the server decodes at most `SV_PACKET_RATE` client packets per second on average, 137 (10 % above the client's 125, whose clock may run slightly faster than the server's: with no margin, a client clock 0.1 % fast would empty the burst in about 17 minutes without a map load and then lose a packet every 8 s), with a burst of `SV_PACKET_BURST` 125 packets; it drops the rest before decoding and counts them ("above the packet rate"). Loopback clients are not limited.
 - **Timeouts** (`qcommon.h`): `TIMEOUT_CONNECTING` 60 s while the client is not in the game (map loading), `TIMEOUT_ACTIVE` 30 s in game, on both sides; `SV_ZOMBIE_TIME` 2 s.
 - **Game module, cgame, UI** (`g_client.c`, `g_bot.c`, `g_xcvar.h`, `cg_servercmds.c`, `ui_main.c`): the advice to set `/snaps` removed; bots no longer send `rate` and `snaps`; cgame no longer sets `snaps`; `ui_setRate` removed. The userinfo validation required `rate` and `snaps`, so every client was refused at connection ("Failed userinfo validation", found in the first test): both fields are removed from `userinfoFields`. `g_userinfoValidate` is a bit mask indexed by the position of each field, so its default becomes 6291455 (the same checks as 25165823); a configuration that still stores the old value turns on the extended ASCII check until `reset g_userinfoValidate` (the cvar is archived even at its default value).
-- **Fixes after a review of the code** (in `4aec7fa1d`): `1000 / sv_fps` in `SV_SendMessageToClient` could divide by zero, since a gamestate can be sent from a client packet before `SV_Frame` corrects `sv_fps 0`; the 10 % margin of the packet limit above; the send-time measure restarts at a gamestate and with a snapshot sent without a base asked (a `map_restart` showed a change of 360 ms).
+- **Fixes after a review of the code** (in the commit of part 3): `1000 / sv_fps` in `SV_SendMessageToClient` could divide by zero, since a gamestate can be sent from a client packet before `SV_Frame` corrects `sv_fps 0`; the 10 % margin of the packet limit above; the send-time measure restarts at a gamestate and with a snapshot sent without a base asked (a `map_restart` showed a change of 360 ms).
 
 Checks (owner, 11 November 2026, VPS and local, `svnetstats` with the packet rate derived from packets per snapshot at 20 per second):
 
@@ -55,7 +55,7 @@ Checks (owner, 11 November 2026, VPS and local, `svnetstats` with the packet rat
 
 The connection is accepted, no "/snaps" advice is printed, `status` reads well, `cg_showmiss` shows no new misses. A few snapshots coded against bases 2 to 8 messages back, and a few server commands resent, came from the freeze when the scoreboard (Tab) first loads player models: the client sends nothing during it.
 
-## Part 3: interpolation delay (commit `4aec7fa1d`)
+## Part 3: interpolation delay
 
 `CL_AdjustTimeDelta` (`codemp/client/cl_cgame.cpp`) computed nothing before: it moved the client's time 1 ms forward at each snapshot and 2 ms back after any frame within 5 ms of the newest snapshot, so it settled where that happened in one interval out of three (5 ms more delay than needed on a stable link, frequent extrapolation with jitter). Now:
 

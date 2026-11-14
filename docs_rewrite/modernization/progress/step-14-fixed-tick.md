@@ -1,6 +1,6 @@
 # Step 14: fixed simulation tick, lag compensation, and the rest of "beyond the codec"
 
-Status (14 November 2026): parts 1 to 7 and 10 done and committed (part 7: section 15); part 8 dropped (owner, 14 November 2026: no lag compensation, section 5); parts 9 and 11 to do (section 5). Part 1: the server's CPU time in `svnetstats` (commit `aded85287`) and the fixed rate of 200,000 bytes per second. Part 2 (game timing, commits `4efd458f0` and `1376279bd`): the game's logic at its 20 Hz pace on a 100 Hz tick, proven identical to `sv_fps` 20 with scripted scenarios (section 9; the working notes, audits and traces are in [step-14-audit-100hz.md](step-14-audit-100hz.md)). Part 3, the tick loop: section 10. Part 4, the commands per tick: section 11. Part 5, the snapshot store: section 12. Part 6, the other players interpolated only: section 13. Part 10, the review of the prediction: section 14. What the branch does now, in plain words, with the delays before and after: [../CHANGES.md](../CHANGES.md). The survey, the measurements and the owner's choices that lead here are in [../surveys/tick-and-lag-compensation.md](../surveys/tick-and-lag-compensation.md). Paths are relative to `codemp/`.
+Status (14 November 2026): parts 1 to 7 and 10 done and committed (part 7: section 15); part 8 dropped (owner, 14 November 2026: no lag compensation, section 5); parts 9 and 11 to do (section 5). Part 1: the server's CPU time in `svnetstats` and the fixed rate of 200,000 bytes per second. Part 2 (game timing): the game's logic at its 20 Hz pace on a 100 Hz tick, proven identical to `sv_fps` 20 with scripted scenarios (section 9; the working notes, audits and traces are in [step-14-audit-100hz.md](step-14-audit-100hz.md)). Part 3, the tick loop: section 10. Part 4, the commands per tick: section 11. Part 5, the snapshot store: section 12. Part 6, the other players interpolated only: section 13. Part 10, the review of the prediction: section 14. What the branch does now, in plain words, with the delays before and after: [../CHANGES.md](../CHANGES.md). The survey, the measurements and the owner's choices that lead here are in [../surveys/tick-and-lag-compensation.md](../surveys/tick-and-lag-compensation.md). Paths are relative to `codemp/`.
 
 Owner's choices (11 November 2026): a fixed simulation tick of 125 Hz (revised the same evening: **100 Hz**, so that every 20 Hz instant is a tick, and the game's logic runs at its 20 Hz pace, identical to `sv_fps` 20: section 9) shared by client and server, lag compensation by tick, rate 200,000 bytes per second; designed from recent games rather than from the JKA mods, cleanly and optimised, even if it means starting again from zero; every defect found on the way fixed; the analysis covers the engine (client and dedicated server), the shared movement (`bg_*`), the game module, cgame, qcommon and the codec.
 
@@ -190,7 +190,7 @@ On Linux (the owner's VPS, GCC 12, fast mode, 4 servers at a time on its single 
 The force powers were disabled in these measurements (the owner's server settings, section 8).
 ## 8. Part 2: the force powers (11 November 2026)
 
-**Superseded (section 9):** the timers rewritten here (commit `00c003c91`) are back to OpenJK's code, which runs on the 20 Hz instants; kept as the record of what was tried.
+**Superseded (section 9):** the timers rewritten here are back to OpenJK's code, which runs on the 20 Hz instants; kept as the record of what was tried.
 
 ### What was found (inventory item G4)
 
@@ -300,7 +300,7 @@ B1 (snapshots without a base above 290 ms of round trip at 100 Hz) and B2 (`svs.
 
 ### Linux and Windows must give identical results (owner, 12 November 2026)
 
-Even where 1.01's own Windows and Linux builds differed. Done: `SnapVector` forces round-to-nearest around `lrintf` and restores the mode, the same code as `Sys_SnapVector` (commit after `9de35ca1a`; owner's report `../snapvector-rounding-report.md`).
+Even where 1.01's own Windows and Linux builds differed. Done: `SnapVector` forces round-to-nearest around `lrintf` and restores the mode, the same code as `Sys_SnapVector` (owner's report `../snapvector-rounding-report.md`).
 
 **Measured.**
 
@@ -581,7 +581,7 @@ Window (owner): 128 messages. Computed from the structures' sizes (532 bytes per
 - The cut with the store by version, on the VPS with `sv_netcodecMaxBytes 100` (owner, 37 s): 3,141 snapshots of 3,746 cut to fit, 61.8 bytes per message, no base refused; on the client 0 message not decoded of 3,339 and 0 snapshot without a base. "Snapshots sent" 124.1 us per tick, as with the first 5a. One tick of 3,746 ran without its command, which came 1 ms after it (jitter 4 ms in that run): the network, not the store.
 - `sv_netcodecCompare 1` in the same session (owner, 100 s, ten prints of 1,000 messages): 112.7 to 171.0 bytes per message against 264.6 to 419.2 in the legacy format, ratio 0.408 to 0.430 (0.417 over the 10,000 messages; 0.389 to 0.433 in step 7), and 0.377 to 0.409 for the client packets. So the 114.7 bytes of the normal play are a larger content (a busier game, the legacy format grows as much), not a worse coding.
 - Looked at in game during these sessions (owner): nothing stayed frozen on the screen (doors, items, missiles, players), which the counters would not show for an entity whose change was missed. **5a is done**, to commit.
-- 5a committed (`6e3c0a645`).
+- 5a committed.
 
 ### 5b written (13 November 2026)
 
@@ -708,7 +708,7 @@ What is left, and why:
 
 ### State of part 10 (14 November 2026)
 
-Done and tested in game by the owner: the movers placed at the server's last 20 Hz instant for the local player's prediction and ride; the other players and entities carried with a mover; the server's rule for an animation left and taken again, in the prediction; the zoomed torso animation no longer left at every step (shared movement code, the server too); `predictmiss` and `tools/predict/ps_fields.sh`. Done, not checked in game: the unsent fields carried over a snapshot (the force during a force jump, the zoom level at the release of the alternate fire); the view held compared on 16 bits; the mover's carry for a spectator, a followed player, `cg_noPredict` and a demo. Decided, not done: the force power levels with plan step 13; the game's own values (the force's regeneration, the jetpack's fuel, the idle animation) and the contact with the other players left as they are. The measures: the position differed in 0.6 % of the ticks before, two thirds of them on a mover; after, 0.4 % in a session next to bots (37 ticks of 9,696, all next to another player, 1.0 unit on average, 2.5 at most) and none on a mover. Part 10 committed (`26c484e9e`).
+Done and tested in game by the owner: the movers placed at the server's last 20 Hz instant for the local player's prediction and ride; the other players and entities carried with a mover; the server's rule for an animation left and taken again, in the prediction; the zoomed torso animation no longer left at every step (shared movement code, the server too); `predictmiss` and `tools/predict/ps_fields.sh`. Done, not checked in game: the unsent fields carried over a snapshot (the force during a force jump, the zoom level at the release of the alternate fire); the view held compared on 16 bits; the mover's carry for a spectator, a followed player, `cg_noPredict` and a demo. Decided, not done: the force power levels with plan step 13; the game's own values (the force's regeneration, the jetpack's fuel, the idle animation) and the contact with the other players left as they are. The measures: the position differed in 0.6 % of the ticks before, two thirds of them on a mover; after, 0.4 % in a session next to bots (37 ticks of 9,696, all next to another player, 1.0 unit on average, 2.5 at most) and none on a mover. Part 10 committed.
 
 ### The rest of the review, read only (14 November 2026)
 

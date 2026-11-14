@@ -1,6 +1,6 @@
 # SnapVector / Sys_SnapVector rounding: findings and one change to make
 
-Date: 10 November 2026. Branch: `feature/poc-netcode` (fix commit `230ed6518`).
+Date: 10 November 2026. Branch: `feature/poc-netcode` (the fix: the commit of plan step 6 that makes `Sys_SnapVector` and `SnapVector` round ties to even).
 Audience: the agent that edits the OpenJK tree. Everything needed is in this file.
 
 ## What to do
@@ -10,14 +10,14 @@ One code change, then doc updates.
 1. In `shared/qcommon/q_math.c`, make `SnapVector` force round-to-nearest around its three `lrintf` calls, the same way `Sys_SnapVector` already does in `shared/sys/snapvector.cpp`.
 2. Update `docs_rewrite/modernization/progress/step-06-cpp-codec.md` (section F) with the points listed under "Doc updates".
 
-Do not change `Sys_SnapVector`: commit `230ed6518` is correct as it is.
+Do not change `Sys_SnapVector`: the fix is correct as it is.
 
 ## Why
 
 Target rule for both functions, on every platform and compiler: round to nearest, exact halves to the even integer, result converted through an integer (so -0.5 gives +0). This is what 1.01 did with `fld` / `fistp`.
 
-- `Sys_SnapVector` after `230ed6518`: matches 1.01 everywhere, in every test. Nothing to do.
-- `SnapVector` after `230ed6518`: matches the target in the default FPU state, but `lrintf` follows the current rounding mode and `SnapVector` does not set it. With the caller in round-toward-zero mode it truncates (measured on every compiler below). The engine does not leave the mode changed anywhere, so this is a robustness fix, not a visible bug.
+- `Sys_SnapVector` after the fix: matches 1.01 everywhere, in every test. Nothing to do.
+- `SnapVector` after the fix: matches the target in the default FPU state, but `lrintf` follows the current rounding mode and `SnapVector` does not set it. With the caller in round-toward-zero mode it truncates (measured on every compiler below). The engine does not leave the mode changed anywhere, so this is a robustness fix, not a visible bug.
 
 ## The change
 
@@ -93,7 +93,7 @@ Method: each function run on every float of [-4096, 4096) on a 1/256 grid (2,097
 | 1.01 Linux (`snapvector.nasm`) | original `linuxjampded`; rebuilt and linked with ICC Classic 2021.1 and 2021.10, GCC 13.3 | even | 0, 2, 0, -224 |
 | OpenJK built with MSVC (`roundfloat`) | MSVC 19.51 x86 and x64 (OpenJK's file); MSVC 6.0 SP6, MSVC 7.1, ICC 5.0.1 Windows (expression) | **away** | **1, 3, -1, -225** |
 | OpenJK built with anything else (`nearbyintf`) | ICC Classic 2021.1 and 2021.10, GCC 13.3, MinGW-w64 i686 | even, but keeps -0 | 0, 2, **-0**, -224 |
-| Fix `230ed6518` (`lrintf`) | MSVC 19.51 x86 and x64, ICC Classic 2021.1 and 2021.10, GCC 13.3, MinGW-w64 i686 | even | 0, 2, 0, -224 |
+| The fix (`lrintf`) | MSVC 19.51 x86 and x64, ICC Classic 2021.1 and 2021.10, GCC 13.3, MinGW-w64 i686 | even | 0, 2, 0, -224 |
 
 Conclusion: the regression is OpenJK's MSVC `roundfloat`, confirmed with the real compiler and with 2001-2003 compilers. The fix is bit-identical to 1.01 (same hash over the grid, sign of zero included).
 
@@ -105,7 +105,7 @@ Conclusion: the regression is OpenJK's MSVC `roundfloat`, confirmed with the rea
 | 1.01 Linux (`(int)` macro, `game/q_shared.h`) | rebuilt with ICC Classic 2021.1 and 2021.10, GCC 13.3 | trunc | 0, 1, 3, 0 |
 | OpenJK built with 32-bit MSVC (`fld` / `fistp`) | MSVC 19.51 x86, MSVC 6.0 SP6, MSVC 7.1, ICC 5.0.1 Windows | even | 1, 2, 4, -1 |
 | OpenJK built with anything else (`(int)`) | MSVC 19.51 x64, ICC Classic 2021.1 and 2021.10, GCC 13.3, MinGW-w64 i686 | trunc | 0, 1, 3, 0 |
-| Fix `230ed6518` (`lrintf`) | MSVC 19.51 x86 and x64, ICC Classic 2021.1 and 2021.10, GCC 13.3, MinGW-w64 i686 | even | 1, 2, 4, -1 |
+| The fix (`lrintf`) | MSVC 19.51 x86 and x64, ICC Classic 2021.1 and 2021.10, GCC 13.3, MinGW-w64 i686 | even | 1, 2, 4, -1 |
 
 Conclusion: 1.01 itself differed between Windows (nearest) and Linux (truncation), so no single rule matches both. The decision is to use the 1.01 Windows rule everywhere: at most 0.5 unit of error instead of 1, no bias toward the map origin, and the same rule as `Sys_SnapVector`.
 
@@ -113,7 +113,7 @@ Conclusion: 1.01 itself differed between Windows (nearest) and Linux (truncation
 
 | Code | MSVC 19.51 x86 | MSVC 19.51 x64 | ICC Classic 2021.10 (SSE2 and x87) | GCC 13.3 (x87) | MinGW-w64 i686 |
 |---|---|---|---|---|---|
-| `230ed6518` (`lrintf`, mode not forced) | trunc | trunc | trunc | trunc | trunc |
+| The fix (`lrintf`, mode not forced) | trunc | trunc | trunc | trunc | trunc |
 | Proposed function above (mode forced) | even | even | even | even | even |
 
 In the default mode the proposed function gives the same hash as 1.01 Windows on all of these builds.
