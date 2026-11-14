@@ -214,7 +214,7 @@ static const Entry kDecoders[] = {
 	{JPEG_NAME, "jpg", DecLibjpeg},
 #endif
 #ifdef WITH_LIBPNG
-	{"libpng (tree)", "png", DecLibpng},
+	{"libpng 1.6.53", "png", DecLibpng},
 #endif
 #ifdef WITH_SPNG
 	{"libspng 0.7.4", "png", DecSpng},

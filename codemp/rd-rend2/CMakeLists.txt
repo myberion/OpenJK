@@ -93,10 +93,8 @@ set(MPRend2RdCommonFiles
 	"${MPDir}/rd-common/tr_common.h"
 	"${MPDir}/rd-common/tr_font.cpp"
 	"${MPDir}/rd-common/tr_font.h"
-	"${MPDir}/rd-common/tr_image_load.cpp"
-	"${MPDir}/rd-common/tr_image_jpg.cpp"
-	"${MPDir}/rd-common/tr_image_tga.cpp"
-	"${MPDir}/rd-common/tr_image_png.cpp"
+	"${SharedDir}/rd-common/tr_image_load.cpp"
+	"${SharedDir}/rd-common/tr_image_codec.cpp"
 	"${MPDir}/rd-common/tr_noise.cpp"
 	"${MPDir}/rd-common/tr_public.h"
 	"${MPDir}/rd-common/tr_types.h")
@@ -116,18 +114,8 @@ set(MPRend2CommonSafeFiles
 source_group("common/safe" FILES ${MPRend2CommonSafeFiles})
 set(MPRend2Files ${MPRend2Files} ${MPRend2CommonSafeFiles})
 
-# Transparently use either bundled or system libjpeg.
-list(APPEND MPRend2IncludeDirectories ${JPEG_INCLUDE_DIR})
-list(APPEND MPRend2Libraries          ${JPEG_LIBRARIES})
-
-# Transparently use either bundled or system libpng.  Order is important --
-# libpng used zlib, so it must come before it on the linker command line.
-list(APPEND MPRend2IncludeDirectories ${PNG_INCLUDE_DIRS})
-list(APPEND MPRend2Libraries          ${PNG_LIBRARIES})
-
-# Transparently use either bundled or system zlib.
-list(APPEND MPRend2IncludeDirectories ${ZLIB_INCLUDE_DIR})
-list(APPEND MPRend2Libraries          ${ZLIB_LIBRARIES})
+# The image libraries, vendored and compiled inside shared/rd-common/tr_image_codec.cpp: Wuffs decodes, stb_image_write writes.
+list(APPEND MPRend2IncludeDirectories "${CMAKE_SOURCE_DIR}/lib/wuffs" "${CMAKE_SOURCE_DIR}/lib/stb")
 
 # Transparently use our bundled minizip.
 list(APPEND MPRend2IncludeDirectories ${MINIZIP_INCLUDE_DIRS})

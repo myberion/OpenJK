@@ -12,7 +12,7 @@ Each source is labelled as in the other surveys: **primary** (the project's own 
 4. stb_image also does the three formats, slower (2.0 times libjpeg 9a, 1.3 times libpng), and its own header sends security-minded users to Wuffs.
 5. No candidate fails on any of the game's 5,875 images.
 6. Wuffs does not write images: the screenshots and the video capture need a writer (stb_image_write, or libjpeg-turbo).
-7. Decided (owner, 14 November 2026): Wuffs for every image the game loads (JPEG, PNG and TGA), at the latest alpha of its version 0.4, the only one with a JPEG decoder; stb_image_write for the images it writes. Not written yet (section 6).
+7. Decided (owner, 14 November 2026): Wuffs for every image the game loads (JPEG, PNG and TGA), at the latest alpha of its version 0.4, the only one with a JPEG decoder; stb_image_write for the images it writes. Written the same day (section 6).
 
 ## 2. What the engine uses today
 
@@ -87,7 +87,7 @@ What it means for the game: all of its images decode in 4.6 s with Wuffs instead
 
 For the writers (JPEG screenshots, video capture, PNG screenshots), with A or C: stb_image_write (one header, not measured), or libjpeg and libpng kept for writing only; with B, libjpeg-turbo writes JPEG.
 
-Recommended: A, with stb_image_write for the writers, which takes libjpeg and libpng out of the multiplayer build (they stay in the repository for the single-player trees, which are out of scope). It is the owner's wish (one library, fast), it needs nothing installed, and its JPEG pixels are already those of the Linux build. Its risk is its version: the JPEG decoder is in 0.4 only, whose tags are still named alpha; against it, the output is equal to libjpeg-turbo's on every JPEG of the game, and the library's kind of safety does not depend on its age. If that status is not acceptable: B.
+Recommended: A, with stb_image_write for the writers, which takes libjpeg and libpng out of the multiplayer build. It is the owner's wish (one library, fast), it needs nothing installed, and its JPEG pixels are already those of the Linux build. Its risk is its version: the JPEG decoder is in 0.4 only, whose tags are still named alpha; against it, the output is equal to libjpeg-turbo's on every JPEG of the game, and the library's kind of safety does not depend on its age. If that status is not acceptable: B.
 
 Asked with it, and answered in section 6:
 
@@ -99,11 +99,11 @@ Asked with it, and answered in section 6:
 - 14 November 2026: no system library; the JPEG and PNG libraries replaced before the rest of part 9b.
 - 14 November 2026: Wuffs (option A), at the latest alpha of its version 0.4 (`v0.4.0-alpha.12` on that day). Accepted with it: a version not declared stable; the 9 % libjpeg-turbo has over it on JPEG; the JPEG pixels of the Windows build becoming those of libjpeg-turbo, which the Linux build already draws; the rare kinds of JPEG a player's own skin could use are not a concern.
 - Every format the game loads goes through it, TGA included: the engine's own TGA loader is removed with the libjpeg and libpng loaders. One loader for the three extensions, which finds the format from the file's content. A malformed TGA is then refused with a warning, as the others, instead of stopping the game.
-- The images the game writes (JPEG and PNG screenshots, the video capture) go through stb_image_write; libjpeg and libpng leave the multiplayer build. They stay in the repository for the single-player trees, out of scope.
+- The images the game writes (JPEG and PNG screenshots, the video capture) go through stb_image_write; libjpeg and libpng leave the multiplayer build. Then (owner, the same day) `lib/jpeg-9a` and `lib/libpng` are removed from the repository, and the single-player renderers get the same code, so that nothing needs the two libraries any more. `tools/imagebench/imagebench.sh` takes the two libraries, and the engine's TGA loader, from the last commit that holds them.
 - The PNG loader accepts every size and every kind of PNG: its two refusals go.
 - GCC and MSVC: the owner builds on the VMs once it is written.
 - After the images, the compression libraries are replaced too (zlib, minizip, and any other the code holds), with a survey of their own. Wuffs is to be looked at for it: its release file has decoders for deflate, zlib, gzip, bzip2, LZMA and XZ; it has no reader of ZIP archives, which the pk3 files are, and no compressor.
-- Not written yet: the owner asked to wait before the engine is changed.
+- Written the same day (`shared/rd-common/tr_image_codec.cpp`, the only file that knows the two libraries, one copy for the multiplayer and the single-player renderers; [../progress/step-14-fixed-tick.md](../progress/step-14-fixed-tick.md) section 16). Measured in the client, with the driver's compression off: the reading and decoding of a player model's images 14.6 to 6.8 ms, the load of a model 27.2 to 18.8 ms, the map's own loading 1.16 to 0.89 s.
 
 ## 7. What was not read or verified
 

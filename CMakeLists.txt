@@ -66,27 +66,16 @@ cmake_dependent_option(BuildSymbolServer "Build WIP Windows Symbol Server (exper
 
 set(UseInternalOpenALDefault OFF)
 set(UseInternalZlibDefault   OFF)
-set(UseInternalPNGDefault    OFF)
-set(UseInternalJPEGDefault   OFF)
 set(UseInternalSDL2Default   OFF)
 
 if(UseInternalLibs OR WIN32)
   set(UseInternalOpenALDefault ON)
   set(UseInternalZlibDefault   ON)
-  set(UseInternalPNGDefault    ON)
-  set(UseInternalJPEGDefault   ON)
   set(UseInternalSDL2Default   ON)
-endif()
-
-if(APPLE)
-  set(UseInternalJPEGDefault ON)
-  set(UseInternalPNGDefault  ON)
 endif()
 
 option(UseInternalOpenAL "If set, use bundled OpenAL."  ${UseInternalOpenALDefault})
 option(UseInternalZlib   "If set, use bundled zlib."    ${UseInternalZlibDefault})
-option(UseInternalPNG    "If set, use bundled libpng."  ${UseInternalPNGDefault})
-option(UseInternalJPEG   "If set, use bundled libjpeg." ${UseInternalJPEGDefault})
 option(UseInternalSDL2   "If set, use bundled SDL2."    ${UseInternalSDL2Default})
 
 # This option won't appear on non-Apple platforms.
@@ -408,22 +397,10 @@ set(SharedCommonSafeFiles
 # Adding all of the projects
 #
 #=============================================================================
-if(UseInternalJPEG)
-  add_subdirectory(lib/jpeg-9a)
-else()
-  find_package(JPEG REQUIRED)
-endif()
-
 if(UseInternalZlib)
   add_subdirectory(lib/zlib)
 else()
   find_package(ZLIB REQUIRED)
-endif()
-
-if(UseInternalPNG)
-  add_subdirectory(lib/libpng)
-else()
-  find_package(PNG REQUIRED)
 endif()
 
 # Always use bundled minizip (sets MINIZIP_{LIBRARIES,INCLUDE_DIR})

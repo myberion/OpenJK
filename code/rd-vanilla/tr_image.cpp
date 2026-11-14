@@ -28,7 +28,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "tr_local.h"
 #include "../rd-common/tr_common.h"
-#include <png.h>
 #include <map>
 
 static byte			 s_intensitytable[256];

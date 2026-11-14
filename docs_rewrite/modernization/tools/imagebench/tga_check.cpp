@@ -1,7 +1,7 @@
-// The engine's own TGA loader (codemp/rd-common/tr_image_tga.cpp, built here with stand-ins for the engine's
+// The engine's own TGA loader (codemp/rd-common/tr_image_tga.cpp until it was removed, built here with stand-ins for the engine's
 // functions: tga_shim/tr_common.h) against Wuffs, on every .tga of a folder: the same pixels or not, and the time of
 // each (the best of 5 decodings per file, summed; the file already in memory for both).
-// Usage: tga_check <corpus folder>   (built by imagebench.sh while the engine still has that loader)
+// Usage: tga_check <corpus folder>   (built by imagebench.sh, which takes the loader from the last commit that holds it)
 #include "tr_image_tga.cpp"
 #include <chrono>
 #include <filesystem>
@@ -78,5 +78,5 @@ int main(int argc, char **argv) {
 		pixels += (double)w * h;
 	}
 	printf("TGA files %d: same %d, differ %d, engine failed %d, wuffs failed %d\n", n, same, differ, engineFail, wuffsFail);
-	printf("engine's loader %.1f ms (%.0f MP/s), Wuffs %.1f ms (%.0f MP/s)\n", engineMs, pixels / 1e3 / engineMs, wuffsMs, pixels / 1e3 / wuffsMs);
+	if (same + differ) printf("engine's loader %.1f ms (%.0f MP/s), Wuffs %.1f ms (%.0f MP/s)\n", engineMs, pixels / 1e3 / engineMs, wuffsMs, pixels / 1e3 / wuffsMs);
 }
