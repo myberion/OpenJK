@@ -1917,6 +1917,10 @@ void CG_PredictPlayerState( void ) {
 		if ( cg_showMiss.integer > 1 ) {
 			trap->Print( "not moved\n" );
 		}
+		// the events and the changes of that snapshot are still played here: while the prediction is on, the snapshot's
+		// transition leaves them to this function (CG_TransitionSnapshot), and the next frame would compare with a
+		// state that already holds them (a jump or a saber ignition without its sound)
+		CG_TransitionPlayerState( &cg.predictedPlayerState, &oldPlayerState );
 		goto revertES;
 	}
 

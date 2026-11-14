@@ -746,6 +746,14 @@ First test in game (owner, 14 November 2026, VPS, ping 20 ms, 125 frames per sec
 
 On the clocks' unit decided above: the judgment "no gain with `com_maxfps` 125 or 333" was made on one setup; a player with vertical sync at 144 Hz does get the uneven advance. The decision stands on its cost (every use of the time in the client and cgame), not on that.
 
+### The events of a frame with nothing to predict (owner's report, 14 November 2026)
+
+Reported: on a local server a jump or a saber ignition sometimes has no sound, less often at a high frame rate.
+
+The cause: while the prediction is on, the transition of a snapshot does not play the local player's events and changes (`CG_TransitionSnapshot`, `cgame/cg_snapshot.c`): `CG_PredictPlayerState` does, when it compares the predicted state with the one of the frame before (`CG_TransitionPlayerState`). It skipped that when no command was left to predict (`!moved`), OpenJK's code, where the case hardly ever arose. Since the commands are made at the tick's start, about 4 ms before their tick, a local server runs a command at once and its snapshot is back before the next command is made: a frame drawn then has nothing to predict, the event is not played, and the next frame compares with a state that already holds it, so it is lost. A frame drawn within those 4 ms predicts the command and plays the event: nearly always at 333 frames per second, about one time in two at 125. With a round trip of 20 ms a command is nearly always left to predict.
+
+The fix (`cgame/cg_predict.c`): the transition is also run in a frame with nothing to predict. Checked in game by the owner on a local server: the sounds are there every time.
+
 ## 15. Part 7 (the server's CPU): done (14 November 2026)
 
 ### The measure

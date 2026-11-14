@@ -373,6 +373,7 @@ The first rule of this branch (plan step 11) took the second latest arrival of t
 - The unsent values are carried over from the client's own prediction.
 - Under loss, the prediction starts from the newest snapshot received.
 - Your own player is drawn between its last two predicted ticks, at the frame's exact time.
+- Your own sounds and effects (a jump, a saber ignited, a hit taken) are played even in a frame where the server has already run every command the client made, which is common on a local server or at a very low ping below 333 frames per second.
 
 **Why.** Every prediction error that can be removed is removed; what is left is what only the server can know.
 
