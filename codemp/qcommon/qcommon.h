@@ -393,6 +393,7 @@ void Cbuf_ExecuteText( int exec_when, const char *text );
 // this can be used in place of either Cbuf_AddText or Cbuf_InsertText
 
 void Cbuf_Execute (void);
+qboolean Cbuf_Waiting( void );
 // Pulls off \n terminated lines of text from the command buffer and sends
 // them through Cmd_ExecuteString.  Stops when the buffer is empty.
 // Normally called once per frame, but may be explicitly invoked.
@@ -955,6 +956,10 @@ void CL_Init( void );
 void CL_Disconnect( qboolean showMainMenu );
 void CL_Shutdown( void );
 void CL_Frame( int msec );
+
+// the client's command of a tick, made between two frames (Com_Frame, cl_input.cpp)
+int CL_NextCommandMsec( void );
+qboolean CL_InputTick( void );
 qboolean CL_GameCommand( void );
 void CL_KeyEvent (int key, qboolean down, unsigned time);
 

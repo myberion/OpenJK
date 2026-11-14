@@ -33,8 +33,11 @@ unsigned	frame_msec;		// the frame's length: the view turns every frame
 int			old_com_frameTime;
 // One user command per tick (plan step 14): the key states are measured over the time since the last command, and the
 // movement the mouse gives while strafing or without mouse look is gathered over the frames until the next command.
-static unsigned	s_cmdMsec;			// com_frameTime since the frame that made the last command
+static unsigned	s_cmdMsec;			// the input's time since the last command was made
 static int		s_lastCmdFrameTime;
+// The input's time, on the clock of com_frameTime and of the key events: the frame's time when a frame reads the input,
+// the present time when a tick's command is made between two frames (CL_InputTick)
+static int		s_inputTime;
 static float	s_mouseSide, s_mouseForward;
 
 float cl_mPitchOverride = 0.0f;
@@ -493,11 +496,11 @@ float CL_KeyState( kbutton_t *key, unsigned span ) {
 	if ( key->active ) {
 		// still down
 		if ( !key->downtime ) {
-			msec = com_frameTime;
+			msec = s_inputTime;
 		} else {
-			msec += com_frameTime - key->downtime;
+			msec += s_inputTime - key->downtime;
 		}
-		key->downtime = com_frameTime;
+		key->downtime = s_inputTime;
 	}
 
 #if 0
@@ -1435,7 +1438,7 @@ void CL_CreateNewCommands( void ) {
 	if ( cls.state < CA_PRIMED )
 		return;
 
-	frame_msec = com_frameTime - old_com_frameTime;
+	frame_msec = s_inputTime - old_com_frameTime;	// since the input was last read (a frame, or a tick between two)
 
 	// if running over 1000fps, act as if each frame is 1ms
 	// prevents divisions by zero
@@ -1447,7 +1450,7 @@ void CL_CreateNewCommands( void ) {
 	if ( frame_msec > 200 )
 		frame_msec = 200;
 
-	old_com_frameTime = com_frameTime;
+	old_com_frameTime = s_inputTime;
 
 	CL_UpdateViewAngles();
 
@@ -1455,7 +1458,7 @@ void CL_CreateNewCommands( void ) {
 	// whose commands make the server put the client in the world keep coming
 	if ( cls.state != CA_ACTIVE ) {
 		s_cmdMsec = frame_msec;
-		s_lastCmdFrameTime = com_frameTime;
+		s_lastCmdFrameTime = s_inputTime;
 		cl.cmdNumber++;
 		cl.cmds[cl.cmdNumber & CMD_MASK] = CL_CreateCmd();
 		return;
@@ -1473,8 +1476,8 @@ void CL_CreateNewCommands( void ) {
 		return;	// the gathered input waits for the next tick
 	}
 
-	s_cmdMsec = Q_min( Q_max( com_frameTime - s_lastCmdFrameTime, 1 ), 200 );
-	s_lastCmdFrameTime = com_frameTime;
+	s_cmdMsec = Q_min( Q_max( s_inputTime - s_lastCmdFrameTime, 1 ), 200 );
+	s_lastCmdFrameTime = s_inputTime;
 	usercmd_t cmd = CL_CreateCmd();
 	for ( int t = last + TICK_MSEC; t <= tick; t += TICK_MSEC ) {
 		cmd.serverTime = t;
@@ -1641,17 +1644,8 @@ CL_SendCmd
 Called every frame to builds and sends a command packet to the server.
 =================
 */
-void CL_SendCmd( void ) {
-	// don't send any message if not connected
-	if ( cls.state < CA_CONNECTED ) {
-		return;
-	}
-
-	// don't send commands if paused
-	if ( com_sv_running->integer && sv_paused->integer && cl_paused->integer ) {
-		return;
-	}
-
+// makes the commands that are due at the input's time and sends their packet
+static void CL_MakeAndSend( void ) {
 	// we create commands even if a demo is playing,
 	const int cmdNumber = cl.cmdNumber;
 	CL_CreateNewCommands();
@@ -1665,6 +1659,79 @@ void CL_SendCmd( void ) {
 	}
 
 	CL_WritePacket();
+}
+
+void CL_SendCmd( void ) {
+	// don't send any message if not connected
+	if ( cls.state < CA_CONNECTED ) {
+		return;
+	}
+
+	// don't send commands if paused
+	if ( com_sv_running->integer && sv_paused->integer && cl_paused->integer ) {
+		return;
+	}
+
+	s_inputTime = com_frameTime;
+	CL_MakeAndSend();
+}
+
+/*
+=================
+CL_NextCommandMsec
+
+How long until the command clock enters its next tick, in ms of real time (0: it has, the tick's command is due); -1
+when no command is to be made between two frames: not in a game, a demo, a pause, or a jump of the clock (left to the
+frame, as a map_restart or a hitch is). The command clock is read at the present time: cls.realtime moves once per
+frame, with com_frameTime.
+=================
+*/
+int CL_NextCommandMsec( void ) {
+	if ( cls.state != CA_ACTIVE || clc.demoplaying || cl.cmdNumber == 0 ) {
+		return -1;
+	}
+	if ( com_sv_running->integer && sv_paused->integer && cl_paused->integer ) {
+		return -1;
+	}
+	const int now = Q_max( cls.realtime + ( Sys_Milliseconds() - com_frameTime ) + cl.cmdTimeDelta, cl.oldCmdTime );
+	const int last = cl.cmds[cl.cmdNumber & CMD_MASK].serverTime;	// the end of the tick the last command is for
+
+	if ( abs( now - last ) > 200 ) {
+		return -1;
+	}
+	return Q_max( last - now, 0 );
+}
+
+/*
+=================
+CL_InputTick
+
+Between two frames, when the command clock enters a tick (Com_Frame): reads the input (the system's events, the key
+binds), turns the view, makes the tick's command and sends its packet, as a frame does, without drawing. The client's
+clock is set to the present for it (the packet's send time, the command clock) and put back: the frame that follows
+moves it by its whole length. Returns qfalse when no command was made (the events changed the client's state).
+=================
+*/
+qboolean CL_InputTick( void ) {
+	const int cmdNumber = cl.cmdNumber;
+	const int realtime = cls.realtime;
+
+	s_inputTime = Com_EventLoop();	// Com_Frame has just polled the input (IN_Frame)
+	// the key binds go through the command buffer; not while a wait command counts frames (this is not one)
+	if ( !Cbuf_Waiting() ) {
+		Cbuf_Execute();
+	}
+	if ( cls.state < CA_CONNECTED || CL_NextCommandMsec() != 0 ) {
+		return qfalse;
+	}
+
+	cls.realtime += s_inputTime - com_frameTime;
+	cl.cmdTime = Q_max( cls.realtime + cl.cmdTimeDelta, cl.oldCmdTime );
+	cl.oldCmdTime = cl.cmdTime;
+	CL_MakeAndSend();
+	cls.realtime = realtime;
+
+	return cl.cmdNumber != cmdNumber ? qtrue : qfalse;
 }
 
 static const cmdList_t inputCmds[] =

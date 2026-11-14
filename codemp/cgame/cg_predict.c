@@ -1050,6 +1050,37 @@ static void CG_CarryUnsentFields( playerState_t *base ) {
 	base->jumppad_frame = own->jumppad_frame;
 }
 
+// The newest snapshot received, when it is ahead of cgame's own next one. cgame steps through the snapshots as the drawn
+// time reaches them (CG_ProcessSnapshots): its next snapshot is the first one after the drawn time, which is the newest
+// received as long as the drawn time is less than an interval behind it. With loss or jitter the client draws further
+// behind, and one or two newer snapshots wait. The local player's prediction does not need to wait for them: started
+// from the newest, it has fewer ticks to predict and shows sooner what the server decided about the player. NULL when
+// there is none, or when a teleport, a respawn, another followed player or a restart of the map lies between: those
+// stay with cgame's own transition, as before.
+static snapshot_t *CG_SnapshotAhead( const snapshot_t *next ) {
+	static snapshot_t	ahead;
+	static int			aheadNum = -1;
+
+	if ( cg.latestSnapshotTime <= next->serverTime ) {
+		return NULL;
+	}
+	if ( aheadNum != cg.latestSnapshotNum ) {
+		aheadNum = -1;
+		if ( !trap->GetSnapshot( cg.latestSnapshotNum, &ahead ) ) {
+			return NULL;
+		}
+		aheadNum = cg.latestSnapshotNum;
+	}
+	if ( ahead.serverTime <= next->serverTime || ahead.ps.clientNum != next->ps.clientNum
+		|| ( ( ahead.ps.eFlags ^ next->ps.eFlags ) & EF_TELEPORT_BIT )
+		|| ahead.ps.persistant[PERS_SPAWN_COUNT] != next->ps.persistant[PERS_SPAWN_COUNT]
+		|| ( ( ahead.snapFlags ^ next->snapFlags ) & SNAPFLAG_SERVERCOUNT )
+		|| ( ahead.ps.pm_flags & PMF_FOLLOW ) || ahead.ps.m_iVehicleNum != next->ps.m_iVehicleNum ) {
+		return NULL;
+	}
+	return &ahead;
+}
+
 // Where the server has its movers at a snapshot: it moves them on the 20 Hz instants of its tick only (the game's logic
 // clock, level.time, G_RunFrame; plan step 14), so between two instants a mover is where its trajectory was at the last
 // one. Placed at the snapshot's own time, as before, a lift going down was up to 25 units under the player standing on
@@ -1101,6 +1132,7 @@ static struct {
 	float		originSum[MISS_CAUSES], originMax[MISS_CAUSES];
 	int			animOnly;
 	int			positions, anims, details;				// kept in cg_predictMissDetails
+	int			ahead;									// frames whose prediction started from a snapshot ahead of cgame's
 } cg_predictMiss;
 static predictMissDetail_t cg_predictMissDetails[PREDICT_MISS_POSITIONS + PREDICT_MISS_ANIMS];
 
@@ -1258,6 +1290,8 @@ static void CG_WritePredictMiss( fileHandle_t f ) {
 	}
 	Com_sprintf( line, sizeof( line ), "predictmiss: an animation only: %d ticks\n", cg_predictMiss.animOnly );
 	CG_PredictMissLine( f, line );
+	Com_sprintf( line, sizeof( line ), "predictmiss: %d frames predicted from a snapshot ahead of the drawn ones\n", cg_predictMiss.ahead );
+	CG_PredictMissLine( f, line );
 	// per word: offset, ticks, last predicted and server values
 	for ( i = 0; i < PS_WORDS; i++ ) {
 		if ( cg_predictMiss.count[i] ) {
@@ -1322,6 +1356,7 @@ void CG_PredictMiss_f( void ) {
 				cg_predictMiss.originMax[n] );
 		}
 		trap->Print( "predictmiss: an animation only: %d ticks\n", cg_predictMiss.animOnly );
+		trap->Print( "predictmiss: %d frames predicted from a snapshot ahead of the drawn ones\n", cg_predictMiss.ahead );
 		trap->FS_Open( "predictmiss.txt", &f, FS_WRITE );
 		if ( f ) {
 			CG_WritePredictMiss( f );
@@ -1549,13 +1584,19 @@ void CG_PredictPlayerState( void ) {
 	// because predicted player positions are going to
 	// be ahead of everything else anyway
 	if ( cg.nextSnap && !cg.nextFrameTeleport && !cg.thisFrameTeleport ) {
-		cg.nextSnap->ps.slopeRecalcTime = cg.predictedPlayerState.slopeRecalcTime; //this is the only value we want to maintain seperately on server/client
-		cg.predictedPlayerState = cg.nextSnap->ps;
-		if (CG_Piloting(cg.nextSnap->ps.m_iVehicleNum))
-		{
-			cg.predictedVehicleState = cg.nextSnap->vps;
+		snapshot_t *ahead = CG_SnapshotAhead( cg.nextSnap );
+		snapshot_t *base = ahead ? ahead : cg.nextSnap;
+
+		if ( ahead ) {
+			cg_predictMiss.ahead++;
 		}
-		cg.physicsTime = CG_MoverTime( cg.nextSnap->serverTime );
+		base->ps.slopeRecalcTime = cg.predictedPlayerState.slopeRecalcTime; //this is the only value we want to maintain seperately on server/client
+		cg.predictedPlayerState = base->ps;
+		if (CG_Piloting(base->ps.m_iVehicleNum))
+		{
+			cg.predictedVehicleState = base->vps;
+		}
+		cg.physicsTime = CG_MoverTime( base->serverTime );
 	} else {
 		cg.snap->ps.slopeRecalcTime = cg.predictedPlayerState.slopeRecalcTime; //this is the only value we want to maintain seperately on server/client
 		cg.predictedPlayerState = cg.snap->ps;

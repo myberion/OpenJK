@@ -1545,19 +1545,41 @@ void Com_Frame( void ) {
 			minMsec = 1;
 
 		timeVal = Com_TimeVal(minMsec);
+		{
+		// The client's command of a tick is made and sent when its command clock enters the tick, not at the next
+		// drawn frame (plan step 14, part 10): made at the frames, the commands reached the server spread over a
+		// frame's length (8 ms at 125 frames per second), and the command clock had to run that much earlier for the
+		// latest of them, so a key waited longer the lower the frame rate. The wait for the next frame ends at that
+		// instant too, and the input alone runs (CL_InputTick). Not with a scaled or fixed time: the client's clock
+		// is then not the real time's.
+		qboolean inputTick = ( com_timescale->value == 1 && !com_fixedtime->integer ) ? qtrue : qfalse;
 		do {
+			const int cmdDue = inputTick ? CL_NextCommandMsec() : -1;	// -1: none to make between the frames
+			int wait = timeVal;
+
+			if ( cmdDue == 0 && timeVal > 0 ) {
+				IN_Frame();
+				if ( !CL_InputTick() ) {
+					inputTick = qfalse;	// it made none (the state changed): left to the frame
+				}
+				continue;
+			}
+			if ( cmdDue > 0 && cmdDue < wait ) {
+				wait = cmdDue;
+			}
 			// Busy sleep the last millisecond for better timeout precision
-			if(com_busyWait->integer || timeVal < 1)
+			if(com_busyWait->integer || wait < 1)
 				NET_Sleep(0);
 #ifndef _WIN32
 			// a dedicated server sleeps its last millisecond in steps of 100 us rather than in a busy loop, which took
 			// up to a tenth of a core at 100 Hz (plan step 14, X1); select() keeps such timeouts here, not on Windows
-			else if(timeVal == 1 && com_dedicated->integer)
+			else if(wait == 1 && com_dedicated->integer)
 				NET_Sleep(100);
 #endif
 			else
-				NET_Sleep((timeVal - 1) * 1000);
+				NET_Sleep((wait - 1) * 1000);
 		} while( (timeVal = Com_TimeVal(minMsec)) != 0 );
+		}
 		IN_Frame();
 
 		lastTime = com_frameTime;

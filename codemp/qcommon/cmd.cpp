@@ -173,6 +173,11 @@ void Cbuf_ExecuteText (int exec_when, const char *text)
 Cbuf_Execute
 ============
 */
+// a wait command is counting frames: Cbuf_Execute called between two frames would count one
+qboolean Cbuf_Waiting( void ) {
+	return cmd_wait > 0 ? qtrue : qfalse;
+}
+
 void Cbuf_Execute (void)
 {
 	int		i;

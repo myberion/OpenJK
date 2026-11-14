@@ -41,6 +41,14 @@ void Key_WriteBindings( fileHandle_t f ) {
 void CL_Frame ( int msec ) {
 }
 
+int CL_NextCommandMsec( void ) {
+	return -1;
+}
+
+qboolean CL_InputTick( void ) {
+	return qfalse;
+}
+
 void CL_PacketEvent( const netadr_t *from, msg_t *msg ) {
 }
 
