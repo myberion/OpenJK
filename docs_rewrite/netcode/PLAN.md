@@ -204,6 +204,23 @@ The items as listed before the survey (05 section 5.7):
 
 Placed on 14 November 2026 (owner: every open point gets a place; the parts are in [progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md) section 5): the cost of the statistics commands with part 7 (server CPU); the prediction of the local player, the saber first, with the animation misses and the misses when crouching or jumping while attacking, as part 10; what the audits and the sessions left (the demos' size at 100 messages per second, the dead code reported, a long client hitch, the sound at 333 frames per second, priority and culling) as part 11, at the end of the step.
 
+### Step 15: a new platform layer on SDL 3 (L)
+
+Depends on: step 14 (it touches the input that step 14 settles). Added on 14 November 2026 (owner). The survey, the design and the decisions to take are in [14-platform-layer-survey.md](14-platform-layer-survey.md); nothing is implemented.
+
+The client's platform code (window and OpenGL context, input, sound device, joystick: `shared/sdl/`, SDL 2.0.12 of 2020, inherited from ioquake3 and adapted from SDL 1.2) is replaced by a layer written from zero on SDL 3: the same features for the player, no workaround, no fallback for hardware that no longer exists, the present practices, as few settings as possible. Not a port: the present files are kept only for the knowledge they hold (the key translation, the character set). The dedicated server is not concerned (it does not use SDL).
+
+- A module of its own, `codemp/platform/`, in C++20 by the C++ Core Guidelines, with a public header the engine can include; for the multiplayer client only. `shared/sdl/` stays for the single-player and Jedi Outcast trees, and stays selectable by a CMake option for the multiplayer client until the new layer is accepted.
+- SDL 3 at a pinned release, built from source with the project (it is in neither Debian 12 nor Ubuntu 24.04) and shipped with the client.
+- Parts, in this order, each built and checked on Windows and Linux before the next:
+  1. the build and the window with its OpenGL context: three states (window, borderless fullscreen, exclusive fullscreen with one of the screen's modes), the switch without a video restart, several screens, the pixel density, one request for the context and one retry;
+  2. the keyboard and the mouse: events with their time, the keys by their place (decision P1), text only while a text field is open, relative mode without warp; read at the frames and at the ticks (step 14 part 10);
+  3. the sound device: the mixer asked for samples by the device, the system's default device followed; with it the loudness that depends on the frame rate (step 14 part 11);
+  4. the gamma in the renderer, since SDL 3 has no gamma ramp: one pass at the end of the frame (decision P2);
+  5. the gamepad through SDL's gamepad API;
+  6. optional: the main loop's wait on a high-resolution timer instead of its busy loop.
+- Check: on Windows 11 and Linux (X11 and Wayland), the feel of the mouse and the keys unchanged (the same turn for the same mouse movement, the binds, the keypad, the console key on QWERTY and AZERTY, text with accents); `netstats`' input margin no higher at 100, 125 and 333 frames per second; the display's three states, two screens, alt-tab; the same brightness on screenshots; the sound following the default device; no setting needed.
+
 ## 3. Order at a glance
 
 Order of work (owner, 10 November 2026): step 14 comes right after step 11, before steps 12 (encryption, not wanted for now) and 13 (retraining on recordings of this build).
@@ -224,6 +241,7 @@ Order of work (owner, 10 November 2026): step 14 comes right after step 11, befo
 | 12 | transport security decision | 10, 11 | M to L |
 | 13 | live measurement | 7 to 12 | M |
 | 14 | beyond the codec (after step 11) | 11 | L |
+| 15 | a new platform layer on SDL 3, from zero | 14 | L |
 
 ## 4. Test matrix
 
