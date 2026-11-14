@@ -59,6 +59,13 @@ qboolean gPMDoSlowFall = qfalse;
 
 qboolean pm_cancelOutZoom = qfalse;
 
+#ifdef _CGAME
+// The player state a command is being predicted for and its animations before the command (BG_StartLegsAnim and
+// BG_StartTorsoAnim, bg_panimate.c); NULL outside Pmove
+const playerState_t	*pm_startPs = NULL;
+int					pm_startLegsAnim, pm_startTorsoAnim;
+#endif
+
 // movement parameters
 float	pm_stopspeed = 100.0f;
 float	pm_duckScale = 0.50f;
@@ -7286,7 +7293,11 @@ static void PM_Weapon( void )
 		pm->ps->torsoTimer <= 0 &&
 		(pm->ps->torsoAnim) != WeaponReadyAnim[pm->ps->weapon] &&
 		pm->ps->torsoAnim != TORSO_WEAPONIDLE3 &&
-		pm->ps->weapon != WP_EMPLACED_GUN)
+		pm->ps->weapon != WP_EMPLACED_GUN &&
+		// not while zoomed with the disruptor: the test below puts TORSO_WEAPONREADY4 back at once, and leaving it and
+		// taking it again restarted the animation at every movement step (torsoFlip changed at every tick, in the
+		// player's state and in every snapshot that shows the player; plan step 14, part 10)
+		!(pm->ps->weapon == WP_DISRUPTOR && pm->ps->zoomMode == 1))
 	{
 		PM_StartTorsoAnim( WeaponReadyAnim[pm->ps->weapon] );
 	}
@@ -11199,6 +11210,12 @@ void Pmove (pmove_t *pmove) {
 
 	pmove->ps->pmove_framecount = (pmove->ps->pmove_framecount+1) & ((1<<PS_PMOVEFRAMECOUNTBITS)-1);
 
+#ifdef _CGAME
+	pm_startPs = pmove->ps;
+	pm_startLegsAnim = pmove->ps->legsAnim;
+	pm_startTorsoAnim = pmove->ps->torsoAnim;
+#endif
+
 	// chop the move up if it is too long, to prevent framerate
 	// dependent behavior
 	while ( pmove->ps->commandTime != finalTime ) {
@@ -11217,5 +11234,9 @@ void Pmove (pmove_t *pmove) {
 			pmove->cmd.upmove = 20;
 		}
 	}
+
+#ifdef _CGAME
+	pm_startPs = NULL;
+#endif
 }
 

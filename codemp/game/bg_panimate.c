@@ -2575,6 +2575,13 @@ static void BG_StartLegsAnim( playerState_t *ps, int anim )
 		//one frame, indicating that anim should be restarted.
 		BG_FlipPart(ps, SETANIM_LEGS);
 	}
+#elif defined( _CGAME )
+	else if (ps == pm_startPs && pm_startLegsAnim == anim)
+	{ // the server's rule above, in the prediction: its entity state holds the animation its last frame ended with, which
+		// is the one the predicted command starts from. Without it the client restarted the animation once less than the
+		// server within a command that leaves it and takes it again (zoomed with the disruptor: at every tick)
+		BG_FlipPart(ps, SETANIM_LEGS);
+	}
 #endif
 	ps->legsAnim = anim;
 
@@ -2638,6 +2645,11 @@ void BG_StartTorsoAnim( playerState_t *ps, int anim )
 	else if (g_entities[ps->clientNum].s.torsoAnim == anim)
 	{ //toggled anim to one anim then back to the one we were at previously in
 		//one frame, indicating that anim should be restarted.
+		BG_FlipPart(ps, SETANIM_TORSO);
+	}
+#elif defined( _CGAME )
+	else if (ps == pm_startPs && pm_startTorsoAnim == anim)
+	{ // as for the legs (BG_StartLegsAnim)
 		BG_FlipPart(ps, SETANIM_TORSO);
 	}
 #endif

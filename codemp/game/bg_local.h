@@ -58,6 +58,10 @@ typedef struct
 
 
 extern	pml_t		pml;
+#ifdef _CGAME
+extern	const playerState_t	*pm_startPs;
+extern	int			pm_startLegsAnim, pm_startTorsoAnim;
+#endif
 
 // movement parameters
 extern	float	pm_stopspeed;

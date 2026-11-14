@@ -781,7 +781,8 @@ typedef struct cg_s {
 								// is rendering at.
 	int			oldTime;		// time at last frame, used for missile trails and prediction checking
 
-	int			physicsTime;	// either cg.snap->time or cg.nextSnap->time
+	int			physicsTime;	// the time the movers are placed at for the prediction: the server's last 20 Hz instant at
+								// cg.snap's or cg.nextSnap's time (CG_MoverTime)
 	int			cmdTime;		// the time the local player's state is drawn at (plan step 14, part 4c): the engine's
 								// command clock, ahead of cg.time by the round trip and the interpolation delay, when the
 								// player is predicted; cg.time otherwise. The times the movement code puts in the player
@@ -1813,6 +1814,9 @@ void CG_Trace( trace_t *result, const vec3_t start, const vec3_t mins, const vec
 void CG_G2Trace( trace_t *result, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
 					 int skipNumber, int mask );
 void CG_PredictPlayerState( void );
+void CG_PredictMiss_f( void );
+int CG_MoverTime( int serverTime );
+void CG_CarryWithMover( vec3_t origin, int moverNum, int serverTime );
 void CG_LoadDeferredPlayers( void );
 
 
