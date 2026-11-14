@@ -3,14 +3,14 @@ rem Validation of netcodec on Windows (Visual Studio): configure, build and test
 rem Debug, Win32 Release, x64 with AddressSanitizer), then the size benchmark, the codec benchmark (two runs) and the
 rem Win32 trainers, which must rewrite the committed tables unchanged, then the game (build-openjk\msvc-x64, Release)
 rem when that build directory exists. Needs the traces of
-rem docs_rewrite\netcode\data\traces (export_rans_trace.py, export_codec_trace.py, export_demo_traces.py, and the
+rem docs_rewrite\modernization\data\traces (export_rans_trace.py, export_codec_trace.py, export_demo_traces.py, and the
 rem client traces of netcodec_bench_client --trace).
 rem Run from anywhere (cmd or PowerShell): codemp\netcodec\scripts\validate.bat
 rem Output: the console and build-netcodec\validate-windows.log; the summary and the benchmark figures come last.
 setlocal EnableDelayedExpansion
 cd /d "%~dp0.."
 set "B=..\..\build-netcodec"
-set "T=..\..\docs_rewrite\netcode\data\traces"
+set "T=..\..\docs_rewrite\modernization\data\traces"
 if not exist "%B%" mkdir "%B%"
 set "LOG=%B%\validate-windows.log"
 set "OUT=%TEMP%\netcodec-validate"

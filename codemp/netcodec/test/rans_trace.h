@@ -1,4 +1,4 @@
-// Reader of the rANS golden trace written by docs_rewrite/netcode/tools/python/export_rans_trace.py.
+// Reader of the rANS golden trace written by docs_rewrite/modernization/tools/python/export_rans_trace.py.
 #pragma once
 
 #include "netcodec/rans.h"

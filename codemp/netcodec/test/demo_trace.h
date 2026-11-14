@@ -1,4 +1,4 @@
-// Reader of the corpus traces written by docs_rewrite/netcode/tools/python/export_demo_traces.py (train.bin,
+// Reader of the corpus traces written by docs_rewrite/modernization/tools/python/export_demo_traces.py (train.bin,
 // holdout.bin, captures.bin): decoded messages without coded bytes, read one stream (demo) at a time, and the server
 // loop that chooses the base of every message as the server did.
 #pragma once

@@ -3,7 +3,7 @@
 # run alternately on core 1; prints the warm and cold timings per run, then the best of each build and the difference.
 # Usage, from anywhere: [REF=<commit> | REF_DIR=<copy>] [CUR_DIR=<copy>] [NOINL=1] [NOALIGN=1] [CXXFLAGS=...] [BENCH=client]
 #   bash codemp/netcodec/scripts/ab_gcc.sh [rounds]
-# BENCH=client: netcodec_bench_client on the recorded client packets (docs_rewrite/netcode/data/clientpackets/*.jkcp)
+# BENCH=client: netcodec_bench_client on the recorded client packets (docs_rewrite/modernization/data/clientpackets/*.jkcp)
 # instead of bench_codec; the times are then per client packet.
 # CUR_DIR: a directory holding codemp/netcodec (a variant prepared on the host) timed instead of the working tree;
 # REF_DIR: the same for the reference (instead of a commit).
@@ -40,7 +40,7 @@ ALIGN="-falign-functions=64 -falign-loops=64 -falign-jumps=64"
 build() {   # $1 = name (ref, cur)
 	cmake -S "$W/$1/codemp/netcodec" -B "$W/build-$1" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++ \
 		-DCMAKE_CXX_FLAGS="$ALIGN ${CXXFLAGS:-}" \
-		-Dnetcodec_OPENJK_DIR="$R" -Dnetcodec_TRACE_DIR="$R/docs_rewrite/netcode/data/traces" > "$W/build-$1.log" 2>&1 &&
+		-Dnetcodec_OPENJK_DIR="$R" -Dnetcodec_TRACE_DIR="$R/docs_rewrite/modernization/data/traces" > "$W/build-$1.log" 2>&1 &&
 	cmake --build "$W/build-$1" --target "netcodec_bench_$BENCH" -j 4 >> "$W/build-$1.log" 2>&1 ||
 	{ echo "build of $1 failed:"; tail -30 "$W/build-$1.log"; exit 1; }
 }
@@ -53,14 +53,14 @@ for v in ref cur; do
 done
 diff "$W/syms-ref.txt" "$W/syms-cur.txt" | grep '^[<>]' | cut -c1-200 || echo "  (none)"
 echo "sizes of the code sections: ref $(size -t "$W/build-ref/libnetcodec.a" | tail -1 | awk '{print $1}'), cur $(size -t "$W/build-cur/libnetcodec.a" | tail -1 | awk '{print $1}')"
-T="$R/docs_rewrite/netcode/data/traces/codec_trace.bin"
+T="$R/docs_rewrite/modernization/data/traces/codec_trace.bin"
 PIN=""
 command -v taskset > /dev/null && PIN="taskset -c 1"
 for i in $(seq 1 "$ROUNDS"); do
 	for v in ref cur; do
 		printf '%s %d: ' $v $i
 		if [ "$BENCH" = client ]; then
-			$PIN "$W/build-$v/bench/netcodec_bench_client" "$R"/docs_rewrite/netcode/data/clientpackets/*.jkcp \
+			$PIN "$W/build-$v/bench/netcodec_bench_client" "$R"/docs_rewrite/modernization/data/clientpackets/*.jkcp \
 				| awk -f "$(dirname "$0")/ab_client.awk"
 		else
 			$PIN "$W/build-$v/bench/netcodec_bench_codec" "$T" 10 \

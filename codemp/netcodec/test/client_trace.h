@@ -1,6 +1,6 @@
 // Client packet traces (plan step 8): the client packets the server recorded in the legacy format (part 1), decoded with
 // OpenJK's msg.cpp by netcodec_bench_client --trace, with what the codec codes them against. Not committed (they hold
-// player names and chat): docs_rewrite/netcode/data/traces/client_train.bin and client_holdout.bin.
+// player names and chat): docs_rewrite/modernization/data/traces/client_train.bin and client_holdout.bin.
 //
 // File, little-endian: "JKCT", int32 version (1), int32 stream count; per stream: int32 name length, the name, int32
 // packet count; per packet, int32 unless said: snapTime (-1: the server did not hold the acknowledged snapshot),

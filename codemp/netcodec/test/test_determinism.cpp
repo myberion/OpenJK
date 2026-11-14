@@ -2,7 +2,7 @@
 // value, for every 16-bit angle index from -720 to 720 degrees and its neighbouring patterns (±1, ±2), plus special
 // patterns, and the decode of an angle index over the range of the second-order angle prediction. The results are
 // hashed (FNV-1a 64) and compared with the value of the Python reference functions
-// (docs_rewrite/netcode/tools/python/angle_hash.py): every compiler, architecture and build type must agree.
+// (docs_rewrite/modernization/tools/python/angle_hash.py): every compiler, architecture and build type must agree.
 // The position prediction is covered by netcodec.roundtrip (hash of the coded bytes of the corpus). FloorI is also
 // compared with std::floor directly.
 // Usage: netcodec_test_determinism

@@ -143,7 +143,7 @@ static inline int Net_MarginFromWire( int w ) {
 
 #define	MAX_PACKET_USERCMDS		32		// max number of usercmd_t in a packet
 
-// Network settings fixed rather than set by cvars (plan step 11, docs_rewrite/netcode/10-network-settings-survey.md)
+// Network settings fixed rather than set by cvars (plan step 11, docs_rewrite/modernization/surveys/network-settings.md)
 #define	MAX_PACKET_RATE			100		// client packets per second: one per tick (TICK_MSEC); the server decodes no more
 #define	TIMEOUT_CONNECTING		60		// seconds without a packet before either side drops a connection not yet in the game
 #define	TIMEOUT_ACTIVE			30		// seconds without a packet before either side drops a connection in the game

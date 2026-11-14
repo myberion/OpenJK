@@ -199,5 +199,5 @@ cmake-build-*
 # client packets recorded by the server (sv_recordClientPackets): player names and chat
 *.jkcp
 
-# netcodec traces generated from the recordings (docs_rewrite/netcode/tools/python/export_*.py)
-docs_rewrite/netcode/data/traces/
+# netcodec traces generated from the recordings (docs_rewrite/modernization/tools/python/export_*.py)
+docs_rewrite/modernization/data/traces/

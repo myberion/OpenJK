@@ -1,4 +1,4 @@
-// Synthetic server messages for the tests (C++ port of docs_rewrite/netcode/tools/python/fuzz.py, extended): the
+// Synthetic server messages for the tests (C++ port of docs_rewrite/modernization/tools/python/fuzz.py, extended): the
 // generator, and a stream that holds both sides, the server (the snapshots it sent with their header records, its
 // commands and baselines) and the client (the snapshots it decoded, its commands and baselines).
 // Messages are structurally valid: every operation (gamestates, commands, setgame, downloads, snapshots, map changes,

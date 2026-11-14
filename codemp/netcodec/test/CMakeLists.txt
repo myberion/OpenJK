@@ -1,6 +1,10 @@
 # Tests on traces generated locally (they come from recordings and are not committed): the rANS layer against the
 # Python reference coder (export_rans_trace.py), and the round trip of the format on the corpus (export_demo_traces.py).
-set(netcodec_TRACE_DIR "${PROJECT_SOURCE_DIR}/../../docs_rewrite/netcode/data/traces" CACHE PATH "Directory of the test traces")
+set(netcodec_default_trace_dir "${PROJECT_SOURCE_DIR}/../../docs_rewrite/modernization/data/traces")
+set(netcodec_TRACE_DIR "${netcodec_default_trace_dir}" CACHE PATH "Directory of the test traces")
+if(NOT IS_DIRECTORY "${netcodec_TRACE_DIR}")	# a build directory configured before the folder was renamed
+	set(netcodec_TRACE_DIR "${netcodec_default_trace_dir}" CACHE PATH "Directory of the test traces" FORCE)
+endif()
 
 netcodec_add_program(netcodec_test_rans test_rans.cpp rans_trace.h)
 

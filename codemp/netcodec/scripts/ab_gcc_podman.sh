@@ -44,7 +44,7 @@ for v in noinl cur; do
 	echo "  $v:"
 	diff "$W/syms-ref.txt" "$W/syms-$v.txt" | grep '^[<>]' | cut -c1-160 | sed 's/^/    /' || echo "    (none)"
 done
-T="$R/docs_rewrite/netcode/data/traces/codec_trace.bin"
+T="$R/docs_rewrite/modernization/data/traces/codec_trace.bin"
 PIN=""
 command -v taskset > /dev/null && PIN="taskset -c 1"
 for i in $(seq 1 "$ROUNDS"); do

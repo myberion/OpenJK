@@ -1,4 +1,4 @@
-// Reader of the message-codec golden trace written by docs_rewrite/netcode/tools/python/export_codec_trace.py.
+// Reader of the message-codec golden trace written by docs_rewrite/modernization/tools/python/export_codec_trace.py.
 #pragma once
 
 #include "netcodec/codec.h"

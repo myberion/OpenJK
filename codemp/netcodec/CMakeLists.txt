@@ -1,4 +1,4 @@
-# netcodec: snapshot and message codec of the new netcode (docs_rewrite/netcode/PLAN.md, step 6).
+# netcodec: snapshot and message codec of the new netcode (docs_rewrite/modernization/PLAN.md, step 6).
 #
 # Layout after cpp-best-practices/cmake_template: include/ (public headers), src/, test/, bench/, tools/, cmake/.
 # Two uses:

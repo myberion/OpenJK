@@ -29,7 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // - text to numbers (strtof, strtod, atof, the sscanf %f of the game's files): correctly rounded (LLVM libc), since
 //   the UCRT reads some decimals differently from glibc.
 // Changing an implementation only changes this header or q_libm.cpp.
-// Survey and measurements: docs_rewrite/netcode/12-deterministic-math-survey.md.
+// Survey and measurements: docs_rewrite/modernization/surveys/deterministic-math.md.
 #pragma once
 
 #include <math.h>

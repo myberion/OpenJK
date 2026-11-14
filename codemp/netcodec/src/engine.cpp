@@ -20,7 +20,7 @@ static_assert(kAckWindow == netcodec::kAckWindow, "acknowledge window");
 static_assert(kMaxUserCmds == netcodec::kMaxUserCmds && kUserCmdBytes == netcodec::kUserCmdBytes, "user commands");
 static_assert(kMinCommands >= netcodec::kMaxClientCommands, "client commands");
 static_assert(kMaxCommandLength == netcodec::kMaxClientCommandLength, "client command texts");
-static_assert(sizeof(PacketBase) == 32, "the server keeps kAckWindow of them per client (09-changes-from-openjk.md)");
+static_assert(sizeof(PacketBase) == 32, "the server keeps kAckWindow of them per client (docs_rewrite/modernization/CHANGES.md)");
 
 [[nodiscard]] uint32_t Slot(int32_t seq) noexcept { return static_cast<uint32_t>(seq) % kPacketBackup; }
 

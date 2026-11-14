@@ -4,7 +4,7 @@ netcodec_add_program(netcodec_bench_rans bench_rans.cpp)
 target_include_directories(netcodec_bench_rans PRIVATE "${PROJECT_SOURCE_DIR}/test")
 target_include_directories(netcodec_bench_rans SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/ryg")
 
-# Coded size of the corpus traces against the bytes the server sent (docs_rewrite/netcode/tools/python/export_demo_traces.py).
+# Coded size of the corpus traces against the bytes the server sent (docs_rewrite/modernization/tools/python/export_demo_traces.py).
 netcodec_add_program(netcodec_bench_size bench_size.cpp)
 target_include_directories(netcodec_bench_size PRIVATE "${PROJECT_SOURCE_DIR}/test")
 

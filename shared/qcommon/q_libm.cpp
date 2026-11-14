@@ -20,7 +20,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // q_libm.cpp -- the out-of-line functions of q_libm.h on LLVM libc's header-only math (lib/llvm-libc, C++17): correctly rounded
 // for every float function and every double one except atan and atan2 (within 1 ulp, the same bits everywhere),
-// identical on every compiler and platform measured (docs_rewrite/netcode/12-deterministic-math-survey.md, 12.10).
+// identical on every compiler and platform measured (docs_rewrite/modernization/surveys/deterministic-math.md, section 10).
 #include "q_libm.h"
 
 #include <cctype>

@@ -274,7 +274,7 @@ elseif (("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU") OR ("${CMAKE_C_COMPILER_ID}" M
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 	# the same floating-point results on every compiler and target: no fused multiply-add contracted from a separate
-	# multiply and add (MSVC's /fp:precise does not contract); docs_rewrite/netcode/12-deterministic-math-survey.md
+	# multiply and add (MSVC's /fp:precise does not contract); docs_rewrite/modernization/surveys/deterministic-math.md
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffp-contract=off")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffp-contract=off")
 

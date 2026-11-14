@@ -22,7 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // the C library's rand(), whose sequence differs between glibc and the UCRT. One generator, xoshiro128++ (Blackman
 // and Vigna, public domain), seeded through SplitMix64; integers in a range by Lemire's unbiased method, floats from
 // the top 24 bits: the same numbers on every platform and compiler. Changing the generator only changes q_rand.c.
-// Survey and measurements: docs_rewrite/netcode/13-random-numbers-survey.md.
+// Survey and measurements: docs_rewrite/modernization/surveys/random-numbers.md.
 #pragma once
 
 #include <stdint.h>

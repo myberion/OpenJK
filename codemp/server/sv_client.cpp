@@ -1237,7 +1237,7 @@ player's state at a tick is the result of its command of that tick, after the bo
   ahead for its commands to arrive before their tick.
 - A command that comes after its tick gets no movement time, and what it newly pressed (buttons, a jump, the generic
   command) goes into the next command run: a short press acts a tick late instead of being lost (as Counter-Strike 2;
-  docs_rewrite/netcode/11-tick-and-lag-compensation-survey.md, 11.11). Its margin is negative.
+  docs_rewrite/modernization/surveys/tick-and-lag-compensation.md, section 11). Its margin is negative.
 - A tick without a command runs the last one again, for SV_INPUT_REPEAT_MSEC, then an empty one (no movement, no
   button): a lost packet does not stop the player, a lost connection does.
 

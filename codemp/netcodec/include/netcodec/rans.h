@@ -1,7 +1,7 @@
 // netcodec: static rANS coder (32-bit state, byte renormalisation, 15-bit probabilities).
 //
 // Design of ryg_rans rans_byte.h (Fabian Giesen, public domain), with three differences that are part of the wire
-// format (docs_rewrite/netcode/progress/step-06-cpp-codec.md):
+// format (docs_rewrite/modernization/progress/step-06-cpp-codec.md):
 //  - the encoder starts from state 1, not from the lower bound L: the first coded bits fill the final state, which is
 //    sent anyway (about 1.8 bytes per message);
 //  - the decoder stops reading at the end of the input, so its state may end below L;

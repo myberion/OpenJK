@@ -3,14 +3,14 @@
 # benchmark (Release and ASan + UBSan), the codec benchmark (two runs) and the x86 trainers, which must rewrite the
 # committed tables unchanged, then the game in Release when its build directory exists: build-openjk/gcc-ded (the
 # dedicated server and the game module, the VPS build) and build-openjk/gcc-mp (every multiplayer target: client,
-# renderer, cgame and ui as well). Needs the traces of docs_rewrite/netcode/data/traces (export_rans_trace.py,
+# renderer, cgame and ui as well). Needs the traces of docs_rewrite/modernization/data/traces (export_rans_trace.py,
 # export_codec_trace.py, export_demo_traces.py, and the client traces of netcodec_bench_client --trace).
 # Run from anywhere: codemp/netcodec/scripts/validate.sh
 # Output: the console and build-netcodec/validate-linux.log; the summary and the benchmark figures come last.
 set -u
 cd "$(dirname "$0")/.."
 B=../../build-netcodec
-T=../../docs_rewrite/netcode/data/traces
+T=../../docs_rewrite/modernization/data/traces
 mkdir -p "$B"
 LOG="$B/validate-linux.log"
 exec > >(tee "$LOG") 2>&1

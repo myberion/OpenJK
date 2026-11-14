@@ -610,7 +610,7 @@ CL_AdjustTimeDelta
 Adjust the clients view of server time.
 
 The client shows the world as late as the arrivals of the snapshots require and no later (plan step 11,
-docs_rewrite/netcode/10-network-settings-survey.md, point 5; redone in plan step 14, part 4e). At every frame its
+docs_rewrite/modernization/surveys/network-settings.md, point 5; redone in plan step 14, part 4e). At every frame its
 time must not pass the newest snapshot's, else that frame extrapolates: serverTimeDelta must stay at or below the
 newest snapshot's serverTime minus the frame's real time. Each interval between two snapshot arrivals gives one
 sample, that value at the last frame drawn before the next snapshot came. The window keeps the smallest sample of
@@ -621,7 +621,7 @@ lower). An interval longer than CLOCK_MAX_GAP_MSEC is an interruption, not jitte
 no sample.
 
 The time moves towards the target every frame, by at most 1 ms per CLOCK_SPEEDUP_MSEC or CLOCK_SLOWDOWN_MSEC of
-real time (about 6 and 7 %, the limits of Counter-Strike 2's clock: 11-tick-and-lag-compensation-survey.md, 11.11).
+real time (about 6 and 7 %, the limits of Counter-Strike 2's clock: surveys/tick-and-lag-compensation.md, section 11).
 =================
 */
 
