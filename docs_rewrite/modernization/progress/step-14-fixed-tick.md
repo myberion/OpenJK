@@ -1,6 +1,6 @@
 # Step 14: fixed simulation tick, lag compensation, and the rest of "beyond the codec"
 
-Status (14 November 2026): parts 1 to 6 and 10 done and committed; parts 7, 8, 9 and 11 to do (section 5). Part 1: the server's CPU time in `svnetstats` (commit `aded85287`) and the fixed rate of 200,000 bytes per second. Part 2 (game timing, commits `4efd458f0` and `1376279bd`): the game's logic at its 20 Hz pace on a 100 Hz tick, proven identical to `sv_fps` 20 with scripted scenarios (section 9; the working notes, audits and traces are in [step-14-audit-100hz.md](step-14-audit-100hz.md)). Part 3, the tick loop: section 10. Part 4, the commands per tick: section 11. Part 5, the snapshot store: section 12. Part 6, the other players interpolated only: section 13. Part 10, the review of the prediction: section 14. What the branch does now, in plain words, with the delays before and after: [../CHANGES.md](../CHANGES.md). The survey, the measurements and the owner's choices that lead here are in [../surveys/tick-and-lag-compensation.md](../surveys/tick-and-lag-compensation.md). Paths are relative to `codemp/`.
+Status (14 November 2026): parts 1 to 6 and 10 done and committed; part 7 done (section 15); parts 8, 9 and 11 to do (section 5). Part 1: the server's CPU time in `svnetstats` (commit `aded85287`) and the fixed rate of 200,000 bytes per second. Part 2 (game timing, commits `4efd458f0` and `1376279bd`): the game's logic at its 20 Hz pace on a 100 Hz tick, proven identical to `sv_fps` 20 with scripted scenarios (section 9; the working notes, audits and traces are in [step-14-audit-100hz.md](step-14-audit-100hz.md)). Part 3, the tick loop: section 10. Part 4, the commands per tick: section 11. Part 5, the snapshot store: section 12. Part 6, the other players interpolated only: section 13. Part 10, the review of the prediction: section 14. What the branch does now, in plain words, with the delays before and after: [../CHANGES.md](../CHANGES.md). The survey, the measurements and the owner's choices that lead here are in [../surveys/tick-and-lag-compensation.md](../surveys/tick-and-lag-compensation.md). Paths are relative to `codemp/`.
 
 Owner's choices (11 November 2026): a fixed simulation tick of 125 Hz (revised the same evening: **100 Hz**, so that every 20 Hz instant is a tick, and the game's logic runs at its 20 Hz pace, identical to `sv_fps` 20: section 9) shared by client and server, lag compensation by tick, rate 200,000 bytes per second; designed from recent games rather than from the JKA mods, cleanly and optimised, even if it means starting again from zero; every defect found on the way fixed; the analysis covers the engine (client and dedicated server), the shared movement (`bg_*`), the game module, cgame, qcommon and the codec.
 
@@ -137,7 +137,7 @@ Each part builds, is checked in game (loopback, VPS, `net_dropsim`) and is docum
 4. **Commands per tick** (done 13 November 2026, section 11; the prediction cache was measured and not kept, the partial step was replaced by the interpolation between the last two predicted ticks): the input buffer on the server, one command per tick on the client, the client ahead with time dilation steered by the input margin, `CMD_BACKUP` 256, prediction per tick with the cached states, the partial step for display (D5), the client packet fields (tick, view time). Check: identical movement at 60, 125, 144 and 333 fps (jump heights, strafe speed), no prediction miss on the loopback, input margin stable on the VPS with `net_dropsim`, the local player as responsive as before.
 5. **Snapshot store** (D3; done 13 and 14 November 2026, section 12): shared world state per tick, `PACKET_BACKUP` from the window, the codec's frames. Library change: full validations. Check: bases kept up to the chosen round trip, memory measured.
 6. **Interpolation only** (done 14 November 2026, section 13): `cg_smoothClients` and `g_smoothClients` removed, players sent for interpolation. Check: no extrapolated interval without loss (`netstats`). Read in the code on 14 November 2026 (owner's question, before any change): with the defaults (`g_smoothClients` 1, `cg_smoothClients` 1) the other players are already interpolated between two snapshots whenever the next one is there (`CG_CalcEntityLerpPositions`, `cgame/cg_ents.c`; 0 of 14,534 intervals extrapolated in game without loss); the trajectory sent with the velocity serves only when the next snapshot is missing (the player goes on by its velocity for at most 50 ms instead of stopping). What `cg_smoothClients` 1 adds is a filter on the drawn origin of a player on the ground or in the air (`cgame/cg_players.c`: half of the remaining distance per drawn frame), which leaves the drawn player behind by its movement over one frame, more at a low frame rate. So this part would change two things: the stop on a missing snapshot, and that filter; `cg_smoothClients 0` shows both today. Decided the same day (owner): done now, section 13.
-7. **Server CPU**: profile the 125 Hz frame (bots, game frame), optimise. Check: `svnetstats` before and after. With it (placed on 14 November 2026): what the statistics commands cost while nobody reads them (`svnetstats`, `netstats`, `gamestats`: counters and clock reads in the frame).
+7. **Server CPU** (done 14 November 2026, section 15: profiled, four changes; with 16 bots 35 % less time per tick on the VPS with GCC, 30 % with MSVC, about 36 % with clang): profile the 125 Hz frame (bots, game frame), optimise. Check: `svnetstats` before and after. With it (placed on 14 November 2026): what the statistics commands cost while nobody reads them (`svnetstats`, `netstats`, `gamestats`: counters and clock reads in the frame).
 8. **Lag compensation** (D2, D7): history per tick, rewind for the hitscan shots, the cap; the saber's behind a cheat-protected debug cvar. Check: hits on a moving target at 100 to 200 ms of simulated latency.
 9. **cgame**: lagometer in time. The models of joining players stay loaded at the first scoreboard (D6 (a)).
 10. **Prediction of the local player, the saber first** (done 14 November 2026 as a review of the prediction, section 14; owner, 14 November 2026; its place among the parts not decided): with `cg_noPredict 1` at a ping of 20 ms the saber is direct and precise, with the prediction it is visibly less so, while already far more precise and responsive than OpenJK (owner: the comparison is between the two settings of this branch, not a regression); nothing else was seen (no jerk of the position, no animation jump). Not diagnosed. Two causes to tell apart with `cg_showmiss 1` in a saber fight: the saber moves predicted wrong ("anim miss" lines on the swings; with it the pass on the animation misses and CG5), or the predicted player drawn ahead of the other players, which are drawn in the past (about 28 ms at that ping, more with the ping), so that a blade does not meet the opponent where the screen shows it; the second is a design question, tied to D2 (no lag compensation for the saber). Check: a saber fight looks the same with and without the prediction at a low ping. **Decided (owner, 14 November 2026): the saber stays as it is**, the local player drawn at the present and the others in the past; no miss shows on the attacks alone, so the difference is taken as that gap, which only moves between players (the local saber drawn late as the others, the others extrapolated, or the defenders rewound on the server: none written; D2 stands, with its debug cvar in part 8). The part becomes a review of the prediction and of the interpolation and extrapolation code (cgame and the client): defects, what was missed, what can be improved, each finding shown to the owner; with it the pass on the animation misses and CG5. Check: the findings listed with their decision.
@@ -745,3 +745,148 @@ Checked here (clang): the client and the dedicated server built; the 40 scenario
 First test in game (owner, 14 November 2026, VPS, ping 20 ms, 125 frames per second, `netstats` over 6,349 snapshots; the same session before the change in brackets): the input margin on the server 3.7 ms on average, the lowest 2 ms, no command after its tick (7.3 ms, 2 ms, none); the command clock 20 ms ahead of the drawn time (28 ms): the commands made at the frames came up to a frame late, and the clock ran that much earlier for the latest of them; the snapshots coded against a base 2 messages back for 6,332 of 6,348 and 3 for 16 (2 for 1,396 and 3 for 3,237: the acknowledges now leave at the ticks); the interpolation 7.0 ms behind the newest snapshot with a jitter of 0 ms (7.5 ms, 2 ms); the ping shown on the scoreboard steady (owner). So at 125 frames per second: a key reaches the server 3.6 ms sooner on average and 6 ms sooner at the worst, the local player is drawn 8 ms less ahead of the other players, and the prediction runs one tick less. At 100 frames per second (owner, the same server without bots, 6,192 snapshots): the input margin 3.6 ms on average, the lowest 1 ms, no command after its tick: the same as at 125, which is what the change is for. The drawn time there is 2.1 ms behind the newest snapshot (7.0 ms at 125), 8 intervals of 6,192 extrapolated, and the command clock 13 ms ahead of it; the lagometer's blue line (how far behind the newest snapshot a frame is drawn) nearly gone. That part is not the change's: a frame of 10 ms lasts a snapshot interval, so every frame falls at the same place between two snapshots, here just after one; the two clocks are not tied, so that place drifts with their difference and the delay should move between about 2 and 10 ms over a long game; not watched over time. At 333 frames per second (9,017 snapshots): the input margin 3.8 ms on average, the lowest -1 ms, 2 commands after their tick (a tick that begins while a frame is drawn is made by that frame, a little late); the drawn time 10.6 ms behind the newest snapshot when it arrives, the command clock 21 ms ahead of it. **So the input margin is 3.6, 3.7 and 3.8 ms at 100, 125 and 333 frames per second: the delay of a key no longer depends on the frame rate.** The drawn time's distance to the newest snapshot does (2.1, 7.0 and 10.6 ms when a snapshot arrives): it is the rule of part 4e, that no frame is drawn past the newest snapshot, so the frame drawn just before the next one arrives sets it, and the more frames the closer that frame is to the next arrival; over an interval the world is then drawn 0.6 to 10.6 ms behind the newest snapshot at 333 frames per second. Not changed here. By hand (owner): the movement keys and short taps, the mouse, the binds, the chat, the console and a menu opened in game behave as before. The prediction's newest snapshot tested with loss (owner, VPS, 125 frames per second, `net_dropsim 20` on the client for most of 177 s: 3,072 of the server's messages lost, 14,601 received): 17,634 frames predicted from a snapshot ahead of the drawn ones (the drawn time 26.0 ms behind the newest snapshot, 93 intervals extrapolated), 13,484 ticks compared by `predictmiss`: the position differed in one, a respawn; an animation alone in 14; no message not decoded, no snapshot without a base (bases 2 messages back for 11,925, 3 for 2,175, 4 for 409, 5 to 8 for 92); the input margin 3.7 ms on average, 4 commands of 14,596 after their tick. Nothing wrong reported in the play. **Both changes are done**, to commit.
 
 On the clocks' unit decided above: the judgment "no gain with `com_maxfps` 125 or 333" was made on one setup; a player with vertical sync at 144 Hz does get the uneven advance. The decision stands on its cost (every use of the time in the client and cgame), not on that.
+
+## 15. Part 7 (the server's CPU): done (14 November 2026)
+
+### The measure
+
+On this machine (llvm-mingw clang, `tools/gamestats/gamestats_windows.sh`, a local dedicated server with 16 saber bots and no player), `svnetstats` before any change, in real time over 60 s: 481.5 us per tick, 4.82 % of one core; the game frames 191.2 us, the bots' frames 265.6 us, the snapshots 22.5 us (built for the bots, not sent); the longest tick 2,092 us, none over 10 ms. In fast mode (`FAST=1`: the ticks run one after the other, the caches warm): 364.1, 152.4, 193.4 and 17.3 us.
+
+Where the time goes: a sampling profile (samply 0.13.1 through ETW, 4,000 samples per second; a copy of the server and the game module built with `-g -gdwarf -gcodeview` and a PDB in `build-netcodec/openjk-clang-prof`; the server started through lldb, since the clang server crashes without a console; fast mode, 18,000 ticks; the samples whose stack holds `SV_Frame`, 29,223 of them; the reports: `tools/prof/server_report.py` by phase and function, `tools/prof/callers_report.py` for the callers of a function). Share of a tick:
+
+| what | share | note |
+|---|---|---|
+| the bots (`BotAIStartFrame`) | 56 % | their movement at every tick, 31 % (`ClientThink_real`: what 16 players would cost), and their AI on the 20 Hz instants, 23 % |
+| the game frame (`G_RunFrame`) | 39 % | the saber on the 20 Hz instants, 21 %; `NAV_FindPlayerWaypoint`, 13.8 % |
+| the snapshots | 5 % | built for the bots at every tick |
+| the players' commands, the pings | under 0.1 % | no player in this run |
+
+By function, whatever the phase: `SV_Trace` 38.5 % inclusive (the bots' sight 6.9 %, the movement's ground trace 6.1 %, the waypoints 5.7 %, the movement's slide 3.4 %, the saber 2.7 %); `DotProduct` 11.5 % by itself; the double arc tangent of `vectoangles` 4.3 %, of which 3.6 % from `G_UpdateClientBroadcasts`; `CM_PointLeafnum` 5.0 % (`SV_inPVS` from the waypoints and the bots' sight); the model lookups of `G2_SetupModelPointers` (`RE_RegisterServerModel`, `tolower`, `Q_stricmp`, `Cvar_VariableIntegerValue`) about 3.8 %.
+
+Read in the code from those numbers, all inherited from OpenJK:
+
+- `DotProduct`, `VectorCopy`, `VectorSubtract`, `VectorLength` and the like are functions of `shared/qcommon/q_math.c`, called through the linker from every loop of the collision and model code (they were macros in Quake 3; no link-time optimisation).
+- `NAV_FindPlayerWaypoint` runs for every client at every server frame (`g_allowNPC`, on by default): a search of the nearest navigation node with traces, whose result only the NPCs read. Not on the 20 Hz instants since the tick is 100 Hz: 5 times its cost at `sv_fps` 20.
+- `G_UpdateClientBroadcasts` runs at every command of every client and computes, for every other client, a distance and `vectoangles` (two arc tangents), used only in the Jedi Master game type or when the other client has force sight on: 240 `vectoangles` per tick with 16 clients, 992 with 32.
+- `G2_SetupModelPointers` runs at every ghoul2 call and each time looks the model up by its name (a hash with `tolower`, then `Q_stricmp`) and reads the cvar `dedicated` by its name; its two shortcuts are disabled in OpenJK (`if (0)`, `|| 1`).
+- `ClientThink_real` looks the two foot bolts up by name at every command (`G2API_AddBolt`).
+- The snapshots of the bots are built at every tick and never sent.
+
+What the statistics cost while nobody reads them: the clock reads of `SV_CostAdd` are 0.1 % of a tick in the profile (about 0.3 us), the counters do not show. Nothing to change.
+
+### How two builds are compared
+
+Fast mode with `SEED=5`: every server replays the same game, tick for tick, so two builds do the same work; three servers per build run at once, and the "server frames" time of `svnetstats` is compared within the batch (the same build measured in two batches differed by 5 %). The line of `gamestats` must be the same in both builds: a change that alters the game shows there. `BUILD=<folder>` now gives `gamestats_windows.sh` another server executable, to time two builds of the engine.
+
+### 7a: two computations made for nothing, in the game module
+
+- `NAV_FindPlayerWaypoint` runs on the 20 Hz instants (`G_GRID20_STEP`, `game/g_main.c`), as at `sv_fps` 20.
+- `G_UpdateClientBroadcasts` (`game/g_active.c`) skips a pair of clients when neither test applies, before the distance and the angles. The result is the same by construction.
+
+| three servers each, us per tick | server frame | game frames | bots' frames |
+|---|---|---|---|
+| before | 368.3, 370.6, 364.5 | 151.5, 153.9, 151.9 | 197.5, 197.5, 193.8 |
+| 7a | 318.8, 302.0, 305.7 | 111.2, 104.4, 105.8 | 187.9, 178.6, 180.6 |
+| means | 367.8 to 308.8 (-16.0 %) | 152.4 to 107.1 (-29.7 %) | 196.3 to 182.4 (-7.1 %) |
+
+The same `gamestats` line in the six runs; the 40 scenarios give the recorded counts (`golden: SAME`).
+
+### 7b: the small vector helpers inline
+
+`VectorAdd`, `VectorSubtract`, `VectorScale`, `VectorMA`, `VectorSet`, `VectorClear`, `VectorCopy`, `VectorLength`, `VectorLengthSquared`, `Distance`, `DistanceSquared`, `VectorInc`, `VectorDec`, `VectorInverse`, `CrossProduct`, `DotProduct` and `VectorCompare` move from `shared/qcommon/q_math.c` to `q_math.h` as `static` inline functions, with the same bodies: the semantics do not change, an output that aliases an input included (they stay functions, not macros). The engine, the game module, cgame, the UI and the renderer all get them.
+
+| three servers each, us per tick | server frame | game frames | bots' frames | snapshots |
+|---|---|---|---|---|
+| 7a | 322.1, 331.1, 317.8 | 110.3, 115.1, 110.3 | 191.0, 195.1, 187.1 | 19.8, 19.8, 19.4 |
+| 7b | 278.1, 273.5, 270.6 | 81.3, 80.0, 79.6 | 177.7, 174.7, 172.4 | 18.0, 17.7, 17.5 |
+| means | 323.7 to 274.1 (-15.3 %) | 111.9 to 80.3 (-28.2 %) | 191.1 to 174.9 (-8.5 %) | 19.7 to 17.7 (-9.8 %) |
+
+The longest tick: 1,971 to 2,164 us before (one run had a tick of 23 ms, the machine's), 1,520 to 1,570 us after. The same `gamestats` line in the six runs; the 40 scenarios `golden: SAME`; the library's tests pass with clang in 64 and 32 bits (the movement's determinism hashes included); the client, cgame, the UI and the renderer build. Not built: the single-player targets, which share the header.
+
+Together, within their batches: 0.840 times 0.847, about 29 % less per tick with 16 bots (25 % from the first batch's reference to the last batch's result). To measure on the VPS with GCC, which is the server's target: the profile and the timings above are clang on Windows.
+
+### After 7b: what is left, by share of a tick (second profile, 21,613 samples)
+
+| what | share | for players too | note |
+|---|---|---|---|
+| the movement of 16 clients at every tick (`ClientThink_real`) | 35 % | yes | `Pmove` 27 %: the ground trace 9 %, the water level 4.9 % (point contents) |
+| the bots' AI (20 Hz) | 25 % | no | `ScanForEnemies` 10.9 % (sight traces, `SV_inPVS`) |
+| the saber (20 Hz) | 21.6 % | yes | model collision 7.7 %, bolt matrices 5 % |
+| `G2_SetupModelPointers` | 6.3 % | yes | the lookup by name and the cvar read at every ghoul2 call |
+| the bots' snapshots | 6.4 % | no | built at every tick, never sent |
+| `NAV_FindPlayerWaypoint` (20 Hz) | 4.0 % | yes | only the NPCs read it |
+| the foot bolts by name at every command | 2.7 % | yes | `G2API_AddBolt` |
+
+The collision code itself (`CM_Trace` and what it calls) is about 40 % of a tick, spread over all of the above.
+
+### 7c: the model looked up faster at every ghoul2 call
+
+`G2_SetupModelPointers` keeps looking the model up at every call (OpenJK disabled its two shortcuts; a handle or a pointer kept across a map change would be stale), but the lookup costs less: the cvar `dedicated` is found once (`G2_Dedicated`, `G2_API.cpp`) instead of by its name at every call, and the model hash (`generateHashValue`, `tr_model.cpp`) folds the case itself instead of calling `tolower` per character (the same value in the C locale; the table only needs the same function everywhere, and it has one). In the dedicated server (`rd-dedicated`) and in the vanilla renderer (`rd-vanilla`), which a client's ghoul2 calls go through; rend2 is not touched (it does not build here).
+
+| three servers each, us per tick | server frame | game frames | bots' frames |
+|---|---|---|---|
+| 7b | 278.9, 279.7, 279.5 | 84.5, 84.7, 84.3 | 175.8, 176.4, 176.7 |
+| 7c | 270.0, 259.0, 270.9 | 79.5, 75.0, 80.6 | 171.8, 165.8, 171.5 |
+| means | 279.4 to 266.6 (-4.6 %) | 84.5 to 78.4 (-7.2 %) | 176.3 to 169.7 (-3.7 %) |
+
+The same `gamestats` line in the six runs.
+
+### 7d: no snapshot built for a bot
+
+`SV_SendClientSnapshot` (`server/sv_snapshot.cpp`) built a bot's snapshot at every tick and sent nothing. Nothing reads it: the base game's bot code never calls `BotGetSnapshotEntity` (`BotAI_GetSnapshotEntity` in `game/ai_main.c` has no caller). A bot's snapshot is now built only when the bot is recorded in a demo (`sv_autoDemoBots`, or a demo started on it); otherwise its frame holds no entity, so `BotGetSnapshotEntity` finds none. To keep in mind for part 8: the versions of the entity store are written while snapshots are built, so on a server of bots alone nothing is stored; lag compensation will store what it needs itself.
+
+| three servers each, us per tick | server frame | snapshots |
+|---|---|---|
+| 7c | 253.9, 274.1, 264.8 | 16.9, 17.6, 17.2 |
+| 7d | 252.5, 243.0, 253.7 | 0.3, 0.3, 0.3 |
+| means | 264.3 to 249.7 (-5.5 %) | 17.2 to 0.3 |
+
+The machine was busier in that batch (its three reference runs spread over 8 %). The same `gamestats` line in the six runs. For bots only: a player's snapshot is built, coded and sent as before.
+
+### Part 7 so far
+
+Checked after 7d: the 40 scenarios give the recorded counts (`golden: SAME`), the client, cgame, the UI and the renderer build. None of the four changes alters the simulation (the same game replayed in every comparison) or adds a delay; a shorter tick leaves more room before a tick runs late.
+
+| | us per tick, 16 bots | |
+|---|---|---|
+| each step against the one before, fast mode, same game | 368 to 309, 324 to 274, 279 to 267, 264 to 250 | 0.840, 0.847, 0.954 and 0.945: 36 % less together (32 % from the first reference to the last result) |
+| real time, 60 s, another game each time | 481.5 to 261.3 | 4.82 to 2.61 % of one core; the longest tick 2,092 to 1,432 us (indicative: the machine ran the scenarios during the second run) |
+
+All of it clang on Windows; GCC on the VPS and MSVC are measured below ("The whole part with GCC and MSVC").
+
+What is left by share of a tick (third profile):
+
+| what | share | for players too | note |
+|---|---|---|---|
+| the movement of 16 clients at every tick (`ClientThink_real`) | 36.9 % | yes | `Pmove` 28.9 %: the ground trace 10.1 %, the slide 5.7 %, the water level 5.7 % (`CM_PointContents` 4.5 % by itself); `SV_LinkEntity` 2.9 % |
+| the bots' AI (20 Hz) | 29.7 % | no | sight traces |
+| the saber (20 Hz) | 21.0 % | yes | as the base game; bolt matrices 5.6 % |
+| `NAV_FindPlayerWaypoint` (20 Hz) | 4.9 % | yes | only the NPCs read it |
+| `G2_SetupModelPointers` | 3.6 % | yes | what is left of the lookup |
+| the foot bolts by name at every command | 1.8 % | yes | |
+
+Looked at and not done, with the reason:
+
+- No `NAV_FindPlayerWaypoint` while the map has no NPC: the search starts from the client's last node (`lastWaypoint`), so its result may depend on the searches before it; skipping some could give an NPC spawned later another node than today. Not proven identical, so not done. For the same reason the gate of 7a also gives the NPCs the node they had at `sv_fps` 20: run at every tick, the search started from the node of the tick before (`CNavigator::GetNearestNode` tries the last node first, `server/NPCNav/navigator.cpp`), not from the node of the 20 Hz instant before.
+- No model handle kept in the ghoul2 instance (the shortcuts OpenJK disabled): it needs a field in `CGhoul2Info`, shared by the engine and the renderers, and a rule for every place that invalidates a model; 3.6 % of a tick is left to gain there.
+- The foot bolts kept per client: every place that builds a client's or an NPC's model would have to refresh them; 1.8 %.
+- The movement itself: its traces are the cost of running every player at every tick; changing how it traces could change its results.
+
+### The whole part with GCC and MSVC (14 November 2026)
+
+The four changes together, timed with the server's target compiler and with MSVC. Two builds of each compiler with the same options: before, commit `e747b6640` (for GCC a separate checkout of that commit, built on the Debian VM with the options of `build-openjk/gcc-ded`); after, the tree with 7a to 7d. Fast mode with `SEED=5`, 16 bots, 18,000 ticks measured, three runs per build. GCC 12.2 runs on the VPS, which has one virtual core: one server at a time, before and after alternated. MSVC (x64 Release) runs on the Windows machine, the six servers at once.
+
+| us per tick, 16 bots | server frame | game frames | bots' frames | snapshots | longest tick |
+|---|---|---|---|---|---|
+| GCC, VPS, before | 318.6, 303.6, 311.7 | 131.3, 125.8, 128.7 | 169.2, 160.0, 165.3 | 17.6, 17.4, 17.4 | 2,263, 2,263, 2,240 |
+| GCC, VPS, after | 203.7, 199.5, 200.6 | 73.5, 72.1, 72.7 | 129.7, 127.0, 127.4 | 0.1, 0.1, 0.1 | 1,684, 1,630, 2,955 |
+| means | 311.3 to 201.3 (-35.3 %) | 128.6 to 72.8 (-43.4 %) | 164.8 to 128.0 (-22.3 %) | 17.5 to 0.1 | |
+| MSVC, Windows, before | 360.3, 371.8, 347.9 | 145.0, 148.5, 139.5 | 197.1, 204.2, 190.9 | 17.3, 18.1, 16.7 | 1,704, 1,873, 4,388 |
+| MSVC, Windows, after | 254.3, 253.5, 251.2 | 79.9, 79.5, 79.4 | 173.2, 172.9, 170.6 | 0.2, 0.2, 0.2 | 1,563, 1,571, 1,518 |
+| means | 360.0 to 253.0 (-29.7 %) | 144.3 to 79.6 (-44.9 %) | 197.4 to 172.2 (-12.7 %) | 17.4 to 0.2 | |
+
+The `gamestats` line is the same in the twelve runs: the same game before and after, and the same game with GCC on Linux and MSVC on Windows.
+
+In real time on the VPS (GCC, 120 s, one run per build, another game each time, so indicative: 597 saber swings before, 492 after): 527.4 to 412.2 us per tick (-21.8 %), 5.27 to 4.12 % of the core; the game frames 202.9 to 116.1 us, the bots' frames 295.3 to 293.0 us, the snapshots 27.5 to 0.9 us. The longest tick: 2,504 us before; after, one tick of 10,334 us (7,124 us of it in the bots' frames), the only one of 12,000 longer than the interval, not seen in the fast runs. The 7.00 % of section 11 (4a) had a player connected at a ping of 19 ms, so it does not compare with these.
+
+Checks on the final tree: the VM validations pass (`validate.sh` with GCC and Clang, `validate.bat` with MSVC, the 32-bit tests included, which run the movement's determinism hashes over the header 7b changed); the 40 scenarios give the recorded counts (`golden: SAME`) with clang and with MSVC on Windows and with GCC on the VPS.

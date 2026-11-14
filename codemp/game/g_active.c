@@ -1141,6 +1141,13 @@ void G_UpdateClientBroadcasts( gentity_t *self ) {
 			continue;
 		}
 
+		if ( !( level.gametype == GT_JEDIMASTER && self->client->ps.isJediMaster )
+			&& !( other->client->ps.fd.forcePowersActive & (1 << FP_SEE) ) ) {
+			// neither test below applies: the distance and the angles (two arc tangents per pair of clients, at every
+			// command) would serve nothing
+			continue;
+		}
+
 		VectorSubtract( self->client->ps.origin, other->client->ps.origin, angles );
 		dist = VectorLengthSquared( angles );
 		vectoangles( angles, angles );

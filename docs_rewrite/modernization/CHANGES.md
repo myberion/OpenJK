@@ -97,7 +97,7 @@ What did not get faster, and what it costs:
 - A key acts at the next tick, not at the next drawn frame: 5 ms on average instead of 4 ms at 125 frames per second and 1.5 ms at 333. A player at 333 frames per second loses 3.5 ms on its own screen; in exchange every player has the same delay and the same movement.
 - There is no lag compensation yet: a hitscan shot (the disruptor) is judged with the positions the server holds, as before. It is planned for the hitscan shots only (plan step 14, part 8).
 - Bandwidth, measured with 17 or 18 bots: 90 to 115 bytes per snapshot, 100 times a second, about 12 to 15 KB per second down for each client with the packet headers, and about 4.5 KB per second up. OpenJK's format on the same messages would be 2.4 times larger.
-- Server CPU, measured on the test server (1 virtual core) with 16 bots: 7.0 % of the core at 100 Hz. Not optimised yet (plan step 14, part 7).
+- Server CPU, measured on the test server (1 virtual core) with 16 bots and no player: 4.1 % of the core at 100 Hz (5.3 % before the optimisation of plan step 14, part 7, which takes about a third off the time of a tick; section [23](#23-server-fixes)).
 
 #### Prediction, interpolation, extrapolation
 
@@ -152,7 +152,7 @@ Each line links to its section.
 
 | change | before | now |
 |---|---|---|
-| [23. Server](#23-server-fixes) | an idle Linux server used a tenth of a core; a clock change could freeze it | it sleeps; a clock that only moves forward |
+| [23. Server](#23-server-fixes) | an idle Linux server used a tenth of a core; a clock change could freeze it; work repeated for nothing at every tick | it sleeps; a clock that only moves forward; about a third less time per tick |
 | [24. Game](#24-game-fixes) | three random choices differed between compilers; a zoomed animation restarted at every step | fixed |
 | [25. Client](#25-client-fixes-outside-the-netcode) | menu cursor too fast, keypad binds, servers hidden from the browser | fixed |
 
@@ -172,7 +172,7 @@ Each line links to its section.
 
 - A snapshot every 10 ms instead of every 50 ms (20 Hz) or 25 ms (40 Hz).
 - The same game as at `sv_fps 20`. Proof: 40 scripted fights between two bots (saber: 5 styles, defender idle or attacking; 6 force powers; 12 weapons with both fire modes) give the same wounds, damage, deaths, blocks, bounces, shots and hits at 20 and at 100, on Windows (clang, MSVC) and on Linux (GCC). A free-for-all of 16 bots shows no difference beyond the noise (damage -2.8 % with a margin of 1.8 %).
-- Cost: server CPU (7.0 % of the test server's core with 16 bots, measured; an empty server 1.1 %), bandwidth (summary), and demos, which hold 100 messages per second instead of 20 or 40 (their size is not measured yet: plan step 14, part 11).
+- Cost: server CPU (4.1 % of the test server's core with 16 bots and no player, measured; an empty server 1.1 %), bandwidth (summary), and demos, which hold 100 messages per second instead of 20 or 40 (their size is not measured yet: plan step 14, part 11).
 
 <details>
 <summary>Technical details</summary>
@@ -860,22 +860,37 @@ The files keep the `.dm_26` extension for now. As in OpenJK, server demos still 
 **Before.**
 
 - A dedicated server spends the last millisecond before each frame in a busy loop: up to a tenth of a core at 100 Hz, even when empty.
+- Small vector operations (a dot product, a copy, a subtraction) are functions called from every loop of the collision and model code: the dot product alone is 11.5 % of a server tick with 16 bots.
+- At every server frame, for every client, the game searches the nearest navigation node, which only NPCs use.
+- At every command of every client, the game computes a distance and two arc tangents to every other client, used only in the Jedi Master game type or against a client with force sight on.
+- Every call about a player's model (a bone, a bolt, a collision) looks the model up again by its file name, and reads a setting by its name.
+- The server builds a snapshot for every bot at every tick, and sends it to no one.
 - On Linux the engine reads the wall clock. When the system's time is set back (a time synchronisation, a date set by hand), the server runs no frame and sends nothing until the clock catches up; beyond 30 s every client times out. When it is set forward, up to 5 s of frames run at once.
 
 **Now.**
 
 - Outside Windows the server sleeps that millisecond, and a packet that arrives still wakes it at once.
 - On Linux the engine reads a clock that only moves forward.
+- The small vector operations are inline, for the server and the client.
+- The navigation node is searched 20 times a second, as on a 20 Hz server.
+- The distance and the angles are computed only when a test needs them.
+- The model lookup is cheaper, on the server and on the client; the setting is found once.
+- A bot's snapshot is built only when the bot is recorded in a demo.
 
-**Why.** Found while measuring the server at 100 Hz.
+**Why.** Found while measuring and profiling the server at 100 Hz.
 
-**Gain.** An empty server at 100 Hz on the test server: 9.7 % of a core before, 1.1 % after (measured over 120 s). A change of the system's time no longer freezes the server.
+**Gain.** An empty server at 100 Hz on the test server: 9.7 % of a core before, 1.1 % after (measured over 120 s). A change of the system's time no longer freezes the server. The speed changes, with 16 bots and the same game replayed tick for tick (same statistics, the 40 scripted fights unchanged): 35 % less time per tick on the test server with GCC (311 to 201 microseconds), 30 % with MSVC on Windows (360 to 253), about 36 % with clang on Windows (four steps, each timed against the one before: 368 to 309 microseconds, 324 to 274, 279 to 267, 264 to 250). In real time: 5.3 to 4.1 % of the test server's core, 4.8 to 2.6 % of one core of the Windows machine. Nothing changes in the simulation and no delay is added.
 
 <details>
 <summary>Technical details</summary>
 
 - `Com_Frame` (`qcommon/common.cpp`): outside Windows the last millisecond is slept in steps of 100 microseconds (`NET_Sleep` takes microseconds, `qcommon/net_ip.cpp`). Windows keeps the busy loop (`select` waits whole timer periods there); OpenJK's cvar `com_busyWait 1` keeps it everywhere.
 - `Sys_Milliseconds` (`shared/sys/sys_unix.cpp`): `clock_gettime( CLOCK_MONOTONIC )` instead of `gettimeofday`, at the same cost; time spent suspended is no longer counted. The unused `baseTime` parameter is gone.
+- `shared/qcommon/q_math.h`: `VectorAdd`, `VectorSubtract`, `VectorScale`, `VectorMA`, `VectorSet`, `VectorClear`, `VectorCopy`, `VectorLength`, `VectorLengthSquared`, `Distance`, `DistanceSquared`, `VectorInc`, `VectorDec`, `VectorInverse`, `CrossProduct`, `DotProduct`, `VectorCompare` are `static` inline functions with the bodies they had in `q_math.c` (macros in Quake 3, functions in OpenJK); same semantics, an aliased output included.
+- `NAV_FindPlayerWaypoint` on the 20 Hz instants (`game/g_main.c`); `G_UpdateClientBroadcasts` skips a pair of clients when neither of its tests applies (`game/g_active.c`).
+- `G2_SetupModelPointers` (`rd-dedicated/G2_API.cpp`, `rd-vanilla/G2_API.cpp`): the cvar `dedicated` is found once (`G2_Dedicated`); the model hash (`generateHashValue`, `tr_model.cpp`) folds the case without `tolower`. The model is still looked up at every call, as in OpenJK.
+- `SV_SendClientSnapshot` (`server/sv_snapshot.cpp`): no snapshot for a bot unless it is recorded (`sv_autoDemoBots`, a demo started on it); `BotGetSnapshotEntity`, which the base game's bots never call, then finds no entity.
+- The profile and the timings: [progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md) section 15.
 - Windows keeps `timeGetTime`, already monotonic. Its value changes every 0.5 ms with the timer period the engine asks for, so a frame starts 0 to 0.5 ms after its millisecond (measured), without accumulating; `QueryPerformanceCounter` would cost 14.7 ns per call instead of 2.8 for no visible gain.
 
 </details>
@@ -996,7 +1011,6 @@ Added commands. The statistics commands print their counters since the previous 
 
 | subject | where |
 |---|---|
-| Server CPU at 100 Hz, and what the statistics commands cost | plan step 14, part 7 |
 | Lag compensation for the hitscan shots (not for the saber or the force powers) | plan step 14, part 8 |
 | The lagometer in time; the freeze when the scoreboard first shows players whose models are not loaded | plan step 14, part 9 |
 | The size of demos at 100 messages per second, a long client hitch, the sound louder at 333 frames per second than at 125 (as in OpenJK), priority and culling per client | plan step 14, part 11 |

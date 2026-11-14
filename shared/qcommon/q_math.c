@@ -909,78 +909,6 @@ void VectorCopy2( const vec2_t vecIn, vec2_t vecOut )
 ///////////////////////////////////////////////////////////////////////////
 vec3_t		vec3_origin = {0,0,0};
 
-void VectorAdd( const vec3_t vec1, const vec3_t vec2, vec3_t vecOut )
-{
-	vecOut[0] = vec1[0]+vec2[0];
-	vecOut[1] = vec1[1]+vec2[1];
-	vecOut[2] = vec1[2]+vec2[2];
-}
-
-void VectorSubtract( const vec3_t vec1, const vec3_t vec2, vec3_t vecOut )
-{
-	vecOut[0] = vec1[0]-vec2[0];
-	vecOut[1] = vec1[1]-vec2[1];
-	vecOut[2] = vec1[2]-vec2[2];
-}
-
-void VectorScale( const vec3_t vecIn, float scale, vec3_t vecOut )
-{
-	vecOut[0] = vecIn[0]*scale;
-	vecOut[1] = vecIn[1]*scale;
-	vecOut[2] = vecIn[2]*scale;
-}
-
-void VectorMA( const vec3_t vec1, float scale, const vec3_t vec2, vec3_t vecOut )
-{
-	vecOut[0] = vec1[0] + scale*vec2[0];
-	vecOut[1] = vec1[1] + scale*vec2[1];
-	vecOut[2] = vec1[2] + scale*vec2[2];
-}
-
-void VectorSet( vec3_t vec, float x, float y, float z )
-{
-	vec[0]=x; vec[1]=y; vec[2]=z;
-}
-
-void VectorClear( vec3_t vec )
-{
-	vec[0] = vec[1] = vec[2] = 0.0f;
-}
-
-void VectorCopy( const vec3_t vecIn, vec3_t vecOut )
-{
-	vecOut[0] = vecIn[0];
-	vecOut[1] = vecIn[1];
-	vecOut[2] = vecIn[2];
-}
-
-// lengths in double: the squares of floats are exact there, and the result is rounded to float once
-float VectorLength( const vec3_t vec )
-{
-	return (float)Q_sqrt( (double)vec[0]*vec[0] + (double)vec[1]*vec[1] + (double)vec[2]*vec[2] );
-}
-
-float VectorLengthSquared( const vec3_t vec )
-{
-	return (float)( (double)vec[0]*vec[0] + (double)vec[1]*vec[1] + (double)vec[2]*vec[2] );
-}
-
-float Distance( const vec3_t p1, const vec3_t p2 )
-{
-	vec3_t	v;
-
-	VectorSubtract( p2, p1, v );
-	return VectorLength( v );
-}
-
-float DistanceSquared( const vec3_t p1, const vec3_t p2 )
-{
-	vec3_t	v;
-
-	VectorSubtract( p2, p1, v );
-	return VectorLengthSquared( v );
-}
-
 // vector normalize routine that does not check that length != 0, nor returns the length; computed in double as
 // VectorNormalize, each component rounded to float once
 void VectorNormalizeFast( vec3_t vec )
@@ -1026,33 +954,6 @@ void VectorAdvance( const vec3_t veca, const float scale, const vec3_t vecb, vec
 	vecc[0] = veca[0] + (scale * (vecb[0] - veca[0]));
 	vecc[1] = veca[1] + (scale * (vecb[1] - veca[1]));
 	vecc[2] = veca[2] + (scale * (vecb[2] - veca[2]));
-}
-
-void VectorInc( vec3_t vec ) {
-	vec[0] += 1.0f; vec[1] += 1.0f; vec[2] += 1.0f;
-}
-
-void VectorDec( vec3_t vec ) {
-	vec[0] -= 1.0f; vec[1] -= 1.0f; vec[2] -= 1.0f;
-}
-
-void VectorInverse( vec3_t vec ) {
-	vec[0] = -vec[0]; vec[1] = -vec[1]; vec[2] = -vec[2];
-}
-
-void CrossProduct( const vec3_t vec1, const vec3_t vec2, vec3_t vecOut ) {
-	vecOut[0] = vec1[1]*vec2[2] - vec1[2]*vec2[1];
-	vecOut[1] = vec1[2]*vec2[0] - vec1[0]*vec2[2];
-	vecOut[2] = vec1[0]*vec2[1] - vec1[1]*vec2[0];
-}
-
-float DotProduct( const vec3_t vec1, const vec3_t vec2 ) {
-	return vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2];
-}
-
-qboolean VectorCompare( const vec3_t vec1, const vec3_t vec2 )
-{
-	return (qboolean)(vec1[0] == vec2[0] && vec1[1] == vec2[1] && vec1[2] == vec2[2]);
 }
 
 qboolean VectorCompare2( const vec3_t v1, const vec3_t v2 )

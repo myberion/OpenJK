@@ -3335,8 +3335,8 @@ void G_RunFrame( int levelTime ) {
 				}
 			}
 
-			if (g_allowNPC.integer)
-			{
+			if (g_allowNPC.integer && G_GRID20_STEP)
+			{ // on the 20 Hz instants, as at sv_fps 20: the waypoint serves the NPCs, which think there (plan step 14)
 				//This was originally intended to only be done for client 0.
 				//Make sure it doesn't slow things down too much with lots of clients in game.
 				NAV_FindPlayerWaypoint(i);
