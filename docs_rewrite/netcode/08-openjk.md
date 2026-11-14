@@ -37,7 +37,7 @@ The only wire difference found:
 | `SV_RateMsec` | `(min(size,1500)+48)*1000/rate` | the same, with `sv_minRate` / `sv_maxRate` and `timescale` applied | unchanged | `server/sv_snapshot.cpp:679` |
 | `g_smoothClients` / `cg_smoothClients` | 1 / 1 | 1 / 1 | unchanged | `game/g_xcvar.h:157`, `cgame/cg_xcvar.h:129` |
 
-Since plan step 11 (11 November 2026) the rate and snapshot cvars and policies of this table are removed: a snapshot every server frame at a fixed rate of 100,000 bytes per second ([09](09-changes-from-openjk.md) section 8, [10](10-network-settings-survey.md)). The decision below describes the branch before that step.
+Since plan step 11 (11 November 2026) the rate and snapshot cvars and policies of this table are removed: a snapshot every server frame at a fixed rate (100,000 bytes per second in step 11, 200,000 since step 14; [09](09-changes-from-openjk.md) section 8, [10](10-network-settings-survey.md)). The decision below describes the branch before that step.
 
 Branch decision (4 and 5 November 2026): keep OpenJK's code, policies and the pilot fix; set `sv_fps` to 20 so that the snapshot rate matches the captures and the demo corpus measurements (with `sv_snapsPolicy` 1 every client then receives 20 snapshots per second); set `sv_clientRate` to 25000 (the client default). At 25000 bytes per second and 50 ms, a message is rate-delayed from 1,202 bytes (`(size + 48) * 1000 / 25000 >= 50`); on the test part of the 5-minute capture this delays 0.0 % of snapshots for both the engine and the new codec (03, section 3.10, row 25,000). OpenJK's upstream pair (50000 bytes per second, 40 snapshots per second) has the same threshold.
 

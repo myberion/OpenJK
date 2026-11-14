@@ -1,6 +1,6 @@
 # Netcode rework study: replacing the Huffman coder of Jedi Academy multiplayer
 
-Status: analysis finished; since 9 November 2026 the engine of this branch sends every server-to-client message with the new codec (plan step 7), and since 10 November 2026 every client-to-server packet too (step 8), with the limits of step 9, the reliable commands of step 10, and since 11 November 2026 network settings fixed or computed at run time (step 11; where the work stands: [progress/README.md](progress/README.md)); step 14 has started (a fixed simulation tick of 100 Hz shared by client and server, with lag compensation: [11-tick-and-lag-compensation-survey.md](11-tick-and-lag-compensation-survey.md); since 12 November 2026 the game's logic keeps its 20 Hz pace on that tick, identical to `sv_fps` 20, and Linux and Windows compute the same game: one entry point for the math functions on LLVM libc's correctly rounded ones, [12-deterministic-math-survey.md](12-deterministic-math-survey.md), and one for random numbers, [13-random-numbers-survey.md](13-random-numbers-survey.md)). Measurements were taken on 3 and 4 November 2026 against the original 1.01 dedicated server. The folder lives in this repository, a fork of OpenJK and the proof-of-concept base of the rewrite: the whole tool chain was re-run here with identical results, the code readings were re-checked in OpenJK ([08-openjk.md](08-openjk.md)), and prediction variants were measured (03, section 3.12).
+Status: analysis finished; since 9 November 2026 the engine of this branch sends every server-to-client message with the new codec (plan step 7), and since 10 November 2026 every client-to-server packet too (step 8), with the limits of step 9, the reliable commands of step 10, and since 11 November 2026 network settings fixed or computed at run time (step 11; where the work stands: [progress/README.md](progress/README.md)); step 14 has started (a fixed simulation tick of 100 Hz shared by client and server, with lag compensation: [11-tick-and-lag-compensation-survey.md](11-tick-and-lag-compensation-survey.md); since 12 November 2026 the game's logic keeps its 20 Hz pace on that tick, identical to `sv_fps` 20, and Linux and Windows compute the same game: one entry point for the math functions on LLVM libc's correctly rounded ones, [12-deterministic-math-survey.md](12-deterministic-math-survey.md), and one for random numbers, [13-random-numbers-survey.md](13-random-numbers-survey.md); since 14 November 2026 the parts of step 14 that set the delays are done: one command per player and tick, a snapshot every tick, the other players drawn 7 to 11 ms behind the newest snapshot instead of about 55 ms on a 20 Hz server; left in that step: the server's CPU, lag compensation for the hitscan shots and smaller items). What the branch changes against OpenJK, with the delays before and now: [09-changes-from-openjk.md](09-changes-from-openjk.md). Measurements of the study were taken on 3 and 4 November 2026 against the original 1.01 dedicated server. The folder lives in this repository, a fork of OpenJK and the proof-of-concept base of the rewrite: the whole tool chain was re-run here with identical results, the code readings were re-checked in OpenJK ([08-openjk.md](08-openjk.md)), and prediction variants were measured (03, section 3.12).
 
 This folder records an investigation into replacing the network coding of Jedi Academy multiplayer (the Huffman-based `MSG_*` layer and the surrounding snapshot protocol) in a standalone game derived from CleanJK (itself derived from OpenJK, GPL v2). The owner is willing to break protocol compatibility and to change structures, protocol and third-party mods.
 
@@ -33,6 +33,16 @@ These constrain every recommendation in this folder:
 
 ## Documents
 
+The numbers are the order in which the documents were written, not a reading order. They are kept because the section numbers (8.6, 11.11, 12.10), the other documents and comments in the code cite them. By kind:
+
+**What the branch does (start here)**
+
+| file | content | read it when |
+|---|---|---|
+| [09-changes-from-openjk.md](09-changes-from-openjk.md) | Every change of this branch against OpenJK. A summary for players (what changes, the delays before and now in milliseconds, what runs at 100 Hz and what stays at 20), then one section per change: before, now, why, gain, and the technical details folded | you want to know what the branch changes and why, without reading code |
+
+**The study of the codec (3 to 5 November 2026, against the original 1.01 server)**
+
 | file | content | read it when |
 |---|---|---|
 | [01-methodology.md](01-methodology.md) | How the study was done, step by step: capture, decoding, validation, benchmark design, simulation design, what each number means | you want to judge or reproduce the method |
@@ -41,22 +51,38 @@ These constrain every recommendation in this folder:
 | [04-recommendations.md](04-recommendations.md) | Recommended algorithms, schema, precision policy, transport policy, and the reasons | you are deciding what to build |
 | [05-verification-guide.md](05-verification-guide.md) | Claims with confidence levels, known weaknesses, mistakes made on the way, and ideas that were not explored | you are going to re-check the work or look for better solutions |
 | [06-reproduction.md](06-reproduction.md) | Tools, file formats, commands, data checksums, environment | you want to re-run something |
-| [07-transport-study.md](07-transport-study.md) | **Exploratory.** How the current transport and its "encryption" work, security implications, transport requirements derived from the measurements, candidate libraries as read (not run), and how to decide. Wait for the codec before acting on it | you are going to touch the transport |
-| [08-openjk.md](08-openjk.md) | What differs in OpenJK (wire format, defaults, challenge, demos), what was re-checked there, a bug found, and where every function of 02 and 07 is in this tree | you work in this repository |
-| [09-changes-from-openjk.md](09-changes-from-openjk.md) | Every change of this branch against OpenJK, in plain words and comparison tables: the new format, demos, downloads, game physics, settings, client fixes, compatibility, what it implies | you want to know what the branch changes and why, without reading code |
-| [10-network-settings-survey.md](10-network-settings-survey.md) | What recent games and network libraries do for each setting plan step 11 removes (bandwidth, snapshot and packet rates, input redundancy, interpolation delay, time stamps, timeouts, debug cvars), with sources, the options for this branch and the owner's choices | you work on step 11 or wonder why a setting is fixed or computed |
-| [11-tick-and-lag-compensation-survey.md](11-tick-and-lag-compensation-survey.md) | What recent games do about lag compensation and the simulation rate, melee, what this engine already has, the server's CPU time measured at 20, 40 and 125 Hz, and the owner's choices for step 14 (fixed tick of 125 Hz, rate 200,000 bytes per second) | you work on step 14 or wonder why the tick is 125 Hz |
-| [12-deterministic-math-survey.md](12-deterministic-math-survey.md) | Why the C library's math functions differ between platforms, what other projects do (approximations, portable libraries, correctly rounded functions), the candidate libraries (CORE-MATH, LLVM libc, SLEEF, musl, ...) with their accuracy, speed, licence and portability, the options and the tests for step 14 | you work on identical results on Linux and Windows or wonder which math library the game uses |
-| [13-random-numbers-survey.md](13-random-numbers-survey.md) | What the code draws today, the candidate random number generators and counter-based hashes with their quality, speed (measured), state and licence, what engines and languages use, the draws the client predicts, the options for step 14 | you work on the random numbers or wonder which generator the game uses |
+| [07-transport-study.md](07-transport-study.md) | **Exploratory.** How the original transport and its "encryption" work, security implications, transport requirements derived from the measurements, candidate libraries as read (not run), and how to decide | you are going to touch the transport |
+| [08-openjk.md](08-openjk.md) | What differs in OpenJK from 1.01 (wire format, defaults, challenge, demos), what was re-checked there, a bug found, and where every function of 02 and 07 is in this tree | you work in this repository |
+
+**Design surveys (one per design question of the plan: what recent games and libraries do, the options, the measurements, the owner's choices)**
+
+| file | content | read it when |
+|---|---|---|
+| [10-network-settings-survey.md](10-network-settings-survey.md) | Each setting plan step 11 removes: bandwidth, snapshot and packet rates, input redundancy, interpolation delay, time stamps, timeouts, debug cvars | you work on the settings or wonder why one is fixed or computed |
+| [11-tick-and-lag-compensation-survey.md](11-tick-and-lag-compensation-survey.md) | Lag compensation and simulation rates in recent games, melee, what this engine already has, the server's CPU time measured at 20, 40 and 125 Hz, the choices for step 14 (a fixed tick, 125 Hz at first; revised to 100 Hz the same evening: [progress/step-14-fixed-tick.md](progress/step-14-fixed-tick.md) section 9), and the input margin, late commands and clock steering (11.11) | you work on step 14 or wonder why the tick is fixed |
+| [12-deterministic-math-survey.md](12-deterministic-math-survey.md) | Why the C library's math functions differ between platforms, what other projects do, the candidate libraries (CORE-MATH, LLVM libc, SLEEF, musl, ...) with their accuracy, speed, licence and portability, the tests | you work on identical results on Linux and Windows or wonder which math library the game uses |
+| [13-random-numbers-survey.md](13-random-numbers-survey.md) | What the code draws, the candidate generators with their quality, speed (measured), state and licence, what engines and languages use, the draws the client predicts | you work on the random numbers or wonder which generator the game uses |
 | [14-platform-layer-survey.md](14-platform-layer-survey.md) | What the client's platform code does today (window, input, sound device, on SDL 2.0.12), what is legacy in it, what SDL 3 changes, what other engines did, a design written from zero and the decisions to take (plan step 15) | you work on step 15 or wonder why the platform layer is rewritten |
-| [PLAN.md](PLAN.md) (separate from the study) | Ordered steps (1 to 15) from the Python codec to the engine, transport and settings, each with a deliverable, a check and its dependencies; tests and risks | you are going to implement it |
+| [snapvector-rounding-report.md](snapvector-rounding-report.md) | The rounding of `SnapVector` and `Sys_SnapVector`: findings and the change made (10 November 2026) | you want the detail of that fix |
+
+**Plan and progress**
+
+| file | content | read it when |
+|---|---|---|
+| [PLAN.md](PLAN.md) | Ordered steps (1 to 15) from the Python codec to the engine, transport and settings, each with a deliverable, a check and its dependencies; tests and risks | you want to know what is planned and in which order |
 | [progress/README.md](progress/README.md) | **Where the work stands**: status of each step, decisions with dates, open questions, how to resume; one document per finished step | you start a session |
-| `tools/` | The Python and C code used (see 06) | |
+
+**Tools and data**
+
+| folder | content | read it when |
+|---|---|---|
+| `tools/` | The Python and C code used (see 06), the bot benches (`gamestats/`), the clock simulations (`clock/`), the math and random number benches (`mathlib/`, `rng/`), the prediction tool (`predict/`) | |
 | `data/` | The three real captures, a copy of `msg.cpp` (2.6 MB, 0.5 MB, 0.1 MB), the C benchmark input files (13 MB and two small crowd scenarios) | you want to re-run anything |
-| `bin/` | `jkabench.exe` and `jkabench_libs.exe`, the Windows x64 builds used for the CPU measurements | you want to re-measure speed without compiling |
+| `bin/` | `jkabench.exe` and `jkabench_libs.exe`, the Windows x64 builds used for the CPU measurements of the study | you want to re-measure speed without compiling |
 
 ## Suggested reading order
 
+- Player or server administrator: the summary of [09-changes-from-openjk.md](09-changes-from-openjk.md).
 - Owner or lead: this file, then [09-changes-from-openjk.md](09-changes-from-openjk.md) (what the branch changes), [progress/README.md](progress/README.md), then 04, then [PLAN.md](PLAN.md); then 07 when the transport comes up (it is exploratory).
 - Engineer implementing: [progress/README.md](progress/README.md), 02, 08, 04, [PLAN.md](PLAN.md), then 03 as reference.
 - A model or reviewer asked to re-verify and improve the work: 05 first, then 01, 02, 03, 06, and finally 04 and [PLAN.md](PLAN.md) to see what is proposed.
